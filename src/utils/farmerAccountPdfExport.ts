@@ -1,0 +1,712 @@
+import { FarmerAccountSummary, MandiSettings } from '../types/mandi';
+import { formatCurrencyINR, maskAadhaarNumber } from './calculations';
+
+function cleanText(text: string | undefined): string {
+  if (!text) return '';
+  return text.replace(/[^\x00-\x7F]/g, '').trim();
+}
+
+/**
+ * Draw placeholder when photo is missing or fails to render
+ */
+function drawPhotoBox(doc: any, x: number, y: number, size: number, label: string) {
+  doc.setFillColor(241, 245, 249);
+  doc.rect(x, y, size, size, 'F');
+  doc.setDrawColor(203, 213, 225);
+  doc.rect(x, y, size, size, 'S');
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7);
+  doc.setTextColor(148, 163, 184);
+  doc.text(label, x + size / 2, y + size / 2, { align: 'center' });
+}
+
+/**
+ * Generate Comprehensive Farmer Account PDF / ਕਿਸਾਨ ਖਾਤਾ
+ */
+export async function exportFarmerAccountPDF(
+  account: FarmerAccountSummary,
+  settings: MandiSettings
+): Promise<void> {
+  const { jsPDF } = await import('jspdf');
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: 'a4'
+  });
+
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 12;
+  const contentWidth = pageWidth - margin * 2;
+  let y = 12;
+
+  const checkPageBreak = (neededHeight: number) => {
+    if (y + neededHeight > pageHeight - 14) {
+      doc.addPage();
+      y = 14;
+      // Mini page header
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8);
+      doc.setTextColor(100, 116, 139);
+      doc.text(`Punjab Mandi Software — Farmer Account: ${account.farmer.id} (${cleanText(account.farmer.farmerName)})`, margin, y);
+      doc.text(`Page ${doc.getNumberOfPages()}`, pageWidth - margin, y, { align: 'right' });
+      doc.setDrawColor(226, 232, 240);
+      doc.line(margin, y + 2, pageWidth - margin, y + 2);
+      y += 8;
+    }
+  };
+
+  // ==========================================
+  // TOP HEADER BANNER
+  // ==========================================
+  doc.setFillColor(16, 44, 38); // Dark Emerald Green
+  doc.roundedRect(margin, y, contentWidth, 26, 2, 2, 'F');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(14);
+  doc.setTextColor(255, 255, 255);
+  doc.text('PUNJAB MANDI SOFTWARE', margin + 6, y + 8);
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(209, 250, 229);
+  doc.text(`${cleanText(settings.mandiNameEn)} | ${cleanText(settings.marketCommitteeEn)}`, margin + 6, y + 14);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.setTextColor(251, 191, 36); // Amber Accent
+  doc.text('FARMER ACCOUNT / KISAN KHATA STATEMENT', margin + 6, y + 21);
+
+  // Farmer ID badge top right
+  doc.setFillColor(245, 158, 11);
+  doc.roundedRect(pageWidth - margin - 42, y + 4, 38, 18, 2, 2, 'F');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7);
+  doc.setTextColor(0, 0, 0);
+  doc.text('FARMER ID', pageWidth - margin - 23, y + 9, { align: 'center' });
+  doc.setFontSize(11);
+  doc.text(account.farmer.id, pageWidth - margin - 23, y + 16, { align: 'center' });
+
+  y += 30;
+
+  // ==========================================
+  // FARMER PROFILE & BANK DETAILS
+  // ==========================================
+  checkPageBreak(50);
+  const profileCardHeight = 44;
+  doc.setFillColor(248, 250, 252);
+  doc.roundedRect(margin, y, contentWidth, profileCardHeight, 2, 2, 'F');
+  doc.setDrawColor(226, 232, 240);
+  doc.roundedRect(margin, y, contentWidth, profileCardHeight, 2, 2, 'S');
+
+  // Photo
+  const photoSize = 34;
+  const photoX = margin + 5;
+  const photoY = y + 5;
+
+  if (account.farmer.photoUrl) {
+    try {
+      doc.addImage(account.farmer.photoUrl, 'JPEG', photoX, photoY, photoSize, photoSize);
+      doc.setDrawColor(203, 213, 225);
+      doc.rect(photoX, photoY, photoSize, photoSize, 'S');
+    } catch {
+      drawPhotoBox(doc, photoX, photoY, photoSize, 'Farmer Photo');
+    }
+  } else {
+    drawPhotoBox(doc, photoX, photoY, photoSize, 'No Photo');
+  }
+
+  // Farmer Information
+  const infoX1 = photoX + photoSize + 8;
+  let textY = y + 9;
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(12);
+  doc.setTextColor(15, 23, 42);
+  doc.text(cleanText(account.farmer.farmerName) || 'Farmer Name', infoX1, textY);
+
+  textY += 6;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8.5);
+  doc.setTextColor(71, 85, 105);
+  doc.text("Father's Name:", infoX1, textY);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(15, 23, 42);
+  doc.text(cleanText(account.farmer.fatherName) || '—', infoX1 + 25, textY);
+
+  textY += 5.5;
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(71, 85, 105);
+  doc.text('Village / District:', infoX1, textY);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(15, 23, 42);
+  doc.text(`${cleanText(account.farmer.village)} (PIN: ${account.farmer.pinCode || '141401'})`, infoX1 + 25, textY);
+
+  textY += 5.5;
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(71, 85, 105);
+  doc.text('Mobile / Aadhaar:', infoX1, textY);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(15, 23, 42);
+  doc.text(`${account.farmer.mobile || '—'}  |  ${maskAadhaarNumber(account.farmer.aadhaar)}`, infoX1 + 25, textY);
+
+  // Bank Column (Right side)
+  const bankX = margin + (contentWidth * 0.62);
+  let bankY = y + 9;
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.setTextColor(20, 83, 45);
+  doc.text('BANK ACCOUNT DETAILS', bankX, bankY);
+
+  bankY += 5.5;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(71, 85, 105);
+  doc.text('Bank:', bankX, bankY);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(15, 23, 42);
+  doc.text(cleanText(account.farmer.bankDetails?.bankName) || '—', bankX + 16, bankY);
+
+  bankY += 5;
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(71, 85, 105);
+  doc.text('A/C No:', bankX, bankY);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(15, 23, 42);
+  doc.text(account.farmer.bankDetails?.accountNumber || '—', bankX + 16, bankY);
+
+  bankY += 5;
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(71, 85, 105);
+  doc.text('IFSC:', bankX, bankY);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(15, 23, 42);
+  doc.text(account.farmer.bankDetails?.ifscCode || '—', bankX + 16, bankY);
+
+  bankY += 5;
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(71, 85, 105);
+  doc.text('Branch:', bankX, bankY);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(15, 23, 42);
+  doc.text(cleanText(account.farmer.bankDetails?.branchName) || '—', bankX + 16, bankY);
+
+  y += profileCardHeight + 5;
+
+  // ==========================================
+  // LIVE 4-GRID SUMMARY METRICS
+  // ==========================================
+  checkPageBreak(25);
+  const cardWidth = (contentWidth - 9) / 4;
+  const cardHeight = 18;
+
+  // 1. Mandi Bags
+  doc.setFillColor(238, 242, 255);
+  doc.setDrawColor(199, 210, 254);
+  doc.roundedRect(margin, y, cardWidth, cardHeight, 1.5, 1.5, 'FD');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7.5);
+  doc.setTextColor(67, 56, 202);
+  doc.text('MANDI ARRIVAL', margin + cardWidth / 2, y + 5.5, { align: 'center' });
+  doc.setFontSize(11);
+  doc.setTextColor(30, 27, 75);
+  doc.text(`${account.mandiArrivalBags} Bags`, margin + cardWidth / 2, y + 11, { align: 'center' });
+  doc.setFontSize(7);
+  doc.setFont('helvetica', 'normal');
+  doc.text(account.mandiArrivalDisplay, margin + cardWidth / 2, y + 15, { align: 'center' });
+
+  // 2. Purchased Bags
+  doc.setFillColor(240, 253, 244);
+  doc.setDrawColor(187, 247, 208);
+  doc.roundedRect(margin + cardWidth + 3, y, cardWidth, cardHeight, 1.5, 1.5, 'FD');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7.5);
+  doc.setTextColor(21, 128, 61);
+  doc.text('PURCHASED BAGS', margin + cardWidth + 3 + cardWidth / 2, y + 5.5, { align: 'center' });
+  doc.setFontSize(11);
+  doc.setTextColor(20, 83, 45);
+  doc.text(`${account.purchasedBags} Bags`, margin + cardWidth + 3 + cardWidth / 2, y + 11, { align: 'center' });
+  doc.setFontSize(7);
+  doc.setFont('helvetica', 'normal');
+  doc.text(account.purchasedWeightDisplay, margin + cardWidth + 3 + cardWidth / 2, y + 15, { align: 'center' });
+
+  // 3. Remaining Bags
+  doc.setFillColor(254, 242, 242);
+  doc.setDrawColor(254, 202, 202);
+  doc.roundedRect(margin + (cardWidth + 3) * 2, y, cardWidth, cardHeight, 1.5, 1.5, 'FD');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7.5);
+  doc.setTextColor(185, 28, 28);
+  doc.text('REMAINING BAGS', margin + (cardWidth + 3) * 2 + cardWidth / 2, y + 5.5, { align: 'center' });
+  doc.setFontSize(11);
+  doc.setTextColor(153, 27, 27);
+  doc.text(`${account.remainingBags} Bags`, margin + (cardWidth + 3) * 2 + cardWidth / 2, y + 11, { align: 'center' });
+  doc.setFontSize(7);
+  doc.setFont('helvetica', 'normal');
+  doc.text(account.remainingWeightDisplay, margin + (cardWidth + 3) * 2 + cardWidth / 2, y + 15, { align: 'center' });
+
+  // 4. Total Amount
+  doc.setFillColor(255, 251, 235);
+  doc.setDrawColor(253, 230, 138);
+  doc.roundedRect(margin + (cardWidth + 3) * 3, y, cardWidth, cardHeight, 1.5, 1.5, 'FD');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7.5);
+  doc.setTextColor(180, 83, 9);
+  doc.text('TOTAL AMOUNT', margin + (cardWidth + 3) * 3 + cardWidth / 2, y + 5.5, { align: 'center' });
+  doc.setFontSize(10);
+  doc.setTextColor(120, 53, 15);
+  doc.text(formatCurrencyINR(account.purchasedAmount), margin + (cardWidth + 3) * 3 + cardWidth / 2, y + 11, { align: 'center' });
+  doc.setFontSize(7);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`Paid: ${formatCurrencyINR(account.paidAmount)}`, margin + (cardWidth + 3) * 3 + cardWidth / 2, y + 15, { align: 'center' });
+
+  y += cardHeight + 6;
+
+  // ==========================================
+  // SECTION 1: MANDI ARRIVAL SUMMARY
+  // ==========================================
+  checkPageBreak(35);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.setTextColor(20, 83, 45);
+  doc.text('1. MANDI ARRIVAL & WEIGHMENT DETAILS (ਮੰਡੀ ਆਮਦ ਤੁਲਾਈ)', margin, y);
+  y += 4;
+
+  // Table header
+  doc.setFillColor(226, 232, 240);
+  doc.rect(margin, y, contentWidth, 6, 'F');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7.5);
+  doc.setTextColor(30, 41, 59);
+  doc.text('Date', margin + 3, y + 4.2);
+  doc.text('Slip No', margin + 24, y + 4.2);
+  doc.text('Bags', margin + 48, y + 4.2);
+  doc.text('Total Weight', margin + 68, y + 4.2);
+  doc.text('Bardana', margin + 104, y + 4.2);
+  doc.text('Rate', margin + 128, y + 4.2);
+  doc.text('Total Amount', pageWidth - margin - 4, y + 4.2, { align: 'right' });
+  y += 6;
+
+  if (account.mandiArrivalEntries.length === 0) {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(148, 163, 184);
+    doc.text('No Mandi Arrival records found for this farmer.', margin + 3, y + 5);
+    y += 8;
+  } else {
+    account.mandiArrivalEntries.forEach((entry, idx) => {
+      checkPageBreak(7);
+      if (idx % 2 === 1) {
+        doc.setFillColor(248, 250, 252);
+        doc.rect(margin, y, contentWidth, 6, 'F');
+      }
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7.5);
+      doc.setTextColor(51, 65, 85);
+      doc.text(entry.date, margin + 3, y + 4.2);
+      doc.text(entry.entryNumber, margin + 24, y + 4.2);
+      doc.text(`${entry.bags} Bags`, margin + 48, y + 4.2);
+      doc.text(entry.grandTotalDisplay, margin + 68, y + 4.2);
+      doc.text(`${entry.bardana} Bardana`, margin + 104, y + 4.2);
+      doc.text(`Rs. ${entry.ratePerQtl}`, margin + 128, y + 4.2);
+      doc.setFont('helvetica', 'bold');
+      doc.text(formatCurrencyINR(entry.totalAmount), pageWidth - margin - 4, y + 4.2, { align: 'right' });
+      y += 6;
+    });
+
+    // Total row
+    doc.setDrawColor(203, 213, 225);
+    doc.line(margin, y, pageWidth - margin, y);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(15, 23, 42);
+    doc.text('Total Mandi Arrival:', margin + 3, y + 4.5);
+    doc.text(`${account.mandiArrivalBags} Bags`, margin + 48, y + 4.5);
+    doc.text(account.mandiArrivalDisplay, margin + 68, y + 4.5);
+    y += 8;
+  }
+
+  // ==========================================
+  // SECTION 2: AGENCY-WISE PURCHASE & DAILY PURCHASES
+  // ==========================================
+  checkPageBreak(35);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.setTextColor(20, 83, 45);
+  doc.text('2. AGENCY-WISE & DAILY PURCHASES (ਰੋਜ਼ਾਨਾ ਖਰੀਦ ਵੇਰਵਾ)', margin, y);
+  y += 4;
+
+  // Table header
+  doc.setFillColor(226, 232, 240);
+  doc.rect(margin, y, contentWidth, 6, 'F');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7.5);
+  doc.setTextColor(30, 41, 59);
+  doc.text('Date', margin + 3, y + 4.2);
+  doc.text('Agency', margin + 24, y + 4.2);
+  doc.text('Boli / Ref', margin + 56, y + 4.2);
+  doc.text('Bags', margin + 84, y + 4.2);
+  doc.text('Weight', margin + 104, y + 4.2);
+  doc.text('Rate', margin + 130, y + 4.2);
+  doc.text('Amount', pageWidth - margin - 4, y + 4.2, { align: 'right' });
+  y += 6;
+
+  if (account.purchaseRecords.length === 0) {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(148, 163, 184);
+    doc.text('No Daily Purchase records found for this farmer.', margin + 3, y + 5);
+    y += 8;
+  } else {
+    account.purchaseRecords.forEach((pur, idx) => {
+      checkPageBreak(7);
+      if (idx % 2 === 1) {
+        doc.setFillColor(248, 250, 252);
+        doc.rect(margin, y, contentWidth, 6, 'F');
+      }
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7.5);
+      doc.setTextColor(51, 65, 85);
+      doc.text(pur.date, margin + 3, y + 4.2);
+      doc.text(cleanText(pur.agency), margin + 24, y + 4.2);
+      doc.text(pur.boliNumber || pur.id, margin + 56, y + 4.2);
+      doc.text(`${pur.bags} Bags`, margin + 84, y + 4.2);
+      doc.text(pur.totalWeightDisplay || `${pur.qul}Q ${pur.kg}K`, margin + 104, y + 4.2);
+      doc.text(`Rs. ${pur.rate}`, margin + 130, y + 4.2);
+      doc.setFont('helvetica', 'bold');
+      doc.text(formatCurrencyINR(pur.totalAmount), pageWidth - margin - 4, y + 4.2, { align: 'right' });
+      y += 6;
+    });
+
+    // Total row
+    doc.setDrawColor(203, 213, 225);
+    doc.line(margin, y, pageWidth - margin, y);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(15, 23, 42);
+    doc.text('Total Purchased:', margin + 3, y + 4.5);
+    doc.text(`${account.purchasedBags} Bags`, margin + 84, y + 4.5);
+    doc.text(account.purchasedWeightDisplay, margin + 104, y + 4.5);
+    doc.text(formatCurrencyINR(account.purchasedAmount), pageWidth - margin - 4, y + 4.5, { align: 'right' });
+    y += 8;
+  }
+
+  // Agency Breakdown Box
+  if (account.agencyWisePurchases.length > 0) {
+    checkPageBreak(20);
+    doc.setFillColor(241, 245, 249);
+    doc.roundedRect(margin, y, contentWidth, 14, 1.5, 1.5, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    doc.setTextColor(71, 85, 105);
+    doc.text('AGENCY PROCUREMENT BREAKDOWN:', margin + 4, y + 4.5);
+
+    let agX = margin + 4;
+    account.agencyWisePurchases.forEach((ag) => {
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8);
+      doc.setTextColor(20, 83, 45);
+      doc.text(`${cleanText(ag.agency)}: ${ag.bags} Bags (${formatCurrencyINR(ag.amount)})   |`, agX, y + 10);
+      agX += 58;
+    });
+    y += 18;
+  }
+
+  // ==========================================
+  // SECTION 3: BARDANA DETAILS
+  // ==========================================
+  checkPageBreak(22);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.setTextColor(20, 83, 45);
+  doc.text('3. BARDANA USAGE DETAILS (ਬਾਰਦਾਨਾ ਵੇਰਵਾ)', margin, y);
+  y += 4;
+
+  doc.setFillColor(248, 250, 252);
+  doc.roundedRect(margin, y, contentWidth, 12, 1.5, 1.5, 'F');
+  doc.setDrawColor(226, 232, 240);
+  doc.roundedRect(margin, y, contentWidth, 12, 1.5, 1.5, 'S');
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8.5);
+  doc.setTextColor(51, 65, 85);
+  doc.text(`New Bardana Used: `, margin + 6, y + 7.5);
+  doc.setFont('helvetica', 'bold');
+  doc.text(`${account.newBardanaUsed} Bags`, margin + 36, y + 7.5);
+
+  doc.setFont('helvetica', 'normal');
+  doc.text(`Old Bardana Used: `, margin + 70, y + 7.5);
+  doc.setFont('helvetica', 'bold');
+  doc.text(`${account.oldBardanaUsed} Bags`, margin + 98, y + 7.5);
+
+  doc.setFont('helvetica', 'normal');
+  doc.text(`Total Bardana Used: `, margin + 130, y + 7.5);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(20, 83, 45);
+  doc.text(`${account.totalBardanaUsed} Bags`, margin + 160, y + 7.5);
+
+  y += 18;
+
+  // ==========================================
+  // SECTION 4: CROP PURCHASES & LABOUR RECONCILIATION
+  // ==========================================
+  checkPageBreak(42);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.setTextColor(20, 83, 45);
+  doc.text('4. CROP RECONCILIATION & LABOUR DEDUCTIONS (ਫਸਲ ਹਿਸਾਬ ਅਤੇ ਲੇਬਰ ਕਟੌਤੀ)', margin, y);
+  y += 4;
+
+  doc.setFillColor(248, 250, 252);
+  doc.roundedRect(margin, y, contentWidth, 34, 1.5, 1.5, 'F');
+  doc.setDrawColor(226, 232, 240);
+  doc.roundedRect(margin, y, contentWidth, 34, 1.5, 1.5, 'S');
+
+  let crY = y + 6;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8.5);
+  doc.setTextColor(71, 85, 105);
+  doc.text('Gross Crop Amount (ਕੁੱਲ ਫਸਲ ਰਕਮ):', margin + 6, crY);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(15, 23, 42);
+  doc.text(formatCurrencyINR(account.totalGrossAmount), margin + 80, crY);
+
+  crY += 5.5;
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(185, 28, 28);
+  doc.text('Less: Pakki Labour (ਪੱਕੀ ਲੇਬਰ ₹7/ਕੁਇੰਟਲ):', margin + 6, crY);
+  doc.setFont('helvetica', 'bold');
+  doc.text(`- ${formatCurrencyINR(account.totalPakkiLabour)}`, margin + 80, crY);
+
+  crY += 5.5;
+  doc.setFont('helvetica', 'normal');
+  doc.text('Less: Pakka Double Labour (ਡਬਲ ਲੇਬਰ ₹14/ਕੁਇੰਟਲ):', margin + 6, crY);
+  doc.setFont('helvetica', 'bold');
+  doc.text(`- ${formatCurrencyINR(account.totalPakkaDoubleLabour)}`, margin + 80, crY);
+
+  crY += 5.5;
+  doc.setFont('helvetica', 'normal');
+  doc.text('Less: Sukhi Labour (ਸੁੱਕੀ ਲੇਬਰ ₹5/ਕੁਇੰਟਲ):', margin + 6, crY);
+  doc.setFont('helvetica', 'bold');
+  doc.text(`- ${formatCurrencyINR(account.totalSukhiLabour)}`, margin + 80, crY);
+
+  // Divider line
+  doc.setDrawColor(203, 213, 225);
+  doc.line(margin + 4, crY + 2, margin + contentWidth - 4, crY + 2);
+
+  crY += 6.5;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.setTextColor(20, 83, 45);
+  doc.text('Total Labour Deductions (ਕੁੱਲ ਲੇਬਰ ਕਟੌਤੀ):', margin + 6, crY);
+  doc.text(`- ${formatCurrencyINR(account.totalLabourDeductions)}`, margin + 80, crY);
+
+  // Right column: Agency Payments & Net Crop Payable
+  const netColX = margin + (contentWidth * 0.58);
+  let netY = y + 6;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8.5);
+  doc.setTextColor(71, 85, 105);
+  doc.text('Agency Payments Paid (ਅਦਾਇਗੀਆਂ):', netColX, netY);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(15, 23, 42);
+  doc.text(formatCurrencyINR(account.totalAgencyPurchasePayment), pageWidth - margin - 6, netY, { align: 'right' });
+
+  netY += 9;
+  doc.setFillColor(240, 253, 244);
+  doc.roundedRect(netColX - 2, netY - 2, contentWidth * 0.42, 18, 1.5, 1.5, 'F');
+  doc.setDrawColor(34, 197, 94);
+  doc.roundedRect(netColX - 2, netY - 2, contentWidth * 0.42, 18, 1.5, 1.5, 'S');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.setTextColor(20, 83, 45);
+  doc.text('NET CROP PAYABLE (ਸ਼ੁੱਧ ਫਸਲ ਰਕਮ)', netColX + 4, netY + 4);
+  doc.setFontSize(12);
+  doc.text(formatCurrencyINR(account.netPayableAmount), netColX + 4, netY + 12);
+
+  y += 40;
+
+  // ==========================================
+  // SECTION 5: SEPARATE ADVANCE & MONTHS+DAYS INTEREST STATEMENT
+  // ==========================================
+  checkPageBreak(40);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.setTextColor(20, 83, 45);
+  doc.text('5. SEPARATE ADVANCE & ACCRUED INTEREST (ਪੇਸ਼ਗੀ ਅਤੇ ਮਹੀਨਾਵਾਰ ਵਿਆਜ ਹਿਸਾਬ)', margin, y);
+  y += 4;
+
+  // Table header matching: Principal | Start Date | End Date | Rate | Days | Months+Days | Interest | Total
+  doc.setFillColor(226, 232, 240);
+  doc.rect(margin, y, contentWidth, 6.5, 'F');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7);
+  doc.setTextColor(30, 41, 59);
+  doc.text('Principal (Rs.)', margin + 3, y + 4.2);
+  doc.text('Start Date', margin + 28, y + 4.2);
+  doc.text('End Date', margin + 50, y + 4.2);
+  doc.text('Rate/Mo', margin + 72, y + 4.2);
+  doc.text('Days', margin + 88, y + 4.2);
+  doc.text('Months + Days', margin + 104, y + 4.2);
+  doc.text('Interest (Rs.)', margin + 140, y + 4.2);
+  doc.text('Total (Rs.)', pageWidth - margin - 4, y + 4.2, { align: 'right' });
+  y += 6.5;
+
+  if (!account.advances || account.advances.length === 0) {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(148, 163, 184);
+    doc.text('No separate advance records recorded for this farmer.', margin + 3, y + 5);
+    y += 8;
+  } else {
+    account.advances.forEach((adv, idx) => {
+      checkPageBreak(7);
+      if (idx % 2 === 1) {
+        doc.setFillColor(248, 250, 252);
+        doc.rect(margin, y, contentWidth, 6, 'F');
+      }
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(7.5);
+      doc.setTextColor(15, 23, 42);
+      doc.text(formatCurrencyINR(adv.principal ?? adv.amount), margin + 3, y + 4.2);
+
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(51, 65, 85);
+      doc.text(adv.startDate || adv.date, margin + 28, y + 4.2);
+      doc.text(adv.endDate || adv.interestTillDate || '—', margin + 50, y + 4.2);
+      doc.text(`${adv.monthlyInterestRate ?? 2.0}%`, margin + 72, y + 4.2);
+      doc.text(`${adv.totalDays || 0}d`, margin + 88, y + 4.2);
+      doc.text(`${adv.monthsElapsed || 0}M + ${adv.daysElapsed || 0}D`, margin + 104, y + 4.2);
+
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(180, 83, 9);
+      doc.text(formatCurrencyINR(adv.interestAmount || 0), margin + 140, y + 4.2);
+      doc.setTextColor(159, 18, 57);
+      doc.text(formatCurrencyINR(adv.totalPayableWithInterest || (adv.amount + (adv.interestAmount || 0))), pageWidth - margin - 4, y + 4.2, { align: 'right' });
+      y += 6;
+    });
+
+    // Advance Totals row matching: Total Principal | Total Interest | Principal + Interest Total
+    doc.setDrawColor(203, 213, 225);
+    doc.line(margin, y, pageWidth - margin, y);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    doc.setTextColor(15, 23, 42);
+    doc.text('Total Principal:', margin + 3, y + 4.5);
+    doc.text(formatCurrencyINR(account.totalAdvancePrincipal), margin + 28, y + 4.5);
+
+    doc.setTextColor(180, 83, 9);
+    doc.text('Total Interest:', margin + 72, y + 4.5);
+    doc.text(formatCurrencyINR(account.totalAdvanceInterest), margin + 98, y + 4.5);
+
+    doc.setTextColor(159, 18, 57);
+    doc.text('Principal + Interest Total:', margin + 128, y + 4.5);
+    doc.text(formatCurrencyINR(account.totalAdvanceRecoverable), pageWidth - margin - 4, y + 4.5, { align: 'right' });
+    y += 8;
+  }
+
+  // ==========================================
+  // SECTION 6: FINAL NET SETTLEMENT STATEMENT
+  // ==========================================
+  checkPageBreak(30);
+  const isPayable = account.finalNetSettlementBalance >= 0;
+  doc.setFillColor(isPayable ? 240 : 254, isPayable ? 253 : 242, isPayable ? 244 : 242);
+  doc.roundedRect(margin, y, contentWidth, 24, 2, 2, 'F');
+  doc.setDrawColor(isPayable ? 34 : 239, isPayable ? 197 : 68, isPayable ? 94 : 68);
+  doc.roundedRect(margin, y, contentWidth, 24, 2, 2, 'S');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9.5);
+  doc.setTextColor(isPayable ? 20 : 153, isPayable ? 83 : 27, isPayable ? 45 : 27);
+  doc.text('6. FINAL NET SETTLEMENT STATEMENT / ਅੰਤਿਮ ਹਿਸਾਬ ਬਕਾਇਆ', margin + 6, y + 6);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(51, 65, 85);
+  doc.text(`Net Crop Payable: ${formatCurrencyINR(account.netPayableAmount)}`, margin + 6, y + 13);
+  doc.text(`Less Advance Recoverable: - ${formatCurrencyINR(account.totalAdvanceRecoverable)}`, margin + 64, y + 13);
+  doc.text(`Direct Payments: - ${formatCurrencyINR(account.paidAmount)}`, margin + 134, y + 13);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.setTextColor(isPayable ? 20 : 185, isPayable ? 83 : 28, isPayable ? 45 : 28);
+  const settlementLabel = isPayable ? 'FINAL BALANCE PAYABLE TO FARMER:' : 'FINAL RECOVERABLE FROM FARMER:';
+  doc.text(settlementLabel, margin + 6, y + 19.5);
+  doc.setFontSize(12);
+  doc.text(formatCurrencyINR(Math.abs(account.finalNetSettlementBalance)), pageWidth - margin - 6, y + 19.5, { align: 'right' });
+
+  y += 30;
+
+  // ==========================================
+  // SECTION 7: COMPLETE TRANSACTION LEDGER
+  // ==========================================
+  checkPageBreak(35);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.setTextColor(20, 83, 45);
+  doc.text('7. CHRONOLOGICAL TRANSACTION LEDGER (ਲੈਣ-ਦੇਣ ਦਾ ਰਿਕਾਰਡ)', margin, y);
+  y += 4;
+
+  // Table header
+  doc.setFillColor(226, 232, 240);
+  doc.rect(margin, y, contentWidth, 6, 'F');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7.5);
+  doc.setTextColor(30, 41, 59);
+  doc.text('Date', margin + 3, y + 4.2);
+  doc.text('Type', margin + 24, y + 4.2);
+  doc.text('Agency / Ref', margin + 56, y + 4.2);
+  doc.text('Bags', margin + 98, y + 4.2);
+  doc.text('Weight', margin + 116, y + 4.2);
+  doc.text('Rate', margin + 138, y + 4.2);
+  doc.text('Amount (Rs.)', pageWidth - margin - 4, y + 4.2, { align: 'right' });
+  y += 6;
+
+  if (account.transactions.length === 0) {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(148, 163, 184);
+    doc.text('No ledger transactions recorded yet.', margin + 3, y + 5);
+    y += 8;
+  } else {
+    account.transactions.forEach((tx, idx) => {
+      checkPageBreak(7);
+      if (idx % 2 === 1) {
+        doc.setFillColor(248, 250, 252);
+        doc.rect(margin, y, contentWidth, 6, 'F');
+      }
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7.5);
+      doc.setTextColor(51, 65, 85);
+      doc.text(tx.date, margin + 3, y + 4.2);
+      doc.text(cleanText(tx.typeLabelEn), margin + 24, y + 4.2);
+      doc.text(cleanText(`${tx.agency || ''} ${tx.reference ? `(${tx.reference})` : ''}`), margin + 56, y + 4.2);
+      doc.text(tx.bags ? `${tx.bags}` : '—', margin + 98, y + 4.2);
+      doc.text(tx.qul !== undefined ? `${tx.qul}Q ${tx.kg}K` : '—', margin + 116, y + 4.2);
+      doc.text(tx.rate ? `${tx.rate}` : '—', margin + 138, y + 4.2);
+      doc.setFont('helvetica', 'bold');
+      doc.text(tx.totalAmount ? formatCurrencyINR(tx.totalAmount) : '—', pageWidth - margin - 4, y + 4.2, { align: 'right' });
+      y += 6;
+    });
+  }
+
+  // ==========================================
+  // SIGNATURE FOOTER
+  // ==========================================
+  checkPageBreak(25);
+  y += 10;
+  doc.setDrawColor(203, 213, 225);
+  doc.line(margin, y, pageWidth - margin, y);
+  y += 6;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(100, 116, 139);
+  doc.text('Verified Mandi Secretary / Auctioneer Signature', margin + 4, y + 10);
+  doc.text('Aadhaar / Farmer Signature', pageWidth - margin - 50, y + 10);
+
+  // Save PDF
+  const filename = `Farmer_Account_${account.farmer.id}_${account.farmer.farmerName.replace(/\s+/g, '_')}.pdf`;
+  doc.save(filename);
+}
