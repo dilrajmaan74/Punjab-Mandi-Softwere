@@ -33,6 +33,42 @@ import {
   FIXED_BAG_WEIGHT_KG,
   FIXED_RATE_PER_QTL
 } from '../utils/calculations';
+import { isSupabaseConfigured } from '../lib/supabase';
+import {
+  loadAllDataFromSupabase,
+  migrateAllDataToSupabase,
+  supabaseUpsertFarmer,
+  supabaseDeleteFarmer,
+  supabaseUpsertBagsEntry,
+  supabaseDeleteBagsEntry,
+  supabaseUpsertBardana,
+  supabaseDeleteBardana,
+  supabaseUpsertDailyPurchase,
+  supabaseDeleteDailyPurchase,
+  supabaseUpsertPayment,
+  supabaseDeletePayment,
+  supabaseUpsertAdvance,
+  supabaseDeleteAdvance,
+  supabaseUpsertBoli,
+  supabaseDeleteBoli,
+  supabaseUpsertLefting,
+  supabaseDeleteLefting,
+  supabaseUpsertTruck,
+  supabaseDeleteTruck,
+  supabaseUpsertSeller,
+  supabaseDeleteSeller,
+  supabaseUpsertFirm,
+  supabaseDeleteFirm,
+  supabaseSaveActiveFirmContext,
+  supabaseSaveFiscalYears,
+  supabaseSaveActiveFiscalYearContext,
+  supabaseSaveAgencies,
+  supabaseSaveSettings,
+  supabaseSavePinCodes,
+  supabaseUpsertRecycleItem,
+  supabaseDeleteRecycleItem,
+  supabaseClearRecycleBin
+} from '../services/supabaseService';
 
 interface DuplicateCheckResult {
   isDuplicate: boolean;
@@ -260,6 +296,16 @@ interface MandiContextType {
   // Settings & DB Reset
   updateSettings: (newSettings: Partial<MandiSettings>) => void;
   resetAllData: () => void;
+
+  // Supabase Cloud PostgreSQL Integration
+  supabaseSyncStatus: 'idle' | 'syncing' | 'connected' | 'error';
+  supabaseSyncError: string | null;
+  supabaseLastSyncedAt: string | null;
+  isSupabaseConfigured: boolean;
+  syncWithSupabase: () => Promise<void>;
+  migrateDataToSupabase: () => Promise<{ success: boolean; stats: any; error?: string }>;
+  isSupabaseSyncModalOpen: boolean;
+  setIsSupabaseSyncModalOpen: (open: boolean) => void;
 }
 
 const MandiContext = createContext<MandiContextType | undefined>(undefined);
@@ -554,6 +600,125 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [selectedFarmerForAccount, setSelectedFarmerForAccount] = useState<Farmer | null>(null);
   const [activePurchaseRecord, setActivePurchaseRecord] = useState<DailyPurchaseRecord | null>(null);
 
+  // 13. Supabase Cloud PostgreSQL Integration States
+  const [supabaseSyncStatus, setSupabaseSyncStatus] = useState<'idle' | 'syncing' | 'connected' | 'error'>('idle');
+  const [supabaseSyncError, setSupabaseSyncError] = useState<string | null>(null);
+  const [supabaseLastSyncedAt, setSupabaseLastSyncedAt] = useState<string | null>(null);
+  const [isSupabaseSyncModalOpen, setIsSupabaseSyncModalOpen] = useState<boolean>(false);
+
+  /**
+   * Migrate all local state records into Supabase PostgreSQL tables
+   */
+  const migrateDataToSupabase = async () => {
+    setSupabaseSyncStatus('syncing');
+    setSupabaseSyncError(null);
+    const res = await migrateAllDataToSupabase({
+      farmers,
+      bagsEntries,
+      bardanaRecords,
+      dailyPurchaseRecords,
+      farmerPayments,
+      farmerAdvances,
+      boliRecords,
+      leftingRecords,
+      recycleBinItems,
+      agencies,
+      pinCodes,
+      settings,
+      firms,
+      activeFirmId,
+      fiscalYears,
+      activeFiscalYear,
+      sellers,
+      trucks
+    });
+
+    if (res.success) {
+      setSupabaseSyncStatus('connected');
+      setSupabaseLastSyncedAt(new Date().toISOString());
+      setSupabaseSyncError(null);
+    } else {
+      setSupabaseSyncStatus('error');
+      setSupabaseSyncError(res.error || 'Failed to migrate data to Supabase.');
+    }
+    return res;
+  };
+
+  /**
+   * Sync all 17 datasets from Supabase PostgreSQL (Supabase is PRIMARY)
+   */
+  const syncWithSupabase = async () => {
+    if (!isSupabaseConfigured()) {
+      setSupabaseSyncStatus('error');
+      setSupabaseSyncError('Supabase publishable key is not configured.');
+      return;
+    }
+
+    setSupabaseSyncStatus('syncing');
+    setSupabaseSyncError(null);
+
+    try {
+      const res = await loadAllDataFromSupabase();
+      if (res.success && res.data) {
+        const d = res.data;
+        const hasSupabaseData =
+          d.farmers.length > 0 ||
+          d.bagsEntries.length > 0 ||
+          d.dailyPurchaseRecords.length > 0 ||
+          d.leftingRecords.length > 0 ||
+          d.bardanaRecords.length > 0 ||
+          d.farmerPayments.length > 0 ||
+          d.farmerAdvances.length > 0 ||
+          d.trucks.length > 0;
+
+        if (hasSupabaseData) {
+          // Supabase is the PRIMARY source of truth
+          if (d.farmers) setFarmers(d.farmers);
+          if (d.bagsEntries) setBagsEntries(d.bagsEntries);
+          if (d.bardanaRecords) setBardanaRecords(d.bardanaRecords);
+          if (d.dailyPurchaseRecords) setDailyPurchaseRecords(d.dailyPurchaseRecords);
+          if (d.farmerPayments) setFarmerPayments(d.farmerPayments);
+          if (d.farmerAdvances) setFarmerAdvances(d.farmerAdvances);
+          if (d.boliRecords) setBoliRecords(d.boliRecords);
+          if (d.leftingRecords) setLeftingRecords(d.leftingRecords);
+          if (d.recycleBinItems) setRecycleBinItems(d.recycleBinItems);
+          if (d.agencies && d.agencies.length > 0) setAgencies(d.agencies);
+          if (d.pinCodes && d.pinCodes.length > 0) setPinCodes(d.pinCodes);
+          if (d.firms && d.firms.length > 0) setFirms(d.firms);
+          if (d.activeFirmId) setActiveFirmId(d.activeFirmId);
+          if (d.fiscalYears && d.fiscalYears.length > 0) setFiscalYears(d.fiscalYears);
+          if (d.activeFiscalYear) setActiveFiscalYear(d.activeFiscalYear);
+          if (d.sellers && d.sellers.length > 0) setSellers(d.sellers);
+          if (d.trucks && d.trucks.length > 0) setTrucks(d.trucks);
+          if (d.settings) setSettings(d.settings);
+        } else {
+          // Supabase is empty or newly created: Do NOT auto-migrate until security audit & explicit user migration
+          console.info('Supabase database connected. Ready for manual migration after security audit.');
+        }
+
+        setSupabaseSyncStatus('connected');
+        setSupabaseLastSyncedAt(new Date().toISOString());
+        setSupabaseSyncError(null);
+      } else if (res.tablesMissing) {
+        setSupabaseSyncStatus('error');
+        setSupabaseSyncError('One or more tables missing in Supabase. Please run the SQL schema migration.');
+      } else {
+        setSupabaseSyncStatus('error');
+        setSupabaseSyncError(res.error || 'Failed to sync with Supabase.');
+      }
+    } catch (err: any) {
+      setSupabaseSyncStatus('error');
+      setSupabaseSyncError(err.message || 'Supabase network error occurred.');
+    }
+  };
+
+  // Connect to Supabase on mount
+  useEffect(() => {
+    if (isSupabaseConfigured()) {
+      syncWithSupabase();
+    }
+  }, []);
+
   // Sync to LocalStorage
   useEffect(() => {
     localStorage.setItem(LOCAL_STORAGE_KEYS.TRUCKS, JSON.stringify(trucks));
@@ -742,6 +907,9 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     };
 
     setFarmers((prev) => [newFarmer, ...prev]);
+    // Supabase async mirror
+    supabaseUpsertFarmer(newFarmer, activeFirmId).catch(console.error);
+
     return {
       success: true,
       farmer: newFarmer,
@@ -750,9 +918,12 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const updateFarmer = (id: string, updates: Partial<Farmer>): boolean => {
-    setFarmers((prev) =>
-      prev.map((f) => (f.id === id ? { ...f, ...updates } : f))
-    );
+    setFarmers((prev) => {
+      const updatedList = prev.map((f) => (f.id === id ? { ...f, ...updates } : f));
+      const target = updatedList.find((f) => f.id === id);
+      if (target) supabaseUpsertFarmer(target, activeFirmId).catch(console.error);
+      return updatedList;
+    });
     return true;
   };
 
@@ -770,8 +941,11 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         recordData: farmer
       };
       setRecycleBinItems((prev) => [binItem, ...prev]);
+      supabaseUpsertRecycleItem(binItem, activeFirmId).catch(console.error);
     }
     setFarmers((prev) => prev.filter((f) => f.id !== id));
+    supabaseDeleteFarmer(id).catch(console.error);
+
     // Also clean up associated transactions for data consistency
     setBagsEntries((prev) => prev.filter((b) => b.farmerId !== id));
     setDailyPurchaseRecords((prev) => prev.filter((p) => p.farmerId !== id));
@@ -796,9 +970,12 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const saveFarmerBankDetails = (farmerId: string, bankDetails: BankDetails): boolean => {
-    setFarmers((prev) =>
-      prev.map((f) => (f.id === farmerId ? { ...f, bankDetails } : f))
-    );
+    setFarmers((prev) => {
+      const updatedList = prev.map((f) => (f.id === farmerId ? { ...f, bankDetails } : f));
+      const target = updatedList.find((f) => f.id === farmerId);
+      if (target) supabaseUpsertFarmer(target, activeFirmId).catch(console.error);
+      return updatedList;
+    });
     return true;
   };
 
@@ -814,6 +991,7 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       createdAt: new Date().toISOString()
     };
     setFarmerPayments((prev) => [newRecord, ...prev]);
+    supabaseUpsertPayment(newRecord, activeFirmId, activeFiscalYear).catch(console.error);
     return newRecord;
   };
 
@@ -831,8 +1009,10 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         recordData: payment
       };
       setRecycleBinItems((prev) => [binItem, ...prev]);
+      supabaseUpsertRecycleItem(binItem, activeFirmId).catch(console.error);
     }
     setFarmerPayments((prev) => prev.filter((p) => p.id !== id));
+    supabaseDeletePayment(id).catch(console.error);
     return true;
   };
 
@@ -895,13 +1075,14 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     };
 
     setFarmerAdvances((prev) => [newRecord, ...prev]);
+    supabaseUpsertAdvance(newRecord, activeFirmId, activeFiscalYear).catch(console.error);
     return newRecord;
   };
 
   const updateFarmerAdvance = (id: string, updates: Partial<FarmerAdvanceRecord>): boolean => {
     let updated = false;
-    setFarmerAdvances((prev) =>
-      prev.map((item) => {
+    setFarmerAdvances((prev) => {
+      const updatedList = prev.map((item) => {
         if (item.id === id) {
           updated = true;
           const merged = { ...item, ...updates };
@@ -936,8 +1117,11 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           };
         }
         return item;
-      })
-    );
+      });
+      const target = updatedList.find((a) => a.id === id);
+      if (target) supabaseUpsertAdvance(target, activeFirmId, activeFiscalYear).catch(console.error);
+      return updatedList;
+    });
     return updated;
   };
 
@@ -955,8 +1139,10 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         recordData: adv
       };
       setRecycleBinItems((prev) => [binItem, ...prev]);
+      supabaseUpsertRecycleItem(binItem, activeFirmId).catch(console.error);
     }
     setFarmerAdvances((prev) => prev.filter((a) => a.id !== id));
+    supabaseDeleteAdvance(id).catch(console.error);
     return true;
   };
 
@@ -972,6 +1158,7 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       createdAt: new Date().toISOString()
     };
     setBoliRecords((prev) => [newRecord, ...prev]);
+    supabaseUpsertBoli(newRecord, activeFirmId, activeFiscalYear).catch(console.error);
     return newRecord;
   };
 
@@ -989,8 +1176,10 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         recordData: boli
       };
       setRecycleBinItems((prev) => [binItem, ...prev]);
+      supabaseUpsertRecycleItem(binItem, activeFirmId).catch(console.error);
     }
     setBoliRecords((prev) => prev.filter((b) => b.id !== id));
+    supabaseDeleteBoli(id).catch(console.error);
     return true;
   };
 
@@ -1436,6 +1625,7 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     };
 
     setBagsEntries((prev) => [newRecord, ...prev]);
+    supabaseUpsertBagsEntry(newRecord, activeFirmId, activeFiscalYear).catch(console.error);
     return newRecord;
   };
 
@@ -1454,13 +1644,14 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     });
 
     setBagsEntries((prev) => [...newRecords, ...prev]);
+    newRecords.forEach((r) => supabaseUpsertBagsEntry(r, activeFirmId, activeFiscalYear).catch(console.error));
     return newRecords;
   };
 
   const updateBagsEntry = (id: string, updates: Partial<BagsEntryRecord>): boolean => {
     let updated = false;
-    setBagsEntries((prev) =>
-      prev.map((item) => {
+    setBagsEntries((prev) => {
+      const updatedList = prev.map((item) => {
         if (item.id === id) {
           updated = true;
           return {
@@ -1469,8 +1660,11 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           };
         }
         return item;
-      })
-    );
+      });
+      const target = updatedList.find((b) => b.id === id);
+      if (target) supabaseUpsertBagsEntry(target, activeFirmId, activeFiscalYear).catch(console.error);
+      return updatedList;
+    });
     return updated;
   };
 
@@ -1488,8 +1682,10 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         recordData: entry
       };
       setRecycleBinItems((prev) => [binItem, ...prev]);
+      supabaseUpsertRecycleItem(binItem, activeFirmId).catch(console.error);
     }
     setBagsEntries((prev) => prev.filter((e) => e.id !== id));
+    supabaseDeleteBagsEntry(id).catch(console.error);
     return true;
   };
 
@@ -1562,13 +1758,14 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     };
 
     setBardanaRecords((prev) => [newRecord, ...prev]);
+    supabaseUpsertBardana(newRecord, activeFirmId, activeFiscalYear).catch(console.error);
     return newRecord;
   };
 
   const updateBardanaRecord = (id: string, updates: Partial<BardanaReceivedRecord>): boolean => {
     let updated = false;
-    setBardanaRecords((prev) =>
-      prev.map((item) => {
+    setBardanaRecords((prev) => {
+      const updatedList = prev.map((item) => {
         if (item.id === id) {
           updated = true;
           const newBoxes = updates.newBoxCount !== undefined ? Number(updates.newBoxCount) : (item.newBoxCount || 0);
@@ -1597,8 +1794,11 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           };
         }
         return item;
-      })
-    );
+      });
+      const target = updatedList.find((b) => b.id === id);
+      if (target) supabaseUpsertBardana(target, activeFirmId, activeFiscalYear).catch(console.error);
+      return updatedList;
+    });
     return updated;
   };
 
@@ -1616,8 +1816,10 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         recordData: bardana
       };
       setRecycleBinItems((prev) => [binItem, ...prev]);
+      supabaseUpsertRecycleItem(binItem, activeFirmId).catch(console.error);
     }
     setBardanaRecords((prev) => prev.filter((r) => r.id !== id));
+    supabaseDeleteBardana(id).catch(console.error);
     return true;
   };
 
@@ -2066,6 +2268,7 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     };
 
     setDailyPurchaseRecords((prev) => [newRecord, ...prev]);
+    supabaseUpsertDailyPurchase(newRecord, activeFirmId, activeFiscalYear).catch(console.error);
 
     return {
       success: true,
@@ -2144,6 +2347,10 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       })
     );
 
+    if (updatedRecord) {
+      supabaseUpsertDailyPurchase(updatedRecord, activeFirmId, activeFiscalYear).catch(console.error);
+    }
+
     return {
       success: true,
       record: updatedRecord,
@@ -2169,8 +2376,10 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         recordData: purchase
       };
       setRecycleBinItems((prev) => [binItem, ...prev]);
+      supabaseUpsertRecycleItem(binItem, activeFirmId).catch(console.error);
     }
     setDailyPurchaseRecords((prev) => prev.filter((p) => p.id !== id));
+    supabaseDeleteDailyPurchase(id).catch(console.error);
     return true;
   };
 
@@ -2229,6 +2438,7 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     };
 
     setLeftingRecords((prev) => [newRecord, ...prev]);
+    supabaseUpsertLefting(newRecord, activeFirmId, activeFiscalYear).catch(console.error);
 
     // Auto-save truck to Truck Master if not already present
     if (recordData.truckNo && recordData.truckNo.trim()) {
@@ -2247,6 +2457,7 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             truckUnion: recordData.truckUnion || undefined,
             createdAt: new Date().toISOString()
           };
+          supabaseUpsertTruck(autoTruck).catch(console.error);
           return [autoTruck, ...prev];
         }
         return prev;
@@ -2263,8 +2474,8 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const updateLeftingRecord = (id: string, updates: Partial<LeftingRecord>): boolean => {
     let updated = false;
-    setLeftingRecords((prev) =>
-      prev.map((item) => {
+    setLeftingRecords((prev) => {
+      const updatedList = prev.map((item) => {
         if (item.id === id) {
           updated = true;
           const merged = { ...item, ...updates };
@@ -2274,8 +2485,11 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           return merged;
         }
         return item;
-      })
-    );
+      });
+      const target = updatedList.find((l) => l.id === id);
+      if (target) supabaseUpsertLefting(target, activeFirmId, activeFiscalYear).catch(console.error);
+      return updatedList;
+    });
     return updated;
   };
 
@@ -2293,8 +2507,10 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         recordData: item
       };
       setRecycleBinItems((prev) => [binItem, ...prev]);
+      supabaseUpsertRecycleItem(binItem, activeFirmId).catch(console.error);
     }
     setLeftingRecords((prev) => prev.filter((l) => l.id !== id));
+    supabaseDeleteLefting(id).catch(console.error);
     return true;
   };
 
@@ -2314,6 +2530,7 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         updatedAt: new Date().toISOString()
       };
       setTrucks((prev) => prev.map((t) => (t.id === existing.id ? updated : t)));
+      supabaseUpsertTruck(updated).catch(console.error);
       return updated;
     }
 
@@ -2324,6 +2541,7 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       createdAt: new Date().toISOString()
     };
     setTrucks((prev) => [newTruck, ...prev]);
+    supabaseUpsertTruck(newTruck).catch(console.error);
     return newTruck;
   };
 
@@ -2332,6 +2550,7 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   ): { added: number; updated: number } => {
     let addedCount = 0;
     let updatedCount = 0;
+    const modifiedTrucks: TruckMasterRecord[] = [];
 
     setTrucks((prev) => {
       const map = new Map<string, TruckMasterRecord>();
@@ -2343,12 +2562,14 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
         if (map.has(cleanKey)) {
           const existing = map.get(cleanKey)!;
-          map.set(cleanKey, {
+          const updatedT = {
             ...existing,
             ...item,
             truckNo: item.truckNo.trim().toUpperCase(),
             updatedAt: new Date().toISOString()
-          });
+          };
+          map.set(cleanKey, updatedT);
+          modifiedTrucks.push(updatedT);
           updatedCount++;
         } else {
           const newT: TruckMasterRecord = {
@@ -2358,6 +2579,7 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             createdAt: new Date().toISOString()
           };
           map.set(cleanKey, newT);
+          modifiedTrucks.push(newT);
           addedCount++;
         }
       });
@@ -2365,13 +2587,14 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       return Array.from(map.values());
     });
 
+    modifiedTrucks.forEach((t) => supabaseUpsertTruck(t).catch(console.error));
     return { added: addedCount, updated: updatedCount };
   };
 
   const updateTruck = (id: string, updates: Partial<TruckMasterRecord>): boolean => {
     let ok = false;
-    setTrucks((prev) =>
-      prev.map((t) => {
+    setTrucks((prev) => {
+      const updatedList = prev.map((t) => {
         if (t.id === id) {
           ok = true;
           return {
@@ -2382,13 +2605,17 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           };
         }
         return t;
-      })
-    );
+      });
+      const target = updatedList.find((t) => t.id === id);
+      if (target) supabaseUpsertTruck(target).catch(console.error);
+      return updatedList;
+    });
     return ok;
   };
 
   const deleteTruck = (id: string): boolean => {
     setTrucks((prev) => prev.filter((t) => t.id !== id));
+    supabaseDeleteTruck(id).catch(console.error);
     return true;
   };
 
@@ -2412,33 +2639,44 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     if (item.type === 'FARMER') {
       setFarmers((prev) => [item.recordData, ...prev.filter((f) => f.id !== item.recordData.id)]);
+      supabaseUpsertFarmer(item.recordData, activeFirmId).catch(console.error);
     } else if (item.type === 'BAGS_ENTRY') {
       setBagsEntries((prev) => [item.recordData, ...prev.filter((b) => b.id !== item.recordData.id)]);
+      supabaseUpsertBagsEntry(item.recordData, activeFirmId, activeFiscalYear).catch(console.error);
     } else if (item.type === 'DAILY_PURCHASE') {
       setDailyPurchaseRecords((prev) => [item.recordData, ...prev.filter((p) => p.id !== item.recordData.id)]);
+      supabaseUpsertDailyPurchase(item.recordData, activeFirmId, activeFiscalYear).catch(console.error);
     } else if (item.type === 'BARDANA') {
       setBardanaRecords((prev) => [item.recordData, ...prev.filter((b) => b.id !== item.recordData.id)]);
+      supabaseUpsertBardana(item.recordData, activeFirmId, activeFiscalYear).catch(console.error);
     } else if (item.type === 'ADVANCE') {
       setFarmerAdvances((prev) => [item.recordData, ...prev.filter((a) => a.id !== item.recordData.id)]);
+      supabaseUpsertAdvance(item.recordData, activeFirmId, activeFiscalYear).catch(console.error);
     } else if (item.type === 'LEFTING') {
       setLeftingRecords((prev) => [item.recordData, ...prev.filter((l) => l.id !== item.recordData.id)]);
+      supabaseUpsertLefting(item.recordData, activeFirmId, activeFiscalYear).catch(console.error);
     } else if (item.type === 'PAYMENT') {
       setFarmerPayments((prev) => [item.recordData, ...prev.filter((p) => p.id !== item.recordData.id)]);
+      supabaseUpsertPayment(item.recordData, activeFirmId, activeFiscalYear).catch(console.error);
     } else if (item.type === 'BOLI') {
       setBoliRecords((prev) => [item.recordData, ...prev.filter((b) => b.id !== item.recordData.id)]);
+      supabaseUpsertBoli(item.recordData, activeFirmId, activeFiscalYear).catch(console.error);
     }
 
     setRecycleBinItems((prev) => prev.filter((i) => i.id !== id));
+    supabaseDeleteRecycleItem(id).catch(console.error);
     return true;
   };
 
   const permanentlyDeleteRecycleBinItem = (id: string): boolean => {
     setRecycleBinItems((prev) => prev.filter((i) => i.id !== id));
+    supabaseDeleteRecycleItem(id).catch(console.error);
     return true;
   };
 
   const emptyRecycleBin = () => {
     setRecycleBinItems([]);
+    supabaseClearRecycleBin().catch(console.error);
   };
 
   /**
@@ -2449,17 +2687,27 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       ...agencyData,
       id: `AG-${(agencies.length + 1).toString().padStart(2, '0')}`
     };
-    setAgencies((prev) => [...prev, newAgency]);
+    const updatedAgencies = [...agencies, newAgency];
+    setAgencies(updatedAgencies);
+    supabaseSaveAgencies(updatedAgencies).catch(console.error);
     return newAgency;
   };
 
   const updateAgency = (id: string, updates: Partial<ProcurementAgency>): boolean => {
-    setAgencies((prev) => prev.map((a) => (a.id === id ? { ...a, ...updates } : a)));
+    setAgencies((prev) => {
+      const updatedList = prev.map((a) => (a.id === id ? { ...a, ...updates } : a));
+      supabaseSaveAgencies(updatedList).catch(console.error);
+      return updatedList;
+    });
     return true;
   };
 
   const deleteAgency = (id: string): boolean => {
-    setAgencies((prev) => prev.filter((a) => a.id !== id));
+    setAgencies((prev) => {
+      const updatedList = prev.filter((a) => a.id !== id);
+      supabaseSaveAgencies(updatedList).catch(console.error);
+      return updatedList;
+    });
     return true;
   };
 
@@ -2467,8 +2715,8 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
    * Add village to existing PIN Code
    */
   const addVillageToPinCode = (pinCode: string, villageEn: string, villagePa: string) => {
-    setPinCodes((prev) =>
-      prev.map((item) => {
+    setPinCodes((prev) => {
+      const updatedList = prev.map((item) => {
         if (item.pinCode === pinCode) {
           const exists = item.villages.some((v) => v.en.toLowerCase() === villageEn.trim().toLowerCase());
           if (!exists) {
@@ -2479,8 +2727,10 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           }
         }
         return item;
-      })
-    );
+      });
+      supabaseSavePinCodes(updatedList).catch(console.error);
+      return updatedList;
+    });
   };
 
   /**
@@ -2495,8 +2745,9 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   ) => {
     setPinCodes((prev) => {
       const exists = prev.find((p) => p.pinCode === pinCode);
+      let updatedList: PinCodeVillageMapping[];
       if (exists) {
-        return prev.map((p) =>
+        updatedList = prev.map((p) =>
           p.pinCode === pinCode
             ? {
                 ...p,
@@ -2504,16 +2755,19 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
               }
             : p
         );
+      } else {
+        updatedList = [
+          ...prev,
+          {
+            pinCode,
+            districtEn,
+            districtPa,
+            villages: [{ en: villageEn.trim(), pa: villagePa.trim() || villageEn.trim() }]
+          }
+        ];
       }
-      return [
-        ...prev,
-        {
-          pinCode,
-          districtEn,
-          districtPa,
-          villages: [{ en: villageEn.trim(), pa: villagePa.trim() || villageEn.trim() }]
-        }
-      ];
+      supabaseSavePinCodes(updatedList).catch(console.error);
+      return updatedList;
     });
   };
 
@@ -2528,11 +2782,17 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       createdAt: new Date().toLocaleDateString('en-IN')
     };
     setFirms((prev) => [...prev, newFirm]);
+    supabaseUpsertFirm(newFirm).catch(console.error);
     return newFirm;
   };
 
   const updateFirm = (id: string, updates: Partial<MandiFirm>): boolean => {
-    setFirms((prev) => prev.map((f) => (f.id === id ? { ...f, ...updates } : f)));
+    setFirms((prev) => {
+      const updatedList = prev.map((f) => (f.id === id ? { ...f, ...updates } : f));
+      const target = updatedList.find((f) => f.id === id);
+      if (target) supabaseUpsertFirm(target).catch(console.error);
+      return updatedList;
+    });
     return true;
   };
 
@@ -2546,8 +2806,10 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
     const remaining = firms.filter((f) => f.id !== id);
     setFirms(remaining);
+    supabaseDeleteFirm(id).catch(console.error);
     if (activeFirmId === id) {
       setActiveFirmId(remaining[0].id);
+      supabaseSaveActiveFirmContext(remaining[0].id).catch(console.error);
     }
     return { success: true };
   };
@@ -2558,7 +2820,9 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const addFiscalYear = (year: string) => {
     const clean = year.trim();
     if (clean && !fiscalYears.includes(clean)) {
-      setFiscalYears((prev) => [...prev, clean]);
+      const updatedYears = [...fiscalYears, clean];
+      setFiscalYears(updatedYears);
+      supabaseSaveFiscalYears(updatedYears).catch(console.error);
     }
   };
 
@@ -2573,16 +2837,23 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       createdAt: new Date().toLocaleDateString('en-IN')
     };
     setSellers((prev) => [newSeller, ...prev]);
+    supabaseUpsertSeller(newSeller, activeFirmId).catch(console.error);
     return newSeller;
   };
 
   const updateSeller = (id: string, updates: Partial<SellerMaster>): boolean => {
-    setSellers((prev) => prev.map((s) => (s.id === id ? { ...s, ...updates } : s)));
+    setSellers((prev) => {
+      const updatedList = prev.map((s) => (s.id === id ? { ...s, ...updates } : s));
+      const target = updatedList.find((s) => s.id === id);
+      if (target) supabaseUpsertSeller(target, activeFirmId).catch(console.error);
+      return updatedList;
+    });
     return true;
   };
 
   const deleteSeller = (id: string): boolean => {
     setSellers((prev) => prev.filter((s) => s.id !== id));
+    supabaseDeleteSeller(id).catch(console.error);
     return true;
   };
 
@@ -2590,7 +2861,11 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
    * Update Mandi Settings
    */
   const updateSettings = (newSettings: Partial<MandiSettings>) => {
-    setSettings((prev) => ({ ...prev, ...newSettings }));
+    setSettings((prev) => {
+      const merged = { ...prev, ...newSettings };
+      supabaseSaveSettings(merged).catch(console.error);
+      return merged;
+    });
   };
 
   /**
@@ -2728,7 +3003,15 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         addVillageToPinCode,
         addNewPinCode,
         updateSettings,
-        resetAllData
+        resetAllData,
+        supabaseSyncStatus,
+        supabaseSyncError,
+        supabaseLastSyncedAt,
+        isSupabaseConfigured: isSupabaseConfigured(),
+        syncWithSupabase,
+        migrateDataToSupabase,
+        isSupabaseSyncModalOpen,
+        setIsSupabaseSyncModalOpen
       }}
     >
       {children}

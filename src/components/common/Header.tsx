@@ -9,10 +9,15 @@ import {
   Calendar,
   ChevronDown,
   Settings2,
-  Building
+  Building,
+  Database,
+  RefreshCw,
+  CheckCircle2,
+  AlertCircle
 } from 'lucide-react';
 import { FirmManagerModal } from '../firm/FirmManagerModal';
 import { SellerMasterModal } from '../seller/SellerMasterModal';
+import { SupabaseSyncModal } from '../supabase/SupabaseSyncModal';
 
 export const Header: React.FC = () => {
   const {
@@ -27,7 +32,11 @@ export const Header: React.FC = () => {
     setActiveFirmId,
     fiscalYears,
     activeFiscalYear,
-    setActiveFiscalYear
+    setActiveFiscalYear,
+    supabaseSyncStatus,
+    isSupabaseSyncModalOpen,
+    setIsSupabaseSyncModalOpen,
+    isSupabaseConfigured
   } = useMandi();
 
   const [isFirmModalOpen, setIsFirmModalOpen] = useState(false);
@@ -132,6 +141,37 @@ export const Header: React.FC = () => {
               <span>ਸੈਲਰ ਮਾਸਟਰ (Sellers)</span>
             </button>
 
+            {/* Supabase Cloud DB Status & Control Button */}
+            <button
+              type="button"
+              onClick={() => setIsSupabaseSyncModalOpen(true)}
+              title="Supabase PostgreSQL Cloud Database & Migration"
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-bold transition ${
+                supabaseSyncStatus === 'connected'
+                  ? 'bg-emerald-950/80 hover:bg-emerald-900 border-emerald-600/60 text-emerald-300'
+                  : supabaseSyncStatus === 'syncing'
+                  ? 'bg-blue-950/80 hover:bg-blue-900 border-blue-600/60 text-blue-300 animate-pulse'
+                  : supabaseSyncStatus === 'error'
+                  ? 'bg-rose-950/80 hover:bg-rose-900 border-rose-600/60 text-rose-300'
+                  : 'bg-slate-800/90 hover:bg-slate-700 border-slate-700 text-slate-300 hover:text-white'
+              }`}
+            >
+              <Database className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="hidden sm:inline">Supabase</span>
+              {supabaseSyncStatus === 'connected' && (
+                <span className="inline-flex items-center gap-1 text-[10px] text-emerald-400">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                  ਕਲਾਊਡ
+                </span>
+              )}
+              {supabaseSyncStatus === 'syncing' && (
+                <RefreshCw className="w-3 h-3 text-blue-400 animate-spin" />
+              )}
+              {supabaseSyncStatus === 'error' && (
+                <AlertCircle className="w-3 h-3 text-rose-400" />
+              )}
+            </button>
+
             {/* Quick Metrics */}
             <div className="hidden xl:flex items-center gap-2 bg-slate-800/60 px-2 py-1 rounded-lg border border-slate-700/60 text-xs">
               <div className="flex items-center gap-1 text-slate-300">
@@ -182,6 +222,12 @@ export const Header: React.FC = () => {
       <SellerMasterModal
         isOpen={isSellerModalOpen}
         onClose={() => setIsSellerModalOpen(false)}
+      />
+
+      {/* Supabase PostgreSQL Cloud Sync & Migration Modal */}
+      <SupabaseSyncModal
+        isOpen={isSupabaseSyncModalOpen}
+        onClose={() => setIsSupabaseSyncModalOpen(false)}
       />
     </>
   );

@@ -34,6 +34,7 @@ export interface Farmer {
   aadhaarBackUrl?: string; // Aadhaar Card BACK
   aadhaarPhotoUrl?: string; // backward compatibility
   bankDetails?: BankDetails;
+  firmId?: string;
   createdAt: string;
   updatedAt?: string;
 }
@@ -60,6 +61,8 @@ export interface FarmerAdvanceRecord {
   referenceNumber?: string;
   status?: 'ACTIVE' | 'SETTLED' | 'CANCELLED';
   remarks?: string;
+  firmId?: string;
+  fiscalYear?: string;
   createdAt: string;
   updatedAt?: string;
 }
@@ -257,6 +260,8 @@ export interface BagsEntryRecord {
   labourDeductions?: LabourAndDeductions;
   netAmount?: number;
   agency?: string; // Optional procurement agency assignment
+  firmId?: string;
+  fiscalYear?: string;
   createdAt: string;
 }
 
@@ -299,6 +304,8 @@ export interface DailyPurchaseRecord {
   gatePassNumber?: string;
   status?: 'COMPLETED' | 'PENDING' | 'VERIFIED';
   remarks?: string;
+  firmId?: string;
+  fiscalYear?: string;
   createdAt: string;
   updatedAt?: string;
 }
@@ -366,6 +373,8 @@ export interface FarmerPaymentRecord {
   agency?: string;
   remarks?: string;
   status: 'PAID' | 'PENDING';
+  firmId?: string;
+  fiscalYear?: string;
   createdAt: string;
 }
 
@@ -386,6 +395,8 @@ export interface BoliRecord {
   boliNumber?: string;
   gatePassNumber?: string;
   status: 'CONFIRMED' | 'PENDING' | 'COMPLETED';
+  firmId?: string;
+  fiscalYear?: string;
   createdAt: string;
 }
 
