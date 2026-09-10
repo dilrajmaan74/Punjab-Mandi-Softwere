@@ -63,7 +63,7 @@ export const DateInput: React.FC<DateInputProps> = ({
     }
   };
 
-  const ymdValue = convertDDMMYYYYtoYYYYMMDD(value);
+  const ymdValue = convertDDMMYYYYtoYYYYMMDD(value || '');
 
   return (
     <div className={`relative ${className}`}>
@@ -79,7 +79,7 @@ export const DateInput: React.FC<DateInputProps> = ({
         <input
           type="text"
           id={id}
-          value={value}
+          value={value || ''}
           onChange={handleTextChange}
           placeholder={placeholder}
           maxLength={10}
@@ -96,7 +96,7 @@ export const DateInput: React.FC<DateInputProps> = ({
           type="date"
           tabIndex={-1}
           aria-hidden="true"
-          value={ymdValue}
+          value={ymdValue || ''}
           onChange={handleCalendarPick}
           disabled={disabled}
           className="absolute right-0 top-0 bottom-0 w-8 opacity-0 pointer-events-none"

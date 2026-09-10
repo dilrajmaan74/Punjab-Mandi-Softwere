@@ -1,10 +1,13 @@
 import React, { useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useNotification } from '../../context/NotificationContext';
+import { useMandi } from '../../context/MandiContext';
 import { Trash2, AlertTriangle, Info, X, RefreshCw } from 'lucide-react';
 
 export const ConfirmationModal: React.FC = () => {
   const { confirmationState, closeConfirmation, proceedConfirmation } = useNotification();
+  const { language } = useMandi();
+  const isEn = language === 'en';
 
   // Escape key to close
   useEffect(() => {
@@ -93,11 +96,13 @@ export const ConfirmationModal: React.FC = () => {
 
                 <div>
                   <h3 className="text-base sm:text-lg font-black text-slate-900 leading-snug">
-                    {titlePa}
+                    {isEn ? (titleEn || titlePa) : titlePa}
                   </h3>
-                  <div className="text-xs font-bold text-slate-600 tracking-tight">
-                    {titleEn}
-                  </div>
+                  {!isEn && (
+                    <div className="text-xs font-bold text-slate-600 tracking-tight">
+                      {titleEn}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -113,8 +118,14 @@ export const ConfirmationModal: React.FC = () => {
 
             {/* Message Body */}
             <div className="space-y-1 text-xs text-slate-700 bg-slate-50 border border-slate-200 rounded-xl p-3.5 leading-relaxed">
-              <p className="font-bold text-slate-900 text-xs sm:text-sm">{messagePa}</p>
-              <p className="text-[11px] text-slate-600">{messageEn}</p>
+              {isEn ? (
+                <p className="font-bold text-slate-900 text-xs sm:text-sm">{messageEn || messagePa}</p>
+              ) : (
+                <>
+                  <p className="font-bold text-slate-900 text-xs sm:text-sm">{messagePa}</p>
+                  <p className="text-[11px] text-slate-600">{messageEn}</p>
+                </>
+              )}
             </div>
 
             {/* Detailed Item Overview (e.g. Farmer Name, ID, Village, Aadhaar) */}
@@ -123,7 +134,7 @@ export const ConfirmationModal: React.FC = () => {
                 {itemDetails.map((item, index) => (
                   <div key={index} className="p-2.5 flex items-center justify-between gap-2">
                     <span className="text-slate-500 text-[11px] font-medium">
-                      {item.labelPa} ({item.labelEn}):
+                      {isEn ? item.labelEn : `${item.labelPa} (${item.labelEn})`}:
                     </span>
                     <strong className="text-slate-900 font-bold text-right font-mono text-xs">
                       {item.value}
@@ -141,7 +152,7 @@ export const ConfirmationModal: React.FC = () => {
                 disabled={isProcessing}
                 className="w-full sm:w-auto bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 font-bold py-2.5 px-4 rounded-xl text-xs transition disabled:opacity-40"
               >
-                <span>{cancelTextPa} ({cancelTextEn})</span>
+                <span>{isEn ? cancelTextEn : `${cancelTextPa} (${cancelTextEn})`}</span>
               </button>
 
               <button
@@ -157,12 +168,12 @@ export const ConfirmationModal: React.FC = () => {
                 {isProcessing ? (
                   <>
                     <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                    <span>ਪ੍ਰਕਿਰਿਆ ਹੋ ਰਹੀ ਹੈ... (Processing...)</span>
+                    <span>{isEn ? 'Processing...' : 'ਪ੍ਰਕਿਰਿਆ ਹੋ ਰਹੀ ਹੈ... (Processing...)'}</span>
                   </>
                 ) : (
                   <>
                     {isDelete && <Trash2 className="w-3.5 h-3.5" />}
-                    <span>{confirmTextPa} ({confirmTextEn})</span>
+                    <span>{isEn ? confirmTextEn : `${confirmTextPa} (${confirmTextEn})`}</span>
                   </>
                 )}
               </button>

@@ -138,7 +138,7 @@ export const Header: React.FC = () => {
               className="hidden lg:flex items-center gap-1.5 bg-slate-800/90 hover:bg-slate-700 text-slate-200 hover:text-white px-2.5 py-1 rounded-lg border border-slate-700 text-xs font-bold transition"
             >
               <Building className="w-3.5 h-3.5 text-blue-400" />
-              <span>ਸੈਲਰ ਮਾਸਟਰ (Sellers)</span>
+              <span>{language === 'en' ? 'Sellers Master' : 'ਸੈਲਰ ਮਾਸਟਰ (Sellers)'}</span>
             </button>
 
             {/* Supabase Cloud DB Status & Control Button */}
@@ -161,7 +161,7 @@ export const Header: React.FC = () => {
               {supabaseSyncStatus === 'connected' && (
                 <span className="inline-flex items-center gap-1 text-[10px] text-emerald-400">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                  ਕਲਾਊਡ
+                  {language === 'en' ? 'Cloud' : 'ਕਲਾਊਡ'}
                 </span>
               )}
               {supabaseSyncStatus === 'syncing' && (
@@ -176,12 +176,12 @@ export const Header: React.FC = () => {
             <div className="hidden xl:flex items-center gap-2 bg-slate-800/60 px-2 py-1 rounded-lg border border-slate-700/60 text-xs">
               <div className="flex items-center gap-1 text-slate-300">
                 <Users className="w-3.5 h-3.5 text-emerald-400" />
-                <span>ਕਿਸਾਨ: <strong className="text-white font-mono">{farmers.length}</strong></span>
+                <span>{language === 'en' ? 'Farmers' : 'ਕਿਸਾਨ'}: <strong className="text-white font-mono">{farmers.length}</strong></span>
               </div>
               <span className="text-slate-600">|</span>
               <div className="flex items-center gap-1 text-slate-300">
                 <Package className="w-3.5 h-3.5 text-amber-400" />
-                <span>ਬੋਰੀਆਂ: <strong className="text-white font-mono">{totalBags}</strong></span>
+                <span>{language === 'en' ? 'Bags' : 'ਬੋਰੀਆਂ'}: <strong className="text-white font-mono">{totalBags}</strong></span>
               </div>
             </div>
 

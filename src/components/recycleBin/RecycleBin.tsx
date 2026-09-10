@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useMandi } from '../../context/MandiContext';
 import { useNotification } from '../../context/NotificationContext';
+import { SearchableSelect, SearchableSelectOption } from '../common/SearchableSelect';
 import {
   Trash2,
   RotateCcw,
@@ -78,13 +79,27 @@ export const RecycleBin: React.FC = () => {
     recycleBinItems,
     restoreRecycleBinItem,
     permanentlyDeleteRecycleBinItem,
-    emptyRecycleBin
+    emptyRecycleBin,
+    language
   } = useMandi();
+
+  const isEn = language === 'en';
 
   const { notifySaveSuccess, notifyDeleteSuccess, confirmDelete } = useNotification();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<string>('ALL');
+
+  const filterTypeOptions: SearchableSelectOption[] = useMemo(() => [
+    { value: 'ALL', label: isEn ? 'All Types' : 'ਸਾਰੀਆਂ ਕਿਸਮਾਂ (All Types)' },
+    { value: 'FARMER', label: isEn ? 'Farmers' : 'ਕਿਸਾਨ (Farmers)' },
+    { value: 'BAGS_ENTRY', label: isEn ? 'Mandi Arrivals' : 'ਆਮਦ ਤੁਲਾਈ (Mandi Arrivals)' },
+    { value: 'DAILY_PURCHASE', label: isEn ? 'Agency Purchases' : 'ਏਜੰਸੀ ਖਰੀਦ (Purchases)' },
+    { value: 'BARDANA', label: isEn ? 'Bardana' : 'ਬਾਰਦਾਨਾ (Bardana)' },
+    { value: 'ADVANCE', label: isEn ? 'Advances' : 'ਪੇਸ਼ਗੀ (Advances)' },
+    { value: 'LEFTING', label: isEn ? 'Lefting Dispatch' : 'ਲਿਫਟਿੰਗ (Lefting Dispatch)' },
+    { value: 'PAYMENT', label: isEn ? 'Payments' : 'ਭੁਗਤਾਨ (Payments)' },
+  ], [isEn]);
 
   // Handle Restore Item
   const handleRestore = (item: RecycleBinItem) => {
@@ -196,22 +211,15 @@ export const RecycleBin: React.FC = () => {
           />
         </div>
 
-        <div className="flex items-center gap-2">
-          <Filter className="w-4 h-4 text-slate-400" />
-          <select
+        <div className="w-full sm:w-64">
+          <SearchableSelect
+            id="recycle-bin-type-filter"
             value={filterType}
-            onChange={(e) => setFilterType(e.target.value)}
-            className="px-3 py-2 text-xs font-bold text-slate-800 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none"
-          >
-            <option value="ALL">ਸਾਰੀਆਂ ਕਿਸਮਾਂ (All Types)</option>
-            <option value="FARMER">ਕਿਸਾਨ (Farmers)</option>
-            <option value="BAGS_ENTRY">ਆਮਦ ਤੁਲਾਈ (Mandi Arrivals)</option>
-            <option value="DAILY_PURCHASE">ਏਜੰਸੀ ਖਰੀਦ (Purchases)</option>
-            <option value="BARDANA">ਬਾਰਦਾਨਾ (Bardana)</option>
-            <option value="ADVANCE">ਪੇਸ਼ਗੀ (Advances)</option>
-            <option value="LEFTING">ਲਿਫਟਿੰਗ (Lefting Dispatch)</option>
-            <option value="PAYMENT">ਭੁਗਤਾਨ (Payments)</option>
-          </select>
+            onChange={(val) => setFilterType(val)}
+            options={filterTypeOptions}
+            placeholder={isEn ? "Filter by type..." : "ਕਿਸਮ ਅਨੁਸਾਰ ਫਿਲਟਰ..."}
+            size="xs"
+          />
         </div>
       </div>
 

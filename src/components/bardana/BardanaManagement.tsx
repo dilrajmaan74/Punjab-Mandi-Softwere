@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   BardanaReceivedRecord,
   BardanaSourceType,
@@ -6,6 +6,7 @@ import {
 } from '../../types/mandi';
 import { useMandi } from '../../context/MandiContext';
 import { useNotification } from '../../context/NotificationContext';
+import { SearchableSelect, SearchableSelectOption } from '../common/SearchableSelect';
 import {
   Boxes,
   Building2,
@@ -54,8 +55,11 @@ export const BardanaManagement: React.FC = () => {
     settings,
     addBardanaRecord,
     deleteBardanaRecord,
-    getBardanaSummary
+    getBardanaSummary,
+    language
   } = useMandi();
+
+  const isEn = language === 'en';
 
   const {
     notifySaveSuccess,
@@ -126,6 +130,43 @@ export const BardanaManagement: React.FC = () => {
     const capacity = newType === 'NEW' ? 500 : 50;
     setBags(boxes * capacity);
   };
+
+  const agencyOptions: SearchableSelectOption[] = useMemo(() => {
+    const opts: SearchableSelectOption[] = STANDARD_AGENCIES.map((ag) => ({
+      value: ag,
+      label: isEn ? ag.split('(')[0].trim() : ag,
+      subLabel: isEn ? ag.split('(')[1]?.replace(')', '') : undefined,
+      keywords: [ag]
+    }));
+    opts.push({
+      value: 'CUSTOM',
+      label: isEn ? '+ Other Custom Agency...' : '+ ਹੋਰ ਕਸਟਮ ਏਜੰਸੀ (Other Custom Agency)...',
+      keywords: ['custom', 'other']
+    });
+    return opts;
+  }, [isEn]);
+
+  const sellerOptions: SearchableSelectOption[] = useMemo(() => {
+    return sellers.map((s) => ({
+      value: s.id,
+      label: s.firmName,
+      subLabel: `${isEn ? 'Code/City' : 'ਕੋਡ/ਸ਼ਹਿਰ'}: ${s.code || s.city || '-'}`,
+      badge: s.licenceNo || undefined,
+      keywords: [s.firmName, s.code || '', s.city || '', s.phone || '', s.mobile || '']
+    }));
+  }, [sellers, isEn]);
+
+  const filterSourceTypeOptions: SearchableSelectOption[] = useMemo(() => [
+    { value: 'ALL', label: isEn ? 'All Sources (Seller & Agency)' : 'ਸਾਰੇ ਸਰੋਤ (Seller & Agency)' },
+    { value: 'SELLER', label: isEn ? 'Seller Only' : 'ਸਿਰਫ਼ ਸੈਲਰ (Seller Only)' },
+    { value: 'AGENCY', label: isEn ? 'Agency Only' : 'ਸਿਰਫ਼ ਏਜੰਸੀ (Agency Only)' }
+  ], [isEn]);
+
+  const filterBardanaTypeOptions: SearchableSelectOption[] = useMemo(() => [
+    { value: 'ALL', label: isEn ? 'All Types' : 'ਸਾਰਾ ਬਾਰਦਾਨਾ (All Types)' },
+    { value: 'NEW', label: isEn ? 'New Bag (500)' : 'ਨਵਾਂ ਬੋਰਾ (New Bag - 500)' },
+    { value: 'OLD', label: isEn ? 'Old Bag (50)' : 'ਪੁਰਾਣਾ ਬੋਰਾ (Old Bag - 50)' }
+  ], [isEn]);
 
   // Form Submit Handler
   const handleSaveReceiving = (e: React.FormEvent) => {
@@ -274,6 +315,15 @@ export const BardanaManagement: React.FC = () => {
   const recordedAgencies = Array.from(
     new Set([...STANDARD_AGENCIES, ...bardanaRecords.map((r) => r.agency)])
   );
+
+  const filterAgencyOptions: SearchableSelectOption[] = useMemo(() => [
+    { value: 'ALL', label: isEn ? 'All Agencies' : 'ਸਾਰੀਆਂ ਏਜੰਸੀਆਂ (All Agencies)' },
+    ...recordedAgencies.map((ag) => ({
+      value: ag,
+      label: isEn ? ag.split('(')[0].trim() : ag,
+      keywords: [ag]
+    }))
+  ], [recordedAgencies, isEn]);
 
   // Unified Transaction History List (Received + Issued)
   interface UnifiedTransaction {
@@ -628,41 +678,35 @@ export const BardanaManagement: React.FC = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
               <div>
                 <label className="block text-xs font-bold text-emerald-200 mb-1">
-                  ਏਜੰਸੀ ਚੁਣੋ (Select Mandi Agency) <span className="text-amber-400">*</span>
+                  {isEn ? 'Select Mandi Agency' : 'ਏਜੰਸੀ ਚੁਣੋ (Select Mandi Agency)'} <span className="text-amber-400">*</span>
                 </label>
-                <select
-                  value={STANDARD_AGENCIES.includes(fixedAgency) ? fixedAgency : 'CUSTOM'}
-                  onChange={(e) => {
-                    if (e.target.value === 'CUSTOM') {
+                <SearchableSelect
+                  id="bardana-fixed-agency"
+                  value={STANDARD_AGENCIES.includes(fixedAgency) ? fixedAgency : (fixedAgency ? 'CUSTOM' : '')}
+                  onChange={(val) => {
+                    if (val === 'CUSTOM') {
                       setFixedAgency('CUSTOM');
                     } else {
-                      setFixedAgency(e.target.value);
+                      setFixedAgency(val);
                     }
                   }}
-                  className="w-full bg-slate-900 border border-emerald-500 rounded-xl px-3.5 py-2.5 text-xs font-bold text-white focus:ring-2 focus:ring-emerald-400 focus:outline-hidden"
-                >
-                  {STANDARD_AGENCIES.map((ag) => (
-                    <option key={ag} value={ag} className="bg-slate-900 text-white">
-                      {ag}
-                    </option>
-                  ))}
-                  <option value="CUSTOM" className="bg-slate-900 text-white">
-                    + ਹੋਰ ਕਸਟਮ ਏਜੰਸੀ (Other Custom Agency)...
-                  </option>
-                </select>
+                  options={agencyOptions}
+                  placeholder={isEn ? "Select Mandi Agency..." : "ਏਜੰਸੀ ਚੁਣੋ..."}
+                  searchPlaceholder={isEn ? "Search agency..." : "ਏਜੰਸੀ ਖੋਜੋ..."}
+                />
               </div>
 
               {fixedAgency === 'CUSTOM' && (
                 <div>
                   <label className="block text-xs font-bold text-emerald-200 mb-1">
-                    ਕਸਟਮ ਏਜੰਸੀ ਦਾ ਨਾਂ (Enter Custom Agency Name) <span className="text-amber-400">*</span>
+                    {isEn ? 'Enter Custom Agency Name' : 'ਕਸਟਮ ਏਜੰਸੀ ਦਾ ਨਾਂ (Enter Custom Agency Name)'} <span className="text-amber-400">*</span>
                   </label>
                   <input
                     type="text"
-                    placeholder="ਜਿਵੇਂ Punjab State Grains..."
+                    placeholder={isEn ? "Enter custom agency name" : "ਕਸਟਮ ਏਜੰਸੀ ਦਾ ਨਾਂ ਲਿਖੋ"}
                     value={customFixedAgency}
                     onChange={(e) => setCustomFixedAgency(e.target.value)}
-                    className="w-full bg-slate-900 border border-emerald-500 rounded-xl px-3.5 py-2.5 text-xs font-bold text-white placeholder-slate-400 focus:ring-2 focus:ring-emerald-400 focus:outline-hidden"
+                    className="w-full bg-slate-900 border border-emerald-500 rounded-xl px-3.5 py-2.5 text-xs font-bold text-white focus:ring-2 focus:ring-emerald-400 focus:outline-hidden"
                   />
                 </div>
               )}
@@ -848,10 +892,10 @@ export const BardanaManagement: React.FC = () => {
 
                 {receivedFrom === 'SELLER' && sellers.length > 0 ? (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    <select
+                    <SearchableSelect
+                      id="bardana-seller-select"
                       value={selectedSellerId}
-                      onChange={(e) => {
-                        const sid = e.target.value;
+                      onChange={(sid) => {
                         setSelectedSellerId(sid);
                         const match = sellers.find(s => s.id === sid);
                         if (match) {
@@ -860,22 +904,18 @@ export const BardanaManagement: React.FC = () => {
                           setSourceName('');
                         }
                       }}
-                      className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-bold text-slate-900 focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
-                    >
-                      <option value="">-- ਸੈਲਰ ਚੁਣੋ (Choose Saved Seller) --</option>
-                      {sellers.map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.firmName} ({s.code || s.city || 'Seller'})
-                        </option>
-                      ))}
-                    </select>
+                      options={sellerOptions}
+                      placeholder={isEn ? "Search saved seller..." : "ਸੈਲਰ ਖੋਜੋ ਤੇ ਚੁਣੋ..."}
+                      searchPlaceholder={isEn ? "Type seller firm name..." : "ਸੈਲਰ ਫਰਮ ਦਾ ਨਾਂ ਲਿਖੋ..."}
+                      allowClear
+                    />
 
                     <input
                       type="text"
                       value={sourceName}
                       onChange={(e) => setSourceName(e.target.value)}
-                      placeholder="ਜਾਂ ਸੈਲਰ ਦਾ ਨਾਂ ਸਿੱਧਾ ਲਿਖੋ..."
-                      className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-bold text-slate-900 focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
+                      placeholder={isEn ? "Or enter seller name directly..." : "ਜਾਂ ਸੈਲਰ ਦਾ ਨਾਂ ਸਿੱਧਾ ਲਿਖੋ..."}
+                      className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
                     />
                   </div>
                 ) : receivedFrom === 'OTHER_PARTY' ? (
@@ -1084,40 +1124,40 @@ export const BardanaManagement: React.FC = () => {
               </div>
 
               {/* Agency Filter */}
-              <select
-                value={filterAgency}
-                onChange={(e) => setFilterAgency(e.target.value)}
-                className="bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 font-bold text-slate-700 focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
-              >
-                <option value="ALL">ਸਾਰੀਆਂ ਏਜੰਸੀਆਂ (All Agencies)</option>
-                {recordedAgencies.map((ag) => (
-                  <option key={ag} value={ag}>
-                    {ag}
-                  </option>
-                ))}
-              </select>
+              <div>
+                <SearchableSelect
+                  id="bardana-filter-agency"
+                  value={filterAgency}
+                  onChange={(val) => setFilterAgency(val)}
+                  options={filterAgencyOptions}
+                  placeholder={isEn ? "All Agencies" : "ਸਾਰੀਆਂ ਏਜੰਸੀਆਂ"}
+                  size="xs"
+                />
+              </div>
 
               {/* Source Type Filter */}
-              <select
-                value={filterSourceType}
-                onChange={(e) => setFilterSourceType(e.target.value)}
-                className="bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 font-bold text-slate-700 focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
-              >
-                <option value="ALL">ਸਾਰੇ ਸਰੋਤ (Seller & Agency)</option>
-                <option value="SELLER">ਸਿਰਫ਼ ਸੈਲਰ (Seller Only)</option>
-                <option value="AGENCY">ਸਿਰਫ਼ ਏਜੰਸੀ (Agency Only)</option>
-              </select>
+              <div>
+                <SearchableSelect
+                  id="bardana-filter-source"
+                  value={filterSourceType}
+                  onChange={(val) => setFilterSourceType(val)}
+                  options={filterSourceTypeOptions}
+                  placeholder={isEn ? "All Sources" : "ਸਾਰੇ ਸਰੋਤ"}
+                  size="xs"
+                />
+              </div>
 
               {/* Bardana Type Filter */}
-              <select
-                value={filterBardanaType}
-                onChange={(e) => setFilterBardanaType(e.target.value)}
-                className="bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 font-bold text-slate-700 focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
-              >
-                <option value="ALL">ਸਾਰਾ ਬਾਰਦਾਨਾ (All Types)</option>
-                <option value="NEW">ਨਵਾਂ ਬੋਰਾ (New Bag - 500)</option>
-                <option value="OLD">ਪੁਰਾਣਾ ਬੋਰਾ (Old Bag - 50)</option>
-              </select>
+              <div>
+                <SearchableSelect
+                  id="bardana-filter-type"
+                  value={filterBardanaType}
+                  onChange={(val) => setFilterBardanaType(val)}
+                  options={filterBardanaTypeOptions}
+                  placeholder={isEn ? "All Types" : "ਸਾਰਾ ਬਾਰਦਾਨਾ"}
+                  size="xs"
+                />
+              </div>
             </div>
 
             {/* Table */}

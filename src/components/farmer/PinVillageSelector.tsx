@@ -429,7 +429,7 @@ export const PinVillageSelector: React.FC<PinVillageSelectorProps> = ({
                       type="text"
                       disabled={disabled}
                       placeholder="e.g. Lohian Khas / Haveli Kalan"
-                      value={village}
+                      value={village || ''}
                       onChange={(e) => handleManualVillageEnChange(e.target.value)}
                       className="w-full bg-white border border-slate-300 focus:border-emerald-600 rounded-md px-2.5 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:ring-1 focus:ring-emerald-500"
                       required={required}
@@ -445,7 +445,7 @@ export const PinVillageSelector: React.FC<PinVillageSelectorProps> = ({
                       type="text"
                       disabled={disabled}
                       placeholder="e.g. ਲੋਹੀਆਂ ਖਾਸ / ਹਵੇਲੀ ਕਲਾਂ"
-                      value={villagePa}
+                      value={villagePa || ''}
                       onChange={(e) => handleManualVillagePaChange(e.target.value)}
                       className="w-full bg-white border border-slate-300 focus:border-emerald-600 rounded-md px-2.5 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:ring-1 focus:ring-emerald-500"
                       required={required}
@@ -483,7 +483,7 @@ export const PinVillageSelector: React.FC<PinVillageSelectorProps> = ({
                     type="text"
                     disabled={disabled}
                     placeholder="Enter Village Name in English"
-                    value={village}
+                    value={village || ''}
                     onChange={(e) => handleManualVillageEnChange(e.target.value)}
                     className="w-full bg-white border border-slate-300 focus:border-emerald-600 rounded-md px-2.5 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:ring-1 focus:ring-emerald-500"
                     required={required}
@@ -498,7 +498,7 @@ export const PinVillageSelector: React.FC<PinVillageSelectorProps> = ({
                     type="text"
                     disabled={disabled}
                     placeholder="ਪਿੰਡ ਦਾ ਨਾਂ ਪੰਜਾਬੀ ਵਿੱਚ ਦਰਜ ਕਰੋ"
-                    value={villagePa}
+                    value={villagePa || ''}
                     onChange={(e) => handleManualVillagePaChange(e.target.value)}
                     className="w-full bg-white border border-slate-300 focus:border-emerald-600 rounded-md px-2.5 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:ring-1 focus:ring-emerald-500"
                     required={required}
@@ -525,7 +525,7 @@ export const PinVillageSelector: React.FC<PinVillageSelectorProps> = ({
                   type="text"
                   disabled={disabled}
                   placeholder="Village Name (English)"
-                  value={village}
+                  value={village || ''}
                   onChange={(e) => handleManualVillageEnChange(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-300 rounded-md px-2.5 py-1.5 text-xs font-bold text-slate-900 focus:bg-white focus:outline-none focus:border-emerald-500"
                   required={required}
@@ -534,7 +534,7 @@ export const PinVillageSelector: React.FC<PinVillageSelectorProps> = ({
                   type="text"
                   disabled={disabled}
                   placeholder="ਪਿੰਡ ਦਾ ਨਾਂ (ਪੰਜਾਬੀ)"
-                  value={villagePa}
+                  value={villagePa || ''}
                   onChange={(e) => handleManualVillagePaChange(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-300 rounded-md px-2.5 py-1.5 text-xs font-bold text-slate-900 focus:bg-white focus:outline-none focus:border-emerald-500"
                   required={required}

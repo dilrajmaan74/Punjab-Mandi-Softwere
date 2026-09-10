@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { DailyPurchaseRecord } from '../../types/mandi';
 import { useMandi } from '../../context/MandiContext';
 import { useNotification } from '../../context/NotificationContext';
+import { SearchableSelect, SearchableSelectOption } from '../common/SearchableSelect';
 import {
   X,
   Edit,
@@ -30,7 +31,8 @@ export const DailyPurchaseEditModal: React.FC<DailyPurchaseEditModalProps> = ({
   record,
   onClose
 }) => {
-  const { agencies, settings, updateDailyPurchase, getFarmerPurchaseSummary } = useMandi();
+  const { agencies, settings, updateDailyPurchase, getFarmerPurchaseSummary, language } = useMandi();
+  const isEn = language === 'en';
   const { notifyUpdateSuccess, notifyError } = useNotification();
 
   const [date, setDate] = useState<string>('');
@@ -43,6 +45,22 @@ export const DailyPurchaseEditModal: React.FC<DailyPurchaseEditModalProps> = ({
   const [remarks, setRemarks] = useState<string>('');
   const [error, setError] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+
+  const agencyOptions: SearchableSelectOption[] = useMemo(() => {
+    const opts: SearchableSelectOption[] = agencies.map((ag) => ({
+      value: ag.nameEn,
+      label: isEn ? ag.nameEn : `${ag.namePa} (${ag.nameEn})`,
+      subLabel: isEn ? (ag.namePa || undefined) : ag.nameEn,
+      badge: ag.code,
+      keywords: [ag.nameEn, ag.namePa, ag.code]
+    }));
+    opts.push({
+      value: 'CUSTOM',
+      label: isEn ? '+ Other Custom Agency...' : '+ ਹੋਰ ਕਸਟਮ ਏਜੰਸੀ (Custom)...',
+      keywords: ['custom', 'other']
+    });
+    return opts;
+  }, [agencies, isEn]);
 
   useEffect(() => {
     if (record) {
@@ -221,7 +239,7 @@ export const DailyPurchaseEditModal: React.FC<DailyPurchaseEditModalProps> = ({
               <div className="relative">
                 <input
                   type="text"
-                  value={date}
+                  value={date || ''}
                   onChange={(e) => setDate(e.target.value)}
                   placeholder="DD/MM/YYYY"
                   className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-bold text-slate-900 focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
@@ -233,33 +251,30 @@ export const DailyPurchaseEditModal: React.FC<DailyPurchaseEditModalProps> = ({
             {/* 2. Agency Selection */}
             <div>
               <label className="block font-bold text-slate-700 mb-1">
-                ਖਰੀਦ ਏਜੰਸੀ (Agency) <span className="text-rose-500">*</span>
+                {isEn ? 'Procurement Agency' : 'ਖਰੀਦ ਏਜੰਸੀ (Agency)'} <span className="text-rose-500">*</span>
               </label>
-              <select
-                value={agency}
-                onChange={(e) => setAgency(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-bold text-slate-900 focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
-              >
-                {agencies.map((ag) => (
-                  <option key={ag.id} value={ag.nameEn}>
-                    {ag.namePa}
-                  </option>
-                ))}
-                <option value="CUSTOM">+ ਹੋਰ ਕਸਟਮ ਏਜੰਸੀ (Custom)...</option>
-              </select>
+              <SearchableSelect
+                id="edit-purchase-agency"
+                value={agency || ''}
+                onChange={(val) => setAgency(val)}
+                options={agencyOptions}
+                placeholder={isEn ? "Select agency..." : "ਏਜੰਸੀ ਚੁਣੋ..."}
+                searchPlaceholder={isEn ? "Search agency..." : "ਏਜੰਸੀ ਖੋਜੋ..."}
+                emptyMessage={isEn ? "No agency found" : "ਕੋਈ ਏਜੰਸੀ ਨਹੀਂ ਮਿਲੀ"}
+              />
             </div>
           </div>
 
           {agency === 'CUSTOM' && (
             <div>
               <label className="block font-bold text-slate-700 mb-1">
-                ਕਸਟਮ ਏਜੰਸੀ ਦਾ ਨਾਂ (Custom Agency Name) <span className="text-rose-500">*</span>
+                {isEn ? 'Custom Agency Name' : 'ਕਸਟਮ ਏਜੰਸੀ ਦਾ ਨਾਂ (Custom Agency Name)'} <span className="text-rose-500">*</span>
               </label>
               <input
                 type="text"
-                value={customAgency}
+                value={customAgency || ''}
                 onChange={(e) => setCustomAgency(e.target.value)}
-                placeholder="ਜਿਵੇਂ Punjab State Grains..."
+                placeholder={isEn ? "e.g. Punjab State Grains..." : "ਜਿਵੇਂ Punjab State Grains..."}
                 className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-bold text-slate-900 focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
               />
             </div>
@@ -312,7 +327,7 @@ export const DailyPurchaseEditModal: React.FC<DailyPurchaseEditModalProps> = ({
                 <input
                   type="number"
                   step="0.01"
-                  value={rate}
+                  value={rate ?? ''}
                   onChange={(e) => setRate(parseFloat(e.target.value) || 0)}
                   className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs font-mono font-bold text-slate-900 focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
                 />
@@ -339,7 +354,7 @@ export const DailyPurchaseEditModal: React.FC<DailyPurchaseEditModalProps> = ({
               </label>
               <input
                 type="text"
-                value={boliNumber}
+                value={boliNumber || ''}
                 onChange={(e) => setBoliNumber(e.target.value)}
                 placeholder="ਜਿਵੇਂ LOT-104..."
                 className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-bold text-slate-900 focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
@@ -352,7 +367,7 @@ export const DailyPurchaseEditModal: React.FC<DailyPurchaseEditModalProps> = ({
               </label>
               <input
                 type="text"
-                value={gatePassNumber}
+                value={gatePassNumber || ''}
                 onChange={(e) => setGatePassNumber(e.target.value)}
                 placeholder="ਜਿਵੇਂ GP-8821..."
                 className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-bold text-slate-900 focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
@@ -367,7 +382,7 @@ export const DailyPurchaseEditModal: React.FC<DailyPurchaseEditModalProps> = ({
             </label>
             <input
               type="text"
-              value={remarks}
+              value={remarks || ''}
               onChange={(e) => setRemarks(e.target.value)}
               placeholder="ਜਿਵੇਂ ਕੁਆਲਿਟੀ ਪਾਸ, ਗ੍ਰੇਡ-ਏ..."
               className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-bold text-slate-900 focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"

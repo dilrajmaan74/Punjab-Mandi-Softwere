@@ -261,7 +261,7 @@ export const FarmerEditModal: React.FC<FarmerEditModalProps> = ({
                 </label>
                 <input
                   type="text"
-                  value={formData.farmerName}
+                  value={formData.farmerName || ''}
                   onChange={(e) => handleNameChange(e.target.value)}
                   className="w-full bg-white border border-slate-300 rounded-lg p-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-500"
                   required
@@ -274,7 +274,7 @@ export const FarmerEditModal: React.FC<FarmerEditModalProps> = ({
                 </label>
                 <input
                   type="text"
-                  value={formData.farmerNamePa}
+                  value={formData.farmerNamePa || ''}
                   onChange={(e) => setFormData({ ...formData, farmerNamePa: e.target.value })}
                   className="w-full bg-white border border-slate-300 rounded-lg p-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-500"
                 />
@@ -286,7 +286,7 @@ export const FarmerEditModal: React.FC<FarmerEditModalProps> = ({
                 </label>
                 <input
                   type="text"
-                  value={formData.fatherName}
+                  value={formData.fatherName || ''}
                   onChange={(e) => handleFatherNameChange(e.target.value)}
                   className="w-full bg-white border border-slate-300 rounded-lg p-2 text-xs text-slate-900 focus:outline-none focus:border-blue-500"
                 />
@@ -298,7 +298,7 @@ export const FarmerEditModal: React.FC<FarmerEditModalProps> = ({
                 </label>
                 <input
                   type="text"
-                  value={formData.fatherNamePa}
+                  value={formData.fatherNamePa || ''}
                   onChange={(e) => setFormData({ ...formData, fatherNamePa: e.target.value })}
                   className="w-full bg-white border border-slate-300 rounded-lg p-2 text-xs text-slate-900 focus:outline-none focus:border-blue-500"
                 />
@@ -314,9 +314,9 @@ export const FarmerEditModal: React.FC<FarmerEditModalProps> = ({
             </h4>
 
             <PinVillageSelector
-              pinCode={formData.pinCode}
-              village={formData.village}
-              villagePa={formData.villagePa}
+              pinCode={formData.pinCode || '141401'}
+              village={formData.village || ''}
+              villagePa={formData.villagePa || ''}
               pinCodesList={pinCodes}
               onPinCodeChange={(pin) => setFormData((prev) => ({ ...prev, pinCode: pin }))}
               onVillageChange={(vEn, vPa) => setFormData((prev) => ({ ...prev, village: vEn, villagePa: vPa }))}
@@ -331,7 +331,7 @@ export const FarmerEditModal: React.FC<FarmerEditModalProps> = ({
               <input
                 type="text"
                 placeholder="e.g. Near Gurdwara Sahib, Main Road"
-                value={formData.address}
+                value={formData.address || ''}
                 onChange={(e) => setFormData({ ...formData, address: e.target.value })}
                 className="w-full bg-white border border-slate-300 rounded-lg p-2 text-xs text-slate-900 focus:outline-none focus:border-blue-500"
               />
@@ -355,7 +355,7 @@ export const FarmerEditModal: React.FC<FarmerEditModalProps> = ({
                   <input
                     type="tel"
                     maxLength={10}
-                    value={formData.mobile}
+                    value={formData.mobile || ''}
                     onChange={(e) => setFormData({ ...formData, mobile: autoFormatMobile(e.target.value) })}
                     className="w-full bg-white border border-slate-300 rounded-lg p-2 pl-10 text-xs font-mono font-bold text-slate-900 focus:outline-none focus:border-blue-500"
                   />
@@ -369,7 +369,7 @@ export const FarmerEditModal: React.FC<FarmerEditModalProps> = ({
                 <input
                   type="text"
                   maxLength={14}
-                  value={formData.aadhaar}
+                  value={formData.aadhaar || ''}
                   onChange={(e) => setFormData({ ...formData, aadhaar: autoFormatAadhaar(e.target.value) })}
                   className="w-full bg-white border border-slate-300 rounded-lg p-2 text-xs font-mono font-black text-slate-900 tracking-wider focus:outline-none focus:border-blue-500"
                   required

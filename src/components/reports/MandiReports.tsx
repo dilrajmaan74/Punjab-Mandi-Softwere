@@ -23,6 +23,7 @@ import {
   FIXED_BAG_WEIGHT_KG
 } from '../../utils/calculations';
 import { exportDailyPurchaseRegisterPDF } from '../../utils/purchasePdfExport';
+import { SearchableSelect, SearchableSelectOption } from '../common/SearchableSelect';
 
 type ReportTab = 'daily-totals' | 'weighment' | 'farmer-master' | 'village-summary' | 'bardana-summary' | 'market-committee';
 
@@ -35,8 +36,11 @@ export const MandiReports: React.FC = () => {
     setActiveReceipt,
     settings,
     getAllFarmersPurchaseSummaries,
-    getFarmerPurchaseSummary
+    getFarmerPurchaseSummary,
+    language
   } = useMandi();
+
+  const isEn = language === 'en';
 
   const [activeTab, setActiveTab] = useState<ReportTab>('daily-totals');
   const [filterVillage, setFilterVillage] = useState<string>('ALL');
@@ -55,7 +59,31 @@ export const MandiReports: React.FC = () => {
   const [mcSearchQuery, setMcSearchQuery] = useState<string>('');
 
   // Extract unique villages
-  const uniqueVillages = Array.from(new Set(farmers.map((f) => f.village)));
+  const uniqueVillages = useMemo(() => Array.from(new Set(farmers.map((f) => f.village))), [farmers]);
+
+  const reportAgencyFilterOptions: SearchableSelectOption[] = useMemo(() => [
+    { value: 'ALL', label: isEn ? 'All Agencies' : 'ਸਾਰੀਆਂ ਏਜੰਸੀਆਂ (All Agencies)' },
+    ...agencies.map((ag) => ({
+      value: ag.nameEn,
+      label: isEn ? ag.nameEn : `${ag.namePa} (${ag.nameEn})`,
+      keywords: [ag.nameEn, ag.namePa]
+    }))
+  ], [agencies, isEn]);
+
+  const reportVillageFilterOptions: SearchableSelectOption[] = useMemo(() => [
+    { value: 'ALL', label: isEn ? 'All Villages' : 'ਸਾਰੇ ਪਿੰਡ (All Villages)' },
+    ...uniqueVillages.map((v) => ({
+      value: v,
+      label: v,
+      keywords: [v]
+    }))
+  ], [uniqueVillages, isEn]);
+
+  const reportBardanaFilterOptions: SearchableSelectOption[] = useMemo(() => [
+    { value: 'ALL', label: isEn ? 'All Bardana' : 'ਸਾਰਾ ਬਾਰਦਾਨਾ (All Bardana)' },
+    { value: 'NEW', label: isEn ? 'New Bardana' : 'ਨਵਾਂ ਬਾਰਦਾਨਾ (New)' },
+    { value: 'OLD', label: isEn ? 'Old Bardana' : 'ਪੁਰਾਣਾ ਬਾਰਦਾਨਾ (Old)' }
+  ], [isEn]);
 
   // Filtered Bags Entries
   const filteredBagsEntries = bagsEntries.filter((b) => {
@@ -355,7 +383,8 @@ export const MandiReports: React.FC = () => {
                     filteredPurchases,
                     settings,
                     mcAgencyFilter === 'ALL' ? 'All Agencies' : mcAgencyFilter,
-                    mcDateFilter || 'All Dates'
+                    mcDateFilter || 'All Dates',
+                    dailyPurchaseRecords
                   )
                 }
                 className="bg-slate-900 hover:bg-slate-800 text-white font-bold px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 shadow-2xs transition"
@@ -724,32 +753,28 @@ export const MandiReports: React.FC = () => {
               </div>
 
               {/* Agency Filter */}
-              <select
-                value={mcAgencyFilter}
-                onChange={(e) => setMcAgencyFilter(e.target.value)}
-                className="bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-xs font-bold text-slate-800 focus:outline-none"
-              >
-                <option value="ALL">ਸਾਰੀਆਂ ਏਜੰਸੀਆਂ (All Agencies)</option>
-                {agencies.map((ag) => (
-                  <option key={ag.id} value={ag.nameEn}>
-                    {ag.namePa} ({ag.nameEn})
-                  </option>
-                ))}
-              </select>
+              <div className="w-52">
+                <SearchableSelect
+                  id="mc-agency-filter"
+                  value={mcAgencyFilter}
+                  onChange={(val) => setMcAgencyFilter(val)}
+                  options={reportAgencyFilterOptions}
+                  placeholder={isEn ? "All Agencies" : "ਸਾਰੀਆਂ ਏਜੰਸੀਆਂ"}
+                  size="xs"
+                />
+              </div>
 
               {/* Village Filter */}
-              <select
-                value={mcVillageFilter}
-                onChange={(e) => setMcVillageFilter(e.target.value)}
-                className="bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-xs font-bold text-slate-800 focus:outline-none"
-              >
-                <option value="ALL">ਸਾਰੇ ਪਿੰਡ (All Villages)</option>
-                {uniqueVillages.map((v) => (
-                  <option key={v} value={v}>
-                    {v}
-                  </option>
-                ))}
-              </select>
+              <div className="w-48">
+                <SearchableSelect
+                  id="mc-village-filter"
+                  value={mcVillageFilter}
+                  onChange={(val) => setMcVillageFilter(val)}
+                  options={reportVillageFilterOptions}
+                  placeholder={isEn ? "All Villages" : "ਸਾਰੇ ਪਿੰਡ"}
+                  size="xs"
+                />
+              </div>
 
               {/* Date Filter */}
               <input
@@ -894,29 +919,28 @@ export const MandiReports: React.FC = () => {
             </div>
 
             {/* Village Filter */}
-            <select
-              value={filterVillage}
-              onChange={(e) => setFilterVillage(e.target.value)}
-              className="bg-white border border-slate-300 rounded-lg px-2 py-1 text-xs font-bold text-slate-800 focus:outline-none"
-            >
-              <option value="ALL">ਸਾਰੇ ਪਿੰਡ (All Villages)</option>
-              {uniqueVillages.map((v) => (
-                <option key={v} value={v}>
-                  {v}
-                </option>
-              ))}
-            </select>
+            <div className="w-48">
+              <SearchableSelect
+                id="weighment-village-filter"
+                value={filterVillage}
+                onChange={(val) => setFilterVillage(val)}
+                options={reportVillageFilterOptions}
+                placeholder={isEn ? "All Villages" : "ਸਾਰੇ ਪਿੰਡ"}
+                size="xs"
+              />
+            </div>
 
             {/* Bardana Filter */}
-            <select
-              value={filterBardana}
-              onChange={(e) => setFilterBardana(e.target.value)}
-              className="bg-white border border-slate-300 rounded-lg px-2 py-1 text-xs font-bold text-slate-800 focus:outline-none"
-            >
-              <option value="ALL">ਸਾਰਾ ਬਾਰਦਾਨਾ (All Bardana)</option>
-              <option value="NEW">ਨਵਾਂ ਬਾਰਦਾਨਾ (New)</option>
-              <option value="OLD">ਪੁਰਾਣਾ ਬਾਰਦਾਨਾ (Old)</option>
-            </select>
+            <div className="w-44">
+              <SearchableSelect
+                id="weighment-bardana-filter"
+                value={filterBardana}
+                onChange={(val) => setFilterBardana(val)}
+                options={reportBardanaFilterOptions}
+                placeholder={isEn ? "All Bardana" : "ਸਾਰਾ ਬਾਰਦਾਨਾ"}
+                size="xs"
+              />
+            </div>
 
             {/* Farmer Search */}
             <input

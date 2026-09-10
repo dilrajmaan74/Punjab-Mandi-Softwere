@@ -322,17 +322,58 @@ export function computeLabourAndDeductions(
   // 1. Pakki Labour (ਪੱਕੀ ਲੇਬਰ) - PER BAG
   const pakkiRate = current.pakkiLabourRate ?? settings?.defaultPakkiLabourRate ?? DEFAULT_PAKKI_LABOUR_RATE;
   const pakkiEnabled = !!current.pakkiLabourEnabled;
-  const pakkiAmount = pakkiEnabled ? Math.round(bagCount * pakkiRate * 100) / 100 : 0;
+  const pakkiBags = pakkiEnabled
+    ? (typeof current.pakkiBagsCount === 'number' && current.pakkiBagsCount >= 0
+        ? current.pakkiBagsCount
+        : bagCount)
+    : 0;
+  const pakkiAmount = Math.round(pakkiBags * pakkiRate * 100) / 100;
 
   // 2. Pakha Double (ਪੱਖਾ ਡਬਲ) - PER BAG
   const doubleRate = current.pakkaDoubleLabourRate ?? settings?.defaultPakkaDoubleLabourRate ?? DEFAULT_PAKKA_DOUBLE_LABOUR_RATE;
   const doubleEnabled = !!current.pakkaDoubleLabourEnabled;
-  const doubleAmount = doubleEnabled ? Math.round(bagCount * doubleRate * 100) / 100 : 0;
+  const doubleBags = doubleEnabled
+    ? (typeof current.doubleBagsCount === 'number' && current.doubleBagsCount >= 0
+        ? current.doubleBagsCount
+        : bagCount)
+    : 0;
+  const doubleAmount = Math.round(doubleBags * doubleRate * 100) / 100;
 
   // 3. Sukhi Labour / Paddy Drying (ਝੋਨਾ ਸਕਾਈ) - PER BAG
   const sukhiRate = current.sukhiLabourRate ?? settings?.defaultSukhiLabourRate ?? DEFAULT_SUKHI_LABOUR_RATE;
   const sukhiEnabled = !!current.sukhiLabourEnabled;
-  const sukhiAmount = sukhiEnabled ? Math.round(bagCount * sukhiRate * 100) / 100 : 0;
+  const sukkiBags = sukhiEnabled
+    ? (typeof current.sukkiBagsCount === 'number' && current.sukkiBagsCount >= 0
+        ? current.sukkiBagsCount
+        : bagCount)
+    : 0;
+  const sukhiAmount = Math.round(sukkiBags * sukhiRate * 100) / 100;
+
+  // Multiple Condition Breakdown & Remaining Balance
+  const accountedConditionBags = (doubleEnabled ? doubleBags : 0) + (sukhiEnabled ? sukkiBags : 0) + (pakkiEnabled ? pakkiBags : 0);
+  const balanceBags = Math.max(0, bagCount - accountedConditionBags);
+
+  const partsSummary: string[] = [];
+  if (doubleEnabled && doubleBags > 0) partsSummary.push(`${doubleBags} ਡਬਲ`);
+  if (sukhiEnabled && sukkiBags > 0) partsSummary.push(`${sukkiBags} ਸੁੱਕੀ`);
+  if (pakkiEnabled && pakkiBags > 0) partsSummary.push(`${pakkiBags} ਪੱਕੀ`);
+  if (balanceBags > 0) partsSummary.push(`${balanceBags} ਬਾਕੀ ਬੈਲੇਂਸ`);
+
+  const conditionBreakdown = {
+    enabled: !!(doubleEnabled || sukhiEnabled || pakkiEnabled),
+    totalBags: bagCount,
+    doubleBags: doubleEnabled ? doubleBags : 0,
+    doubleRate,
+    doubleAmount,
+    sukkiBags: sukhiEnabled ? sukkiBags : 0,
+    sukkiRate: sukhiRate,
+    sukkiAmount: sukhiAmount,
+    pakkiBags: pakkiEnabled ? pakkiBags : 0,
+    pakkiRate,
+    pakkiAmount,
+    balanceBags,
+    summaryText: partsSummary.length > 0 ? `${bagCount} ਕੁੱਲ = ${partsSummary.join(' + ')}` : `${bagCount} ਬੋਰੀਆਂ`
+  };
 
   // 4. Custom / Other Deductions
   const customLines: CustomDeductionLine[] = (current.customDeductions || DEFAULT_PRESET_DEDUCTIONS).map((item) => {
@@ -361,14 +402,20 @@ export function computeLabourAndDeductions(
     pakkiLabourEnabled: pakkiEnabled,
     pakkiLabourRate: pakkiRate,
     pakkiLabourAmount: pakkiAmount,
+    pakkiBagsCount: pakkiBags,
 
     pakkaDoubleLabourEnabled: doubleEnabled,
     pakkaDoubleLabourRate: doubleRate,
     pakkaDoubleLabourAmount: doubleAmount,
+    doubleBagsCount: doubleBags,
 
     sukhiLabourEnabled: sukhiEnabled,
     sukhiLabourRate: sukhiRate,
     sukhiLabourAmount: sukhiAmount,
+    sukkiBagsCount: sukkiBags,
+
+    balanceBagsCount: balanceBags,
+    conditionBreakdown,
 
     otherDeductionsEnabled,
     customDeductions: customLines,

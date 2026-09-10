@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useNotification, ToastItem, ToastType } from '../../context/NotificationContext';
+import { useMandi } from '../../context/MandiContext';
 import {
   CheckCircle2,
   AlertTriangle,
@@ -121,9 +122,10 @@ const getToastConfig = (type: ToastType): ToastConfig => {
   }
 };
 
-const ToastCard: React.FC<{ toast: ToastItem; onDismiss: (id: string) => void }> = ({
+const ToastCard: React.FC<{ toast: ToastItem; onDismiss: (id: string) => void; isEn: boolean }> = ({
   toast,
-  onDismiss
+  onDismiss,
+  isEn
 }) => {
   const config = getToastConfig(toast.type);
   const [isPaused, setIsPaused] = useState(false);
@@ -185,26 +187,36 @@ const ToastCard: React.FC<{ toast: ToastItem; onDismiss: (id: string) => void }>
           {/* Header Row: Title & Badge */}
           <div className="flex items-center justify-between gap-2 mb-0.5">
             <h4 className={`text-xs sm:text-sm font-black tracking-tight leading-snug ${config.titleColor}`}>
-              {toast.titlePa}
+              {isEn ? (toast.titleEn || toast.titlePa) : toast.titlePa}
             </h4>
             <span className="text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider bg-slate-100/90 text-slate-700 border border-slate-200/80 shrink-0 font-mono">
-              {config.badgePa} / {config.badgeEn}
+              {isEn ? config.badgeEn : `${config.badgePa} / ${config.badgeEn}`}
             </span>
           </div>
 
-          {/* English Title Subhead */}
-          <div className="text-[11px] sm:text-xs font-bold text-slate-800 leading-snug">
-            {toast.titleEn}
-          </div>
+          {/* English Title Subhead when in Punjabi mode */}
+          {!isEn && (
+            <div className="text-[11px] sm:text-xs font-bold text-slate-800 leading-snug">
+              {toast.titleEn}
+            </div>
+          )}
 
           {/* Optional Message / Detail lines */}
           {(toast.messagePa || toast.messageEn || toast.details) && (
             <div className="mt-1 space-y-0.5 text-[11px] leading-relaxed">
-              {toast.messagePa && (
-                <div className="text-slate-800 font-medium">{toast.messagePa}</div>
-              )}
-              {toast.messageEn && (
-                <div className="text-slate-600 text-[10px] font-normal">{toast.messageEn}</div>
+              {isEn ? (
+                (toast.messageEn || toast.messagePa) && (
+                  <div className="text-slate-800 font-medium">{toast.messageEn || toast.messagePa}</div>
+                )
+              ) : (
+                <>
+                  {toast.messagePa && (
+                    <div className="text-slate-800 font-medium">{toast.messagePa}</div>
+                  )}
+                  {toast.messageEn && (
+                    <div className="text-slate-600 text-[10px] font-normal">{toast.messageEn}</div>
+                  )}
+                </>
               )}
               {toast.details && (
                 <div className="font-mono text-[10px] font-bold text-slate-900 bg-slate-100/80 px-1.5 py-0.5 rounded mt-1 inline-block border border-slate-200">
@@ -240,6 +252,8 @@ const ToastCard: React.FC<{ toast: ToastItem; onDismiss: (id: string) => void }>
 
 export const ToastContainer: React.FC = () => {
   const { toasts, dismissToast } = useNotification();
+  const { language } = useMandi();
+  const isEn = language === 'en';
 
   return (
     <div
@@ -248,7 +262,7 @@ export const ToastContainer: React.FC = () => {
     >
       <AnimatePresence mode="popLayout">
         {toasts.map((toast) => (
-          <ToastCard key={toast.id} toast={toast} onDismiss={dismissToast} />
+          <ToastCard key={toast.id} toast={toast} onDismiss={dismissToast} isEn={isEn} />
         ))}
       </AnimatePresence>
     </div>

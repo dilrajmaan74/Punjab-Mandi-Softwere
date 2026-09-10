@@ -254,7 +254,7 @@ export const TruckMasterModal: React.FC<TruckMasterModalProps> = ({
                 <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
-                  value={searchQuery}
+                  value={searchQuery || ''}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="ਟਰੱਕ ਨੰਬਰ (ਜਿਵੇਂ 9596), ਡਰਾਈਵਰ ਦਾ ਨਾਮ ਜਾਂ ਯੂਨੀਅਨ ਖੋਜੋ..."
                   className="w-full pl-9 pr-3 py-2 text-xs font-medium bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-slate-900 focus:outline-none"
@@ -360,7 +360,7 @@ export const TruckMasterModal: React.FC<TruckMasterModalProps> = ({
                 </label>
                 <input
                   type="text"
-                  value={truckNo}
+                  value={truckNo || ''}
                   onChange={(e) => setTruckNo(e.target.value.toUpperCase())}
                   placeholder="e.g. PB-10-AZ-9596"
                   className="w-full px-3 py-2 text-xs font-black font-mono text-slate-900 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-slate-900 focus:outline-none"
@@ -375,7 +375,7 @@ export const TruckMasterModal: React.FC<TruckMasterModalProps> = ({
                   </label>
                   <input
                     type="text"
-                    value={driverName}
+                    value={driverName || ''}
                     onChange={(e) => setDriverName(e.target.value)}
                     placeholder="e.g. ਕੁਲਵੰਤ ਸਿੰਘ"
                     className="w-full px-3 py-2 text-xs font-medium text-slate-900 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-slate-900 focus:outline-none"
@@ -388,7 +388,7 @@ export const TruckMasterModal: React.FC<TruckMasterModalProps> = ({
                   </label>
                   <input
                     type="tel"
-                    value={driverMobile}
+                    value={driverMobile || ''}
                     onChange={(e) => setDriverMobile(e.target.value)}
                     placeholder="e.g. 98147-74651"
                     className="w-full px-3 py-2 text-xs font-medium text-slate-900 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-slate-900 focus:outline-none"
@@ -403,7 +403,7 @@ export const TruckMasterModal: React.FC<TruckMasterModalProps> = ({
                   </label>
                   <input
                     type="text"
-                    value={truckUnion}
+                    value={truckUnion || ''}
                     onChange={(e) => setTruckUnion(e.target.value)}
                     placeholder="e.g. ਸ਼ਾਹਕੋਟ ਟਰੱਕ ਯੂਨੀਅਨ"
                     className="w-full px-3 py-2 text-xs font-medium text-slate-900 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-slate-900 focus:outline-none"
@@ -416,7 +416,7 @@ export const TruckMasterModal: React.FC<TruckMasterModalProps> = ({
                   </label>
                   <input
                     type="number"
-                    value={capacityBags}
+                    value={capacityBags || ''}
                     onChange={(e) => setCapacityBags(e.target.value)}
                     placeholder="e.g. 600"
                     className="w-full px-3 py-2 text-xs font-medium text-slate-900 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-slate-900 focus:outline-none"
@@ -428,7 +428,7 @@ export const TruckMasterModal: React.FC<TruckMasterModalProps> = ({
                 <label className="block text-xs font-bold text-slate-800 mb-1">ਨੋਟ (Notes)</label>
                 <input
                   type="text"
-                  value={notes}
+                  value={notes || ''}
                   onChange={(e) => setNotes(e.target.value)}
                   placeholder="ਕੋਈ ਹੋਰ ਵੇਰਵਾ"
                   className="w-full px-3 py-2 text-xs text-slate-900 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-slate-900 focus:outline-none"
@@ -481,7 +481,7 @@ export const TruckMasterModal: React.FC<TruckMasterModalProps> = ({
               )}
 
               <textarea
-                value={bulkText}
+                value={bulkText || ''}
                 onChange={(e) => setBulkText(e.target.value)}
                 placeholder="ਇੱਥੇ ਟਰੱਕਾਂ ਦੀ ਲਿਸਟ ਪੇਸਟ ਕਰੋ (Paste list of trucks here)..."
                 rows={10}

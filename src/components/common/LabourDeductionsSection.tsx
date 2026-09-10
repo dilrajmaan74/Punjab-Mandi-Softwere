@@ -79,6 +79,22 @@ export const LabourDeductionsSection: React.FC<LabourDeductionsSectionProps> = (
     onChange(updated);
   };
 
+  // Change Pakki Bags Count
+  const handlePakkiBagsChange = (bagsCount: number) => {
+    const safeBags = Math.max(0, bagsCount);
+    const updated = computeLabourAndDeductions(
+      weightKg,
+      grossAmount,
+      {
+        ...value,
+        pakkiBagsCount: safeBags
+      },
+      settings,
+      effectiveBags
+    );
+    onChange(updated);
+  };
+
   // 2. Toggle Pakha Double Labour (ਪੱਖਾ ਡਬਲ)
   const handleToggleDouble = (enabled: boolean) => {
     const updated = computeLabourAndDeductions(
@@ -86,7 +102,8 @@ export const LabourDeductionsSection: React.FC<LabourDeductionsSectionProps> = (
       grossAmount,
       {
         ...value,
-        pakkaDoubleLabourEnabled: enabled
+        pakkaDoubleLabourEnabled: enabled,
+        doubleBagsCount: enabled ? (value.doubleBagsCount ?? effectiveBags) : 0
       },
       settings,
       effectiveBags
@@ -110,6 +127,22 @@ export const LabourDeductionsSection: React.FC<LabourDeductionsSectionProps> = (
     onChange(updated);
   };
 
+  // Change Pakha Double Bags Count
+  const handleDoubleBagsChange = (bagsCount: number) => {
+    const safeBags = Math.max(0, bagsCount);
+    const updated = computeLabourAndDeductions(
+      weightKg,
+      grossAmount,
+      {
+        ...value,
+        doubleBagsCount: safeBags
+      },
+      settings,
+      effectiveBags
+    );
+    onChange(updated);
+  };
+
   // 3. Toggle Sukhi Labour / ਝੋਨਾ ਸਕਾਈ
   const handleToggleSukhi = (enabled: boolean) => {
     const updated = computeLabourAndDeductions(
@@ -117,7 +150,8 @@ export const LabourDeductionsSection: React.FC<LabourDeductionsSectionProps> = (
       grossAmount,
       {
         ...value,
-        sukhiLabourEnabled: enabled
+        sukhiLabourEnabled: enabled,
+        sukkiBagsCount: enabled ? (value.sukkiBagsCount ?? effectiveBags) : 0
       },
       settings,
       effectiveBags
@@ -134,6 +168,22 @@ export const LabourDeductionsSection: React.FC<LabourDeductionsSectionProps> = (
       {
         ...value,
         sukhiLabourRate: safeRate
+      },
+      settings,
+      effectiveBags
+    );
+    onChange(updated);
+  };
+
+  // Change Sukhi Bags Count
+  const handleSukhiBagsChange = (bagsCount: number) => {
+    const safeBags = Math.max(0, bagsCount);
+    const updated = computeLabourAndDeductions(
+      weightKg,
+      grossAmount,
+      {
+        ...value,
+        sukkiBagsCount: safeBags
       },
       settings,
       effectiveBags
@@ -318,7 +368,7 @@ export const LabourDeductionsSection: React.FC<LabourDeductionsSectionProps> = (
                   type="number"
                   min="0"
                   step="0.5"
-                  value={value.pakkiLabourRate}
+                  value={value.pakkiLabourRate ?? ''}
                   onChange={(e) => handlePakkiRateChange(parseFloat(e.target.value) || 0)}
                   disabled={!value.pakkiLabourEnabled}
                   className={`w-16 p-1 text-xs font-mono font-bold rounded border text-right ${
@@ -398,7 +448,7 @@ export const LabourDeductionsSection: React.FC<LabourDeductionsSectionProps> = (
                   type="number"
                   min="0"
                   step="0.5"
-                  value={value.pakkaDoubleLabourRate}
+                  value={value.pakkaDoubleLabourRate ?? ''}
                   onChange={(e) => handleDoubleRateChange(parseFloat(e.target.value) || 0)}
                   disabled={!value.pakkaDoubleLabourEnabled}
                   className={`w-16 p-1 text-xs font-mono font-bold rounded border text-right ${
@@ -413,13 +463,26 @@ export const LabourDeductionsSection: React.FC<LabourDeductionsSectionProps> = (
 
             {/* Live Calculation Display */}
             {value.pakkaDoubleLabourEnabled ? (
-              <div className="bg-orange-100/70 border border-orange-300/70 rounded-lg p-1.5 text-[10px] font-mono text-orange-950 flex justify-between items-center">
-                <span>
-                  {effectiveBags} ਬੋਰੀਆਂ × ₹{value.pakkaDoubleLabourRate}
-                </span>
-                <span className="font-black text-xs text-orange-950">
-                  {formatCurrencyINR(value.pakkaDoubleLabourAmount)}
-                </span>
+              <div className="space-y-1">
+                <div className="flex items-center justify-between gap-1.5 bg-orange-100/60 p-1.5 rounded">
+                  <span className="text-[10px] text-orange-950 font-bold">ਬੋਰੀਆਂ (Bags):</span>
+                  <input
+                    type="number"
+                    min="0"
+                    max={effectiveBags}
+                    value={value.doubleBagsCount ?? effectiveBags}
+                    onChange={(e) => handleDoubleBagsChange(parseInt(e.target.value, 10) || 0)}
+                    className="w-20 p-1 text-xs font-mono font-black rounded border border-orange-300 bg-white text-orange-950 text-right focus:ring-1 focus:ring-orange-500"
+                  />
+                </div>
+                <div className="bg-orange-100/70 border border-orange-300/70 rounded-lg p-1.5 text-[10px] font-mono text-orange-950 flex justify-between items-center">
+                  <span>
+                    {(value.doubleBagsCount ?? effectiveBags)} ਬੋਰੀਆਂ × ₹{value.pakkaDoubleLabourRate}
+                  </span>
+                  <span className="font-black text-xs text-orange-950">
+                    {formatCurrencyINR(value.pakkaDoubleLabourAmount)}
+                  </span>
+                </div>
               </div>
             ) : (
               <div className="text-[10px] text-slate-400 italic text-right">
@@ -478,7 +541,7 @@ export const LabourDeductionsSection: React.FC<LabourDeductionsSectionProps> = (
                   type="number"
                   min="0"
                   step="0.5"
-                  value={value.sukhiLabourRate}
+                  value={value.sukhiLabourRate ?? ''}
                   onChange={(e) => handleSukhiRateChange(parseFloat(e.target.value) || 0)}
                   disabled={!value.sukhiLabourEnabled}
                   className={`w-16 p-1 text-xs font-mono font-bold rounded border text-right ${
@@ -493,13 +556,26 @@ export const LabourDeductionsSection: React.FC<LabourDeductionsSectionProps> = (
 
             {/* Live Calculation Display */}
             {value.sukhiLabourEnabled ? (
-              <div className="bg-emerald-100/70 border border-emerald-300/70 rounded-lg p-1.5 text-[10px] font-mono text-emerald-950 flex justify-between items-center">
-                <span>
-                  {effectiveBags} ਬੋਰੀਆਂ × ₹{value.sukhiLabourRate}
-                </span>
-                <span className="font-black text-xs text-emerald-950">
-                  {formatCurrencyINR(value.sukhiLabourAmount)}
-                </span>
+              <div className="space-y-1">
+                <div className="flex items-center justify-between gap-1.5 bg-emerald-100/60 p-1.5 rounded">
+                  <span className="text-[10px] text-emerald-950 font-bold">ਬੋਰੀਆਂ (Bags):</span>
+                  <input
+                    type="number"
+                    min="0"
+                    max={effectiveBags}
+                    value={value.sukkiBagsCount ?? effectiveBags}
+                    onChange={(e) => handleSukhiBagsChange(parseInt(e.target.value, 10) || 0)}
+                    className="w-20 p-1 text-xs font-mono font-black rounded border border-emerald-300 bg-white text-emerald-950 text-right focus:ring-1 focus:ring-emerald-500"
+                  />
+                </div>
+                <div className="bg-emerald-100/70 border border-emerald-300/70 rounded-lg p-1.5 text-[10px] font-mono text-emerald-950 flex justify-between items-center">
+                  <span>
+                    {(value.sukkiBagsCount ?? effectiveBags)} ਬੋਰੀਆਂ × ₹{value.sukhiLabourRate}
+                  </span>
+                  <span className="font-black text-xs text-emerald-950">
+                    {formatCurrencyINR(value.sukhiLabourAmount)}
+                  </span>
+                </div>
               </div>
             ) : (
               <div className="text-[10px] text-slate-400 italic text-right">
@@ -509,6 +585,40 @@ export const LabourDeductionsSection: React.FC<LabourDeductionsSectionProps> = (
           </div>
         </div>
       </div>
+
+      {/* Multi-Condition Paddy Breakdown Bar */}
+      {(value.pakkaDoubleLabourEnabled || value.sukhiLabourEnabled) && (
+        <div className="bg-gradient-to-r from-amber-50 to-orange-50/60 border border-amber-300 rounded-xl p-3 space-y-1.5 shadow-2xs">
+          <div className="flex items-center justify-between font-black text-amber-950 text-xs">
+            <span className="flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+              <span>ਇੱਕੋ ਐਂਟਰੀ ਵਿੱਚ ਮਲਟੀ-ਕੰਡੀਸ਼ਨ ਵੰਡ (Multi-Condition Paddy Breakdown)</span>
+            </span>
+            <span className="font-mono bg-white border border-amber-300 px-2.5 py-0.5 rounded-lg text-[11px] font-black text-amber-950">
+              ਕੁੱਲ: {effectiveBags} ਬੋਰੀਆਂ
+            </span>
+          </div>
+          <div className="bg-white/90 border border-amber-200 rounded-lg p-2 font-mono text-xs text-slate-800 flex flex-wrap items-center gap-2">
+            <span className="font-black text-slate-900 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+              {effectiveBags} Total
+            </span>
+            <span className="font-bold text-slate-400">=</span>
+            {value.pakkaDoubleLabourEnabled && (
+              <span className="bg-orange-100 text-orange-950 border border-orange-300 px-2 py-0.5 rounded font-bold">
+                {value.doubleBagsCount ?? effectiveBags} Double • {formatCurrencyINR(value.pakkaDoubleLabourAmount)}
+              </span>
+            )}
+            {value.sukhiLabourEnabled && (
+              <span className="bg-emerald-100 text-emerald-950 border border-emerald-300 px-2 py-0.5 rounded font-bold">
+                {value.sukkiBagsCount ?? effectiveBags} Sukki • {formatCurrencyINR(value.sukhiLabourAmount)}
+              </span>
+            )}
+            <span className="bg-indigo-50 text-indigo-950 border border-indigo-200 px-2 py-0.5 rounded font-black">
+              {Math.max(0, effectiveBags - ((value.pakkaDoubleLabourEnabled ? (value.doubleBagsCount ?? effectiveBags) : 0) + (value.sukhiLabourEnabled ? (value.sukkiBagsCount ?? effectiveBags) : 0)))} ਬਾਕੀ ਬੈਲੇਂਸ (Remaining Balance)
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* ================================================== */}
       {/* 4. OTHER OPTIONAL DEDUCTIONS / EXPENSES */}
@@ -543,7 +653,7 @@ export const LabourDeductionsSection: React.FC<LabourDeductionsSectionProps> = (
               <input
                 type="text"
                 placeholder="Description (e.g. Cleaning)"
-                value={newCustomNameEn}
+                value={newCustomNameEn || ''}
                 onChange={(e) => setNewCustomNameEn(e.target.value)}
                 className="bg-white border border-slate-300 rounded p-1.5 text-xs text-slate-900 font-medium"
                 required
@@ -551,12 +661,12 @@ export const LabourDeductionsSection: React.FC<LabourDeductionsSectionProps> = (
               <input
                 type="text"
                 placeholder="ਵੇਰਵਾ (e.g. ਛਾਣਾਈ)"
-                value={newCustomNamePa}
+                value={newCustomNamePa || ''}
                 onChange={(e) => setNewCustomNamePa(e.target.value)}
                 className="bg-white border border-slate-300 rounded p-1.5 text-xs text-slate-900 font-medium"
               />
               <select
-                value={newCustomType}
+                value={newCustomType || 'PER_QTL'}
                 onChange={(e) => setNewCustomType(e.target.value as 'PER_QTL' | 'FIXED')}
                 className="bg-white border border-slate-300 rounded p-1.5 text-xs font-bold text-slate-800"
               >
@@ -614,7 +724,7 @@ export const LabourDeductionsSection: React.FC<LabourDeductionsSectionProps> = (
                     type="number"
                     min="0"
                     step="0.5"
-                    value={item.rate}
+                    value={item.rate ?? ''}
                     onChange={(e) => handleCustomRateChange(item.id, parseFloat(e.target.value) || 0)}
                     disabled={!item.enabled}
                     className={`w-16 p-0.5 text-xs font-mono font-bold rounded border text-right ${

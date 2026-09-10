@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useMandi } from '../../context/MandiContext';
 import { useNotification } from '../../context/NotificationContext';
+import { SearchableSelect, SearchableSelectOption } from '../common/SearchableSelect';
 import {
   Settings,
   MapPin,
@@ -47,10 +48,10 @@ export const SettingsManager: React.FC = () => {
   });
 
   const [mandiForm, setMandiForm] = useState({
-    mandiNameEn: settings.mandiNameEn,
-    mandiNamePa: settings.mandiNamePa,
-    marketCommitteeEn: settings.marketCommitteeEn,
-    marketCommitteePa: settings.marketCommitteePa,
+    mandiNameEn: settings.mandiNameEn || '',
+    mandiNamePa: settings.mandiNamePa || '',
+    marketCommitteeEn: settings.marketCommitteeEn || '',
+    marketCommitteePa: settings.marketCommitteePa || '',
     fixedRatePerQtl: settings.fixedRatePerQtl || 2461,
     defaultPakkiLabourRate: settings.defaultPakkiLabourRate ?? 7,
     defaultPakkaDoubleLabourRate: settings.defaultPakkaDoubleLabourRate ?? 14,
@@ -59,6 +60,15 @@ export const SettingsManager: React.FC = () => {
   });
 
   const activePinObj = pinCodes.find((p) => p.pinCode === selectedPin) || pinCodes[0];
+
+  const pinCodeOptions: SearchableSelectOption[] = useMemo(() => {
+    return pinCodes.map((p) => ({
+      value: p.pinCode,
+      label: `${p.pinCode} - ${p.districtEn}`,
+      subLabel: `${p.districtPa} (${p.villages.length} ਪਿੰਡ)`,
+      keywords: [p.pinCode, p.districtEn, p.districtPa, ...p.villages.map(v => `${v.en} ${v.pa}`)]
+    }));
+  }, [pinCodes]);
 
   const handleVillageNameEnChange = (val: string) => {
     setNewVillageEn(val);
@@ -286,7 +296,7 @@ export const SettingsManager: React.FC = () => {
                 <input
                   type="text"
                   placeholder="e.g. Markfed"
-                  value={agencyForm.nameEn}
+                  value={agencyForm.nameEn || ''}
                   onChange={(e) => handleAgencyEnChange(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-300 rounded p-1.5 text-xs text-slate-900 font-bold focus:bg-white"
                   required
@@ -298,7 +308,7 @@ export const SettingsManager: React.FC = () => {
                 <input
                   type="text"
                   placeholder="e.g. ਮਾਰਕਫੈੱਡ"
-                  value={agencyForm.namePa}
+                  value={agencyForm.namePa || ''}
                   onChange={(e) => setAgencyForm({ ...agencyForm, namePa: e.target.value })}
                   className="w-full bg-slate-50 border border-slate-300 rounded p-1.5 text-xs text-slate-900 font-bold focus:bg-white"
                   required
@@ -311,7 +321,7 @@ export const SettingsManager: React.FC = () => {
                   <input
                     type="text"
                     placeholder="e.g. MKF"
-                    value={agencyForm.code}
+                    value={agencyForm.code || ''}
                     onChange={(e) => setAgencyForm({ ...agencyForm, code: e.target.value })}
                     className="w-full bg-slate-50 border border-slate-300 rounded p-1.5 text-xs font-mono uppercase focus:bg-white"
                   />
@@ -390,7 +400,7 @@ export const SettingsManager: React.FC = () => {
                 <label className="block text-[10px] font-bold text-slate-600 mb-0.5">ਮੰਡੀ ਦਾ ਨਾਂ (English)</label>
                 <input
                   type="text"
-                  value={mandiForm.mandiNameEn}
+                  value={mandiForm.mandiNameEn || ''}
                   onChange={(e) => setMandiForm({ ...mandiForm, mandiNameEn: e.target.value })}
                   className="w-full bg-slate-50 border border-slate-300 rounded p-1.5 text-xs font-bold"
                 />
@@ -399,7 +409,7 @@ export const SettingsManager: React.FC = () => {
                 <label className="block text-[10px] font-bold text-slate-600 mb-0.5">ਮੰਡੀ ਦਾ ਨਾਂ (ਪੰਜਾਬੀ)</label>
                 <input
                   type="text"
-                  value={mandiForm.mandiNamePa}
+                  value={mandiForm.mandiNamePa || ''}
                   onChange={(e) => setMandiForm({ ...mandiForm, mandiNamePa: e.target.value })}
                   className="w-full bg-slate-50 border border-slate-300 rounded p-1.5 text-xs font-bold"
                 />
@@ -409,7 +419,7 @@ export const SettingsManager: React.FC = () => {
                 <input
                   type="number"
                   step="0.01"
-                  value={mandiForm.fixedRatePerQtl}
+                  value={mandiForm.fixedRatePerQtl ?? ''}
                   onChange={(e) => setMandiForm({ ...mandiForm, fixedRatePerQtl: parseFloat(e.target.value) || 0 })}
                   className="w-full bg-slate-50 border border-slate-300 rounded p-1.5 text-xs font-mono font-bold"
                 />
@@ -430,7 +440,7 @@ export const SettingsManager: React.FC = () => {
                   <input
                     type="number"
                     step="0.1"
-                    value={mandiForm.defaultPakkiLabourRate}
+                    value={mandiForm.defaultPakkiLabourRate ?? ''}
                     onChange={(e) =>
                       setMandiForm({ ...mandiForm, defaultPakkiLabourRate: parseFloat(e.target.value) || 0 })
                     }
@@ -442,7 +452,7 @@ export const SettingsManager: React.FC = () => {
                   <input
                     type="number"
                     step="0.1"
-                    value={mandiForm.defaultPakkaDoubleLabourRate}
+                    value={mandiForm.defaultPakkaDoubleLabourRate ?? ''}
                     onChange={(e) =>
                       setMandiForm({ ...mandiForm, defaultPakkaDoubleLabourRate: parseFloat(e.target.value) || 0 })
                     }
@@ -454,7 +464,7 @@ export const SettingsManager: React.FC = () => {
                   <input
                     type="number"
                     step="0.1"
-                    value={mandiForm.defaultSukhiLabourRate}
+                    value={mandiForm.defaultSukhiLabourRate ?? ''}
                     onChange={(e) =>
                       setMandiForm({ ...mandiForm, defaultSukhiLabourRate: parseFloat(e.target.value) || 0 })
                     }
@@ -507,17 +517,14 @@ export const SettingsManager: React.FC = () => {
 
           <div className="space-y-2">
             <label className="block text-xs font-bold text-slate-700">ਪਿੰਨ ਕੋਡ ਚੁਣੋ (Select PIN Code):</label>
-            <select
-              value={selectedPin}
-              onChange={(e) => setSelectedPin(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 text-xs font-mono font-black text-slate-900"
-            >
-              {pinCodes.map((p) => (
-                <option key={p.pinCode} value={p.pinCode}>
-                  {p.pinCode} - {p.districtPa} ({p.districtEn})
-                </option>
-              ))}
-            </select>
+            <SearchableSelect
+              id="settings-pin-code-select"
+              value={selectedPin || ''}
+              onChange={(val) => setSelectedPin(val)}
+              options={pinCodeOptions}
+              placeholder="ਪਿੰਨ ਕੋਡ ਜਾਂ ਜ਼ਿਲ੍ਹਾ ਖੋਜੋ..."
+              searchPlaceholder="ਪਿੰਨ ਕੋਡ ਜਾਂ ਜ਼ਿਲ੍ਹੇ ਦਾ ਨਾਂ ਲਿਖੋ..."
+            />
           </div>
 
           {/* List of Villages in this PIN */}
@@ -546,7 +553,7 @@ export const SettingsManager: React.FC = () => {
               <input
                 type="text"
                 placeholder="Village Name (English)"
-                value={newVillageEn}
+                value={newVillageEn || ''}
                 onChange={(e) => handleVillageNameEnChange(e.target.value)}
                 className="bg-slate-50 border border-slate-300 rounded p-1.5 text-xs text-slate-900 focus:bg-white"
                 required
@@ -554,7 +561,7 @@ export const SettingsManager: React.FC = () => {
               <input
                 type="text"
                 placeholder="ਪਿੰਡ ਦਾ ਨਾਂ (ਪੰਜਾਬੀ)"
-                value={newVillagePa}
+                value={newVillagePa || ''}
                 onChange={(e) => setNewVillagePa(e.target.value)}
                 className="bg-slate-50 border border-slate-300 rounded p-1.5 text-xs text-slate-900 focus:bg-white"
                 required

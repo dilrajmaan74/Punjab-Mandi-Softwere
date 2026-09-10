@@ -102,6 +102,7 @@ export interface SellerMaster {
   address: string;
   addressPa?: string;
   mobile: string;
+  phone?: string;
   contactPerson?: string;
   gstinOrLicence?: string;
   licenceNo?: string;
@@ -203,21 +204,43 @@ export interface CustomDeductionLine {
   enabled: boolean;
 }
 
+export interface BagConditionBreakdown {
+  enabled?: boolean;
+  totalBags?: number;
+  doubleBags?: number;
+  doubleRate?: number;
+  doubleAmount?: number;
+  sukkiBags?: number;
+  sukkiRate?: number;
+  sukkiAmount?: number;
+  pakkiBags?: number;
+  pakkiRate?: number;
+  pakkiAmount?: number;
+  balanceBags?: number;
+  summaryText?: string;
+}
+
 export interface LabourAndDeductions {
   // 1. Pakki Labour / ਪੱਕੀ ਮਜ਼ਦੂਰੀ
   pakkiLabourEnabled: boolean;
   pakkiLabourRate: number; // default: 7 (₹ per Qul)
   pakkiLabourAmount: number; // (weightInKg / 100) * pakkiLabourRate
+  pakkiBagsCount?: number;
 
   // 2. Pakka Double Labour / ਪੱਕੀ ਡਬਲ ਮਜ਼ਦੂਰੀ
   pakkaDoubleLabourEnabled: boolean;
   pakkaDoubleLabourRate: number; // default: 14 (₹ per Qul)
   pakkaDoubleLabourAmount: number; // (weightInKg / 100) * pakkaDoubleLabourRate
+  doubleBagsCount?: number;
 
   // 3. Sukhi Labour / ਸੁੱਕੀ ਮਜ਼ਦੂਰੀ
   sukhiLabourEnabled: boolean;
   sukhiLabourRate: number; // default: 5 (₹ per Qul)
   sukhiLabourAmount: number; // (weightInKg / 100) * sukhiLabourRate
+  sukkiBagsCount?: number;
+
+  balanceBagsCount?: number;
+  conditionBreakdown?: BagConditionBreakdown;
 
   // 4. Other Optional Deductions / Expenses
   otherDeductionsEnabled?: boolean;
@@ -234,6 +257,7 @@ export interface LabourAndDeductions {
 export interface BagsEntryRecord {
   id: string;
   entryNumber: string; // e.g. "BAG-00001"
+  parchiNo?: number; // Sequential Parchi number e.g. 1, 2, 3...
   date: string; // e.g. "28/08/2026"
   farmerId: string; // e.g. "FRM000001"
   farmerName: string;
@@ -258,6 +282,7 @@ export interface BagsEntryRecord {
   ratePerQtl: number; // fixed 2461 (₹2,461 / Qul)
   totalAmount: number; // (grandTotalKg / 100) * 2461
   labourDeductions?: LabourAndDeductions;
+  conditionBreakdown?: BagConditionBreakdown;
   netAmount?: number;
   agency?: string; // Optional procurement agency assignment
   firmId?: string;
@@ -567,6 +592,8 @@ export interface MandiSettings {
   firmAddress?: string; // "Dana Mandi Kang Khurd, Teh. Shahkot, Distt. Jalandhar, Punjab - 144629"
   firmMobile?: string; // "98147-74651"
   firmLicence?: string; // "JAL/LKH/133"
+  firmPan?: string; // "AAACJ1234F"
+  firmGstin?: string;
   fixedRatePerQtl: number; // 2461
   fixedBagWeightKg: number; // 37.50
   agencies?: ProcurementAgency[];

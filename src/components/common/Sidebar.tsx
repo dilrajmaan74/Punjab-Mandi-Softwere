@@ -35,30 +35,53 @@ const NAV_ITEMS: NavItem[] = [
     icon: LayoutDashboard
   },
   {
+    id: 'farmer-registration',
+    titleEn: 'Farmer Register',
+    titlePa: 'ਕਿਸਾਨ ਰਜਿਸਟ੍ਰੇਸ਼ਨ',
+    icon: UserPlus,
+    badgeColor: 'bg-emerald-600'
+  },
+  {
+    id: 'multi-farmer-add',
+    titleEn: 'Multi Farmer Register',
+    titlePa: 'ਮਲਟੀ ਕਿਸਾਨ ਰਜਿਸਟਰ',
+    icon: Users,
+    badgeColor: 'bg-teal-600'
+  },
+  {
+    id: 'bardana',
+    titleEn: 'Bardana Received',
+    titlePa: 'ਬਾਰਦਾਨਾ ਪ੍ਰਾਪਤ',
+    icon: Boxes,
+    badgeColor: 'bg-amber-600'
+  },
+  {
+    id: 'bags-entry',
+    titleEn: 'Bag (37.50 KG)',
+    titlePa: 'ਬੋਰੀਆਂ ਤੁਲਾਈ ਐਂਟਰੀ',
+    icon: PackageCheck,
+    badgeColor: 'bg-blue-600'
+  },
+  {
+    id: 'same-date-multi-entry',
+    titleEn: 'Multi Bag',
+    titlePa: 'ਇੱਕੋ ਮਿਤੀ ਮਲਟੀ ਬੋਰੀਆਂ',
+    icon: CalendarCheck2,
+    badgeColor: 'bg-indigo-600'
+  },
+  {
+    id: 'daily-purchase',
+    titleEn: 'Daily Purchase (ਖਰੀਦ)',
+    titlePa: 'ਰੋਜ਼ਾਨਾ ਖਰੀਦ',
+    icon: ShoppingBag,
+    badgeColor: 'bg-emerald-800'
+  },
+  {
     id: 'farmer-account',
     titleEn: 'Farmer Account (ਖਾਤਾ)',
     titlePa: 'ਕਿਸਾਨ ਖਾਤਾ',
     icon: User,
     badgeColor: 'bg-amber-500'
-  },
-  {
-    id: 'bags-entry',
-    titleEn: 'Bags Entry (37.50 KG)',
-    titlePa: 'ਬੋਰੀਆਂ ਤੁਲਾਈ ਐਂਟਰੀ',
-    icon: PackageCheck
-  },
-  {
-    id: 'same-date-multi-entry',
-    titleEn: 'Same Date Multi Farmer',
-    titlePa: 'ਇੱਕੋ ਮਿਤੀ ਮਲਟੀ ਕਿਸਾਨ',
-    icon: CalendarCheck2
-  },
-  {
-    id: 'daily-purchase',
-    titleEn: 'Daily Purchase (ਖਰੀਦ)',
-    titlePa: 'ਰੋਜ਼ਾਨਾ ਖਰੀਦ ਪ੍ਰਬੰਧਨ',
-    icon: ShoppingBag,
-    badgeColor: 'bg-emerald-800'
   },
   {
     id: 'lefting',
@@ -72,24 +95,6 @@ const NAV_ITEMS: NavItem[] = [
     titleEn: 'Stock Balance Chart',
     titlePa: 'ਸਟਾਕ ਬੈਲੇਂਸ ਚਾਰਟ',
     icon: BarChart3
-  },
-  {
-    id: 'bardana',
-    titleEn: 'Bardana Management',
-    titlePa: 'ਬਾਰਦਾਨਾ ਪ੍ਰਬੰਧਨ',
-    icon: Boxes
-  },
-  {
-    id: 'farmer-registration',
-    titleEn: 'Farmer Registration',
-    titlePa: 'ਕਿਸਾਨ ਰਜਿਸਟ੍ਰੇਸ਼ਨ',
-    icon: UserPlus
-  },
-  {
-    id: 'multi-farmer-add',
-    titleEn: 'Multi Farmer Add',
-    titlePa: 'ਮਲਟੀ ਕਿਸਾਨ ਐਂਟਰੀ',
-    icon: Users
   },
   {
     id: 'bank-details',
@@ -132,14 +137,17 @@ export const Sidebar: React.FC = () => {
     bardanaRecords,
     dailyPurchaseRecords,
     leftingRecords,
-    recycleBinItems
+    recycleBinItems,
+    language
   } = useMandi();
+
+  const isEn = language === 'en';
 
   return (
     <aside className="w-64 bg-white border-r border-slate-200 hidden lg:flex flex-col justify-between shrink-0 shadow-2xs print:hidden">
       <div className="p-3 space-y-1 overflow-y-auto">
         <div className="px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
-          ਮੰਡੀ ਮੌਡਿਊਲ (Mandi Modules)
+          {isEn ? 'MANDI MODULES' : 'ਮੰਡੀ ਮੌਡਿਊਲ (Mandi Modules)'}
         </div>
 
         {NAV_ITEMS.map((item) => {
@@ -157,10 +165,16 @@ export const Sidebar: React.FC = () => {
             >
               <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : 'text-slate-500'}`} />
               <div className="flex-1 truncate">
-                <div className="truncate text-xs font-bold leading-tight">{item.titlePa}</div>
-                <div className={`text-[10px] truncate leading-tight ${isActive ? 'text-emerald-100' : 'text-slate-400'}`}>
-                  {item.titleEn}
-                </div>
+                {isEn ? (
+                  <div className="truncate text-xs font-bold leading-tight">{item.titleEn}</div>
+                ) : (
+                  <>
+                    <div className="truncate text-xs font-bold leading-tight">{item.titlePa}</div>
+                    <div className={`text-[10px] truncate leading-tight ${isActive ? 'text-emerald-100' : 'text-slate-400'}`}>
+                      {item.titleEn}
+                    </div>
+                  </>
+                )}
               </div>
 
               {item.id === 'daily-purchase' && dailyPurchaseRecords.length > 0 && (
@@ -228,11 +242,11 @@ export const Sidebar: React.FC = () => {
       {/* Bottom Status Info */}
       <div className="p-3 border-t border-slate-200 bg-slate-50 text-[11px] text-slate-600 space-y-1">
         <div className="flex justify-between items-center">
-          <span className="font-semibold">ਨਿਰਧਾਰਿਤ ਬੋਰੀ ਵਜ਼ਨ:</span>
+          <span className="font-semibold">{isEn ? 'Fixed Bag Weight:' : 'ਨਿਰਧਾਰਿਤ ਬੋਰੀ ਵਜ਼ਨ:'}</span>
           <strong className="text-slate-900 font-mono font-bold">37.50 KG</strong>
         </div>
         <div className="flex justify-between items-center">
-          <span className="font-semibold">ਸਰਕਾਰੀ ਭਾਅ:</span>
+          <span className="font-semibold">{isEn ? 'Govt MSP Rate:' : 'ਸਰਕਾਰੀ ਭਾਅ:'}</span>
           <strong className="text-emerald-700 font-mono font-bold">₹2,461 / Qul</strong>
         </div>
       </div>

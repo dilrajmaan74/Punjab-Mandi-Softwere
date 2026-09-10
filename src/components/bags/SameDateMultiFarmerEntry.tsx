@@ -1,6 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useMandi } from '../../context/MandiContext';
 import { useNotification } from '../../context/NotificationContext';
+import { useFormDraft } from '../../hooks/useFormDraft';
+import { DateInput } from '../common/DateInput';
+import { SearchableSelect, SearchableSelectOption } from '../common/SearchableSelect';
 import {
   CalendarCheck2,
   Plus,
@@ -21,7 +24,8 @@ import {
   Search,
   MapPin,
   Phone,
-  UserCheck
+  UserCheck,
+  Hash
 } from 'lucide-react';
 import {
   FIXED_BAG_WEIGHT_KG,
@@ -49,12 +53,29 @@ interface BatchRow {
   labourDeductions: LabourAndDeductions;
 }
 
+interface MultiFarmerDraft {
+  batchDate: string;
+  rows: BatchRow[];
+}
+
 export const SameDateMultiFarmerEntry: React.FC = () => {
-  const { farmers, addBagsEntry, setActiveReceipt, getBardanaSummary, settings } = useMandi();
+  const { farmers, addBagsEntry, getNextParchiNo, setActiveReceipt, getBardanaSummary, settings, language } = useMandi();
+  const isEn = language === 'en';
   const { notifySaveSuccess, notifyError } = useNotification();
   const [isSaving, setIsSaving] = useState(false);
 
   const bardanaSummary = getBardanaSummary();
+  const nextParchiNo = getNextParchiNo();
+
+  const farmerOptions: SearchableSelectOption[] = useMemo(() => {
+    return farmers.map((f) => ({
+      value: f.id,
+      label: isEn ? `${f.farmerName} (${f.id})` : `${f.farmerNamePa} (${f.farmerName})`,
+      subLabel: `${isEn ? 'Village' : 'ਪਿੰਡ'}: ${isEn ? f.village : (f.villagePa || f.village)} • ${isEn ? 'Mobile' : 'ਮੋਬਾਈਲ'}: ${f.mobile}`,
+      badge: f.id,
+      keywords: [f.farmerName, f.farmerNamePa, f.village, f.villagePa, f.mobile, f.id, f.fatherName, f.fatherNamePa]
+    }));
+  }, [farmers, isEn]);
 
   // Modal for editing custom deductions of a specific row
   const [editingRowDeductionId, setEditingRowDeductionId] = useState<string | null>(null);
@@ -72,10 +93,33 @@ export const SameDateMultiFarmerEntry: React.FC = () => {
     return `${day}/${month}/${year}`;
   };
 
-  const [batchDate, setBatchDate] = useState<string>(getTodayFormatted());
+  // Universal Auto-Save Draft
+  const { draft, saveDraft, clearDraft } = useFormDraft<MultiFarmerDraft>({
+    formKey: 'draft_multi_farmer_entry',
+    initialValues: {
+      batchDate: getTodayFormatted(),
+      rows: farmers.length > 0 ? [
+        {
+          rowId: 'row-1',
+          farmerId: farmers[0].id,
+          newBags: 0,
+          oldBags: 0,
+          bags: 0,
+          totaKg: 0,
+          bardana: 'NEW',
+          labourDeductions: createDefaultLabourDeductions(settings)
+        }
+      ] : []
+    }
+  });
 
-  // Rows state starts empty until farmer exists or user adds row
+  const [batchDate, setBatchDate] = useState<string>(draft.batchDate || getTodayFormatted());
+
+  // Rows state starts with draft or default
   const [rows, setRows] = useState<BatchRow[]>(() => {
+    if (draft.rows && draft.rows.length > 0) {
+      return draft.rows;
+    }
     if (farmers.length > 0) {
       return [
         {
@@ -92,6 +136,14 @@ export const SameDateMultiFarmerEntry: React.FC = () => {
     }
     return [];
   });
+
+  // Auto-save draft on every change
+  useEffect(() => {
+    saveDraft({
+      batchDate,
+      rows
+    });
+  }, [batchDate, rows, saveDraft]);
 
   const [savedRecords, setSavedRecords] = useState<any[]>([]);
   const [successToast, setSuccessToast] = useState(false);
@@ -356,8 +408,11 @@ export const SameDateMultiFarmerEntry: React.FC = () => {
       titlePa: 'ਬੈਚ ਐਂਟਰੀਆਂ ਸਫਲਤਾਪੂਰਵਕ ਸੇਵ ਹੋ ਗਈਆਂ!',
       titleEn: 'Batch Entries Saved Successfully',
       messagePa: `${savedList.length} ਕਿਸਾਨਾਂ ਲਈ ਕੁੱਲ ${totalBagsInBatch} ਬੋਰੀਆਂ (${totalNewBagsInBatch} ਨਵਾਂ + ${totalOldBagsInBatch} ਪੁਰਾਣਾ) ਸੇਵ ਹੋ ਗਈਆਂ ਹਨ।`,
-      details: `ਮਿਤੀ: ${batchDate} • ਕੁੱਲ ਗ੍ਰਾਸ: ${formatCurrency(totalGrossAmount)}${deductionSummary}`
+      details: `ਮਿਤੀ: ${batchDate} • ਪਰਚੀ ਨੰਬਰਾਂ: #${savedList[0]?.parchiNo || nextParchiNo} ਤੋਂ #${savedList[savedList.length - 1]?.parchiNo || (nextParchiNo + savedList.length - 1)} • ਕੁੱਲ ਗ੍ਰਾਸ: ${formatCurrency(totalGrossAmount)}${deductionSummary}`
     });
+
+    // Clear universal auto-save draft upon successful batch save
+    clearDraft();
 
     setSavedRecords(savedList);
     setIsSaving(false);
@@ -380,11 +435,25 @@ export const SameDateMultiFarmerEntry: React.FC = () => {
             <CalendarCheck2 className="w-5 h-5" />
           </div>
           <div>
-            <h2 className="text-sm sm:text-base font-black text-slate-900">
-              ਇੱਕੋ ਮਿਤੀ ਮਲਟੀ ਕਿਸਾਨ ਐਂਟਰੀ (Same Date Multi Farmer Entry)
-            </h2>
-            <p className="text-[11px] text-slate-500">
-              ਇੱਕੋ ਮਿਤੀ ਤਹਿਤ ਲਗਾਤਾਰ ਮਲਟੀਪਲ ਕਿਸਾਨਾਂ ਦੀਆਂ ਬੋਰੀਆਂ, ਟੋਟਾ ਅਤੇ ਮਜ਼ਦੂਰੀ ਕਟੌਤੀਆਂ ਦਰਜ ਕਰੋ
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="text-sm sm:text-base font-black text-slate-900">
+                {isEn ? 'Same Date Multi Farmer Entry' : 'ਇੱਕੋ ਮਿਤੀ ਮਲਟੀ ਕਿਸਾਨ ਐਂਟਰੀ (Same Date Multi Farmer Entry)'}
+              </h2>
+              {/* Parchi Sequence Badge */}
+              <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-950 border border-amber-300 font-mono font-black text-xs px-2.5 py-0.5 rounded-full shadow-2xs">
+                <Hash className="w-3 h-3 text-amber-700" />
+                <span>{isEn ? `Next Slip: #${nextParchiNo}` : `ਅਗਲੀ ਪਰਚੀ: #${nextParchiNo}`}</span>
+              </span>
+              {/* Separate Date Badge */}
+              <span className="inline-flex items-center gap-1 bg-indigo-50 text-indigo-900 border border-indigo-200 font-mono font-bold text-xs px-2.5 py-0.5 rounded-full">
+                <Calendar className="w-3 h-3 text-indigo-600" />
+                <span>{isEn ? `Date: ${batchDate}` : `ਮਿਤੀ: ${batchDate}`}</span>
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-500 mt-0.5">
+              {isEn
+                ? 'Rapidly enter bags, separate tota, and deductions for multiple farmers under the same date'
+                : 'ਇੱਕੋ ਮਿਤੀ ਤਹਿਤ ਲਗਾਤਾਰ ਮਲਟੀਪਲ ਕਿਸਾਨਾਂ ਦੀਆਂ ਬੋਰੀਆਂ, ਟੋਟਾ ਅਤੇ ਮਜ਼ਦੂਰੀ ਕਟੌਤੀਆਂ ਦਰਜ ਕਰੋ'}
             </p>
           </div>
         </div>
@@ -392,28 +461,22 @@ export const SameDateMultiFarmerEntry: React.FC = () => {
         {/* Date Master Selector & Stock chips */}
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-1.5 text-[11px] bg-slate-50 border border-slate-200 px-2.5 py-1.5 rounded-lg">
-            <span className="text-slate-500 font-bold">ਸਟਾਕ:</span>
+            <span className="text-slate-500 font-bold">{isEn ? 'Stock:' : 'ਸਟਾਕ:'}</span>
             <span className="bg-emerald-100 text-emerald-900 px-1.5 py-0.5 rounded font-mono font-black text-[10px]">
-              ਨਵਾਂ: {bardanaSummary.newBagsRemaining.toLocaleString('en-IN')}
+              {isEn ? 'New:' : 'ਨਵਾਂ:'} {bardanaSummary.newBagsRemaining.toLocaleString('en-IN')}
             </span>
             <span className="bg-amber-100 text-amber-900 px-1.5 py-0.5 rounded font-mono font-black text-[10px]">
-              ਪੁਰਾਣਾ: {bardanaSummary.oldBagsRemaining.toLocaleString('en-IN')}
+              {isEn ? 'Old:' : 'ਪੁਰਾਣਾ:'} {bardanaSummary.oldBagsRemaining.toLocaleString('en-IN')}
             </span>
           </div>
 
-          <div className="flex items-center gap-2 bg-indigo-50 border border-indigo-200 px-3 py-1.5 rounded-lg">
-            <Calendar className="w-4 h-4 text-indigo-700" />
-            <div>
-              <span className="text-[10px] text-indigo-900 font-bold block">ਚੁਣੀ ਗਈ ਮਿਤੀ (Fixed Date):</span>
-              <input
-                type="text"
-                maxLength={10}
-                placeholder="DD/MM/YYYY"
-                value={batchDate}
-                onChange={(e) => setBatchDate(autoFormatDate(e.target.value))}
-                className="bg-white border border-indigo-300 rounded px-2 py-0.5 text-xs font-mono font-black text-indigo-950 focus:outline-none"
-              />
-            </div>
+          <div className="w-44">
+            <DateInput
+              value={batchDate}
+              onChange={setBatchDate}
+              label={isEn ? "Batch Date" : "ਮਿਤੀ (Batch Date)"}
+              required
+            />
           </div>
         </div>
       </div>
@@ -425,9 +488,13 @@ export const SameDateMultiFarmerEntry: React.FC = () => {
             <Hammer className="w-4 h-4" />
           </div>
           <div>
-            <strong className="text-amber-950 block text-xs">ਬੈਚ ਮਜ਼ਦੂਰੀ ਪ੍ਰੀਸੈਟ (Batch Labour Options):</strong>
+            <strong className="text-amber-950 block text-xs">
+              {isEn ? 'Batch Labour Options:' : 'ਬੈਚ ਮਜ਼ਦੂਰੀ ਪ੍ਰੀਸੈਟ (Batch Labour Options):'}
+            </strong>
             <span className="text-[11px] text-amber-800">
-              ਇੱਕੋ ਕਲਿੱਕ ਨਾਲ ਸਾਰੀਆਂ ਕਤਾਰਾਂ 'ਤੇ ਮਜ਼ਦੂਰੀ ਲਾਗੂ ਕਰੋ (ਸਾਰੀਆਂ ਚੋਣਾਂ ਵਿਕਲਪਿਕ ਹਨ)
+              {isEn
+                ? 'Apply labour deductions across all rows with one click (optional)'
+                : "ਇੱਕੋ ਕਲਿੱਕ ਨਾਲ ਸਾਰੀਆਂ ਕਤਾਰਾਂ 'ਤੇ ਮਜ਼ਦੂਰੀ ਲਾਗੂ ਕਰੋ (ਸਾਰੀਆਂ ਚੋਣਾਂ ਵਿਕਲਪਿਕ ਹਨ)"}
             </span>
           </div>
         </div>
@@ -441,7 +508,9 @@ export const SameDateMultiFarmerEntry: React.FC = () => {
               onChange={(e) => setBatchPakkiEnabled(e.target.checked)}
               className="w-3.5 h-3.5 text-amber-600 rounded"
             />
-            <span className="font-bold text-slate-800 text-[11px]">ਪੱਕੀ ਮਜ਼ਦੂਰੀ (₹7/Qtl)</span>
+            <span className="font-bold text-slate-800 text-[11px]">
+              {isEn ? 'Pakki Labour (₹7/Qtl)' : 'ਪੱਕੀ ਮਜ਼ਦੂਰੀ (₹7/Qtl)'}
+            </span>
           </label>
 
           {/* Double ₹14 */}
@@ -452,7 +521,9 @@ export const SameDateMultiFarmerEntry: React.FC = () => {
               onChange={(e) => setBatchDoubleEnabled(e.target.checked)}
               className="w-3.5 h-3.5 text-amber-600 rounded"
             />
-            <span className="font-bold text-slate-800 text-[11px]">ਪੱਕੀ ਡਬਲ (₹14/Qtl)</span>
+            <span className="font-bold text-slate-800 text-[11px]">
+              {isEn ? 'Pakki Double (₹14/Qtl)' : 'ਪੱਕੀ ਡਬਲ (₹14/Qtl)'}
+            </span>
           </label>
 
           {/* Sukhi ₹5 */}
@@ -463,7 +534,9 @@ export const SameDateMultiFarmerEntry: React.FC = () => {
               onChange={(e) => setBatchSukhiEnabled(e.target.checked)}
               className="w-3.5 h-3.5 text-amber-600 rounded"
             />
-            <span className="font-bold text-slate-800 text-[11px]">ਸੁੱਕੀ ਮਜ਼ਦੂਰੀ (₹5/Qtl)</span>
+            <span className="font-bold text-slate-800 text-[11px]">
+              {isEn ? 'Sukhi Labour (₹5/Qtl)' : 'ਸੁੱਕੀ ਮਜ਼ਦੂਰੀ (₹5/Qtl)'}
+            </span>
           </label>
 
           <button
@@ -472,7 +545,7 @@ export const SameDateMultiFarmerEntry: React.FC = () => {
             className="bg-amber-600 hover:bg-amber-500 text-white font-black px-3 py-1 rounded-lg text-[11px] shadow-2xs flex items-center gap-1 transition"
           >
             <Check className="w-3 h-3" />
-            <span>ਸਭ 'ਤੇ ਲਾਗੂ ਕਰੋ (Apply All)</span>
+            <span>{isEn ? 'Apply to All' : "ਸਭ 'ਤੇ ਲਾਗੂ ਕਰੋ (Apply All)"}</span>
           </button>
         </div>
       </div>
@@ -481,17 +554,27 @@ export const SameDateMultiFarmerEntry: React.FC = () => {
         <div className="bg-emerald-50 text-emerald-900 font-bold p-3 rounded-lg border border-emerald-300 text-xs flex items-center justify-between">
           <div className="flex items-center gap-2">
             <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-            <span>ਸਾਰੀਆਂ {savedRecords.length} ਕਿਸਾਨ ਐਂਟਰੀਆਂ ਸਫਲਤਾਪੂਰਵਕ ਸੇਵ ਹੋ ਗਈਆਂ ਹਨ!</span>
+            <span>
+              {isEn
+                ? `All ${savedRecords.length} farmer entries saved successfully!`
+                : `ਸਾਰੀਆਂ ${savedRecords.length} ਕਿਸਾਨ ਐਂਟਰੀਆਂ ਸਫਲਤਾਪੂਰਵਕ ਸੇਵ ਹੋ ਗਈਆਂ ਹਨ!`}
+            </span>
           </div>
-          <span className="font-mono text-emerald-800 text-[11px]">ਮਿਤੀ: {batchDate}</span>
+          <span className="font-mono text-emerald-800 text-[11px]">
+            {isEn ? 'Date:' : 'ਮਿਤੀ:'} {batchDate}
+          </span>
         </div>
       )}
 
       {farmers.length === 0 ? (
         <div className="bg-white border border-slate-200 rounded-xl p-8 text-center space-y-2">
           <AlertCircle className="w-8 h-8 text-slate-400 mx-auto" />
-          <h3 className="text-xs font-bold text-slate-700">ਕੋਈ ਕਿਸਾਨ ਰਜਿਸਟਰਡ ਨਹੀਂ ਹੈ</h3>
-          <p className="text-[11px] text-slate-500">ਕਿਰਪਾ ਕਰਕੇ ਪਹਿਲਾਂ ਕਿਸਾਨ ਰਜਿਸਟਰ ਕਰੋ।</p>
+          <h3 className="text-xs font-bold text-slate-700">
+            {isEn ? 'No Farmers Registered' : 'ਕੋਈ ਕਿਸਾਨ ਰਜਿਸਟਰਡ ਨਹੀਂ ਹੈ'}
+          </h3>
+          <p className="text-[11px] text-slate-500">
+            {isEn ? 'Please register farmers first.' : 'ਕਿਰਪਾ ਕਰਕੇ ਪਹਿਲਾਂ ਕਿਸਾਨ ਰਜਿਸਟਰ ਕਰੋ।'}
+          </p>
         </div>
       ) : (
         <div className="space-y-3">
@@ -500,17 +583,17 @@ export const SameDateMultiFarmerEntry: React.FC = () => {
             <div className="flex items-center justify-between">
               <label className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
                 <Search className="w-4 h-4 text-indigo-600" />
-                <span>ਕਿਸਾਨ ਖੋਜੋ ਤੇ ਸ਼ਾਮਲ ਕਰੋ (Search Farmer to Add to Batch)</span>
+                <span>{isEn ? 'Search Farmer to Add to Batch' : 'ਕਿਸਾਨ ਖੋਜੋ ਤੇ ਸ਼ਾਮਲ ਕਰੋ (Search Farmer to Add to Batch)'}</span>
               </label>
               <span className="text-[10px] text-slate-500">
-                ਨਾਂ, ਪਿਤਾ ਦਾ ਨਾਂ, ਪਿੰਡ, ਪਤਾ, ਮੋਬਾਈਲ ਜਾਂ ID ਨਾਲ ਖੋਜੋ
+                {isEn ? 'Search by name, father, village, mobile, or ID' : 'ਨਾਂ, ਪਿਤਾ ਦਾ ਨਾਂ, ਪਿੰਡ, ਪਤਾ, ਮੋਬਾਈਲ ਜਾਂ ID ਨਾਲ ਖੋਜੋ'}
               </span>
             </div>
 
             <div className="relative">
               <input
                 type="text"
-                placeholder="ਕਿਸਾਨ ਦਾ ਨਾਂ (English/ਪੰਜਾਬੀ), ਪਿਤਾ ਦਾ ਨਾਂ, ਪਿੰਡ, ਪੂਰਾ ਪਤਾ, ਮੋਬਾਈਲ ਜਾਂ ID ਨਾਲ ਖੋਜੋ..."
+                placeholder={isEn ? "Search farmer name, father, village, address, mobile, or ID..." : "ਕਿਸਾਨ ਦਾ ਨਾਂ (English/ਪੰਜਾਬੀ), ਪਿਤਾ ਦਾ ਨਾਂ, ਪਿੰਡ, ਪੂਰਾ ਪਤਾ, ਮੋਬਾਈਲ ਜਾਂ ID ਨਾਲ ਖੋਜੋ..."}
                 value={farmerSearchQuery}
                 onChange={(e) => {
                   setFarmerSearchQuery(e.target.value);
@@ -598,21 +681,39 @@ export const SameDateMultiFarmerEntry: React.FC = () => {
                 <thead className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
                   <tr>
                     <th className="py-2.5 px-3">#</th>
-                    <th className="py-2.5 px-3 min-w-[260px]">ਕਿਸਾਨ ਦੀ ਚੋਣ (Farmer: Name, Father, Village, Address)</th>
+                    <th className="py-2.5 px-3 min-w-[260px]">
+                      {isEn ? 'Farmer (Name, Village, Address)' : 'ਕਿਸਾਨ ਦੀ ਚੋਣ (Farmer: Name, Father, Village, Address)'}
+                    </th>
                     <th className="py-2.5 px-2 w-24 text-center bg-emerald-50 text-emerald-950">
-                      ਨਵਾਂ ਬਾਰਦਾਨਾ
+                      {isEn ? 'New Bags' : 'ਨਵਾਂ ਬਾਰਦਾਨਾ'}
                     </th>
                     <th className="py-2.5 px-2 w-24 text-center bg-amber-50 text-amber-950">
-                      ਪੁਰਾਣਾ ਬਾਰਦਾਨਾ
+                      {isEn ? 'Old Bags' : 'ਪੁਰਾਣਾ ਬਾਰਦਾਨਾ'}
                     </th>
-                    <th className="py-2.5 px-2 w-20 text-center font-black">ਕੁੱਲ ਬੋਰੀਆਂ</th>
-                    <th className="py-2.5 px-2 w-20 text-center">ਟੋਟਾ (Kg)</th>
-                    <th className="py-2.5 px-3 text-right font-black">ਕੁੱਲ ਵਜ਼ਨ</th>
-                    <th className="py-2.5 px-3 min-w-[160px] text-center">ਮਜ਼ਦੂਰੀ ਕਟੌਤੀਆਂ (Labour)</th>
-                    <th className="py-2.5 px-3 text-right">ਗ੍ਰਾਸ (₹)</th>
-                    <th className="py-2.5 px-3 text-right text-rose-700">ਕਟੌਤੀ (₹)</th>
-                    <th className="py-2.5 px-3 text-right text-emerald-950 font-black">ਸ਼ੁੱਧ ਰਕਮ (₹)</th>
-                    <th className="py-2.5 px-3 text-center w-10">ਹਟਾਓ</th>
+                    <th className="py-2.5 px-2 w-20 text-center font-black">
+                      {isEn ? 'Total Bags' : 'ਕੁੱਲ ਬੋਰੀਆਂ'}
+                    </th>
+                    <th className="py-2.5 px-2 w-20 text-center">
+                      {isEn ? 'Tota (Kg)' : 'ਟੋਟਾ (Kg)'}
+                    </th>
+                    <th className="py-2.5 px-3 text-right font-black">
+                      {isEn ? 'Total Wt' : 'ਕੁੱਲ ਵਜ਼ਨ'}
+                    </th>
+                    <th className="py-2.5 px-3 min-w-[160px] text-center">
+                      {isEn ? 'Labour Deductions' : 'ਮਜ਼ਦੂਰੀ ਕਟੌਤੀਆਂ (Labour)'}
+                    </th>
+                    <th className="py-2.5 px-3 text-right">
+                      {isEn ? 'Gross (₹)' : 'ਗ੍ਰਾਸ (₹)'}
+                    </th>
+                    <th className="py-2.5 px-3 text-right text-rose-700">
+                      {isEn ? 'Deductions (₹)' : 'ਕਟੌਤੀ (₹)'}
+                    </th>
+                    <th className="py-2.5 px-3 text-right text-emerald-950 font-black">
+                      {isEn ? 'Net Amount (₹)' : 'ਸ਼ੁੱਧ ਰਕਮ (₹)'}
+                    </th>
+                    <th className="py-2.5 px-3 text-center w-10">
+                      {isEn ? 'Del' : 'ਹਟਾਓ'}
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-medium">
@@ -635,37 +736,40 @@ export const SameDateMultiFarmerEntry: React.FC = () => {
 
                     return (
                       <tr key={row.rowId} className="hover:bg-slate-50/70">
-                        <td className="py-2.5 px-3 font-mono font-bold text-slate-500 text-xs">
-                          {index + 1}
+                        <td className="py-2.5 px-3 font-mono text-center">
+                          <span className="font-bold text-slate-700 text-xs">#{index + 1}</span>
+                          <span className="block mt-1 font-black text-[10px] bg-amber-100 text-amber-900 border border-amber-300 px-1.5 py-0.5 rounded shadow-2xs whitespace-nowrap">
+                            {isEn ? `Slip #${nextParchiNo + index}` : `ਪਰਚੀ #${nextParchiNo + index}`}
+                          </span>
                         </td>
-                        <td className="py-2.5 px-3">
-                          <select
+                        <td className="py-2.5 px-3 min-w-[280px]">
+                          <SearchableSelect
+                            id={`row-farmer-${row.rowId}`}
                             value={row.farmerId}
-                            onChange={(e) => updateRow(row.rowId, 'farmerId', e.target.value)}
-                            className="w-full bg-slate-50 border border-slate-300 rounded p-1 text-xs font-bold text-slate-900 focus:bg-white focus:outline-none"
-                          >
-                            {farmers.map((f) => (
-                              <option key={f.id} value={f.id}>
-                                {f.farmerName} s/o {f.fatherName} • {f.village} | Address: {f.address || 'N/A'}, PIN: {f.pinCode} ({f.farmerNamePa} - ID: {f.id})
-                              </option>
-                            ))}
-                          </select>
+                            onChange={(val) => updateRow(row.rowId, 'farmerId', val)}
+                            options={farmerOptions}
+                            placeholder={isEn ? "Select farmer..." : "ਕਿਸਾਨ ਚੁਣੋ..."}
+                            searchPlaceholder={isEn ? "Search farmer..." : "ਕਿਸਾਨ ਖੋਜੋ..."}
+                            emptyMessage={isEn ? "No farmer found" : "ਕੋਈ ਕਿਸਾਨ ਨਹੀਂ ਮਿਲਿਆ"}
+                          />
                           {selectedF && (
                             <div className="mt-1 text-[10px] text-slate-700 bg-slate-100/90 p-1.5 rounded-md border border-slate-200 space-y-0.5">
                               <div className="font-bold text-slate-900 flex items-center justify-between">
                                 <span>{selectedF.farmerName} s/o {selectedF.fatherName} • {selectedF.village}</span>
                                 <span className="font-mono text-[9px] text-slate-500">{selectedF.id}</span>
                               </div>
-                              <div className="text-emerald-800 font-semibold">
-                                {selectedF.farmerNamePa} ਸ/ਓ {selectedF.fatherNamePa || selectedF.fatherName}
-                              </div>
+                              {!isEn && (
+                                <div className="text-emerald-800 font-semibold">
+                                  {selectedF.farmerNamePa} ਸ/ਓ {selectedF.fatherNamePa || selectedF.fatherName}
+                                </div>
+                              )}
                               <div className="text-[9px] text-slate-600 truncate" title={selectedF.address}>
-                                ਪਤਾ: {selectedF.address || 'N/A'}, PIN: {selectedF.pinCode} | ਮੋਬਾਈਲ: {selectedF.mobile}
+                                {isEn ? 'Address:' : 'ਪਤਾ:'} {selectedF.address || 'N/A'}, PIN: {selectedF.pinCode} | {isEn ? 'Mobile:' : 'ਮੋਬਾਈਲ:'} {selectedF.mobile}
                               </div>
                             </div>
                           )}
                         </td>
-                        {/* 1. New Bags Input */}
+                        {/* 1. New Bags Input (Larger) */}
                         <td className="py-2.5 px-2 bg-emerald-50/30">
                           <input
                             type="number"
@@ -673,10 +777,10 @@ export const SameDateMultiFarmerEntry: React.FC = () => {
                             placeholder="0"
                             value={row.newBags || ''}
                             onChange={(e) => updateRow(row.rowId, 'newBags', parseInt(e.target.value, 10) || 0)}
-                            className="w-full text-center bg-white border border-emerald-300 rounded p-1 text-xs font-mono font-black text-emerald-950 focus:outline-none focus:border-emerald-500"
+                            className="w-full text-center bg-white border-2 border-emerald-300 rounded-lg py-2 px-1 text-base font-mono font-black text-emerald-950 focus:outline-none focus:border-emerald-500"
                           />
                         </td>
-                        {/* 2. Old Bags Input */}
+                        {/* 2. Old Bags Input (Larger) */}
                         <td className="py-2.5 px-2 bg-amber-50/30">
                           <input
                             type="number"
@@ -684,16 +788,16 @@ export const SameDateMultiFarmerEntry: React.FC = () => {
                             placeholder="0"
                             value={row.oldBags || ''}
                             onChange={(e) => updateRow(row.rowId, 'oldBags', parseInt(e.target.value, 10) || 0)}
-                            className="w-full text-center bg-white border border-amber-300 rounded p-1 text-xs font-mono font-black text-amber-950 focus:outline-none focus:border-amber-500"
+                            className="w-full text-center bg-white border-2 border-amber-300 rounded-lg py-2 px-1 text-base font-mono font-black text-amber-950 focus:outline-none focus:border-amber-500"
                           />
                         </td>
                         {/* 3. Auto-calculated Total Bags */}
                         <td className="py-2.5 px-2 text-center">
-                          <span className="font-mono font-black text-xs text-slate-900 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded">
+                          <span className="font-mono font-black text-sm text-slate-900 bg-slate-100 border border-slate-300 px-2.5 py-1.5 rounded-lg block">
                             {bags}
                           </span>
                         </td>
-                        {/* 4. Tota (Kg) */}
+                        {/* 4. Tota (Kg) (Larger) */}
                         <td className="py-2.5 px-2">
                           <input
                             type="number"
@@ -702,7 +806,7 @@ export const SameDateMultiFarmerEntry: React.FC = () => {
                             placeholder="0"
                             value={row.totaKg || ''}
                             onChange={(e) => updateRow(row.rowId, 'totaKg', parseFloat(e.target.value) || 0)}
-                            className="w-full text-center bg-slate-50 border border-slate-300 rounded p-1 text-xs font-mono font-black text-amber-900 focus:outline-none focus:border-amber-500"
+                            className="w-full text-center bg-white border-2 border-slate-300 rounded-lg py-2 px-1 text-base font-mono font-black text-amber-950 focus:outline-none focus:border-amber-500"
                           />
                         </td>
                         <td className="py-2.5 px-3 text-right font-mono font-black text-xs text-emerald-950 whitespace-nowrap">
@@ -800,43 +904,43 @@ export const SameDateMultiFarmerEntry: React.FC = () => {
                 className="bg-white hover:bg-slate-100 border border-slate-300 text-slate-800 font-bold px-3 py-1.5 rounded-lg text-xs flex items-center gap-1 shadow-2xs cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5 text-indigo-600" />
-                <span>+ ਹੋਰ ਕਤਾਰ ਜੋੜੋ (Add Another Row)</span>
+                <span>{isEn ? '+ Add Row' : '+ ਹੋਰ ਕਤਾਰ ਜੋੜੋ (Add Another Row)'}</span>
               </button>
 
               {/* Batch Totals */}
               <div className="flex flex-wrap items-center gap-3 sm:gap-4 text-xs font-mono">
                 <div className="bg-emerald-50 border border-emerald-200 px-2 py-1 rounded">
-                  <span className="text-emerald-800 font-sans text-[10px] block font-bold">ਕੁੱਲ ਨਵਾਂ:</span>
+                  <span className="text-emerald-800 font-sans text-[10px] block font-bold">{isEn ? 'Total New:' : 'ਕੁੱਲ ਨਵਾਂ:'}</span>
                   <strong className="text-emerald-950 font-black text-xs">{totalNewBagsInBatch} Bags</strong>
                 </div>
                 <div className="bg-amber-50 border border-amber-200 px-2 py-1 rounded">
-                  <span className="text-amber-800 font-sans text-[10px] block font-bold">ਕੁੱਲ ਪੁਰਾਣਾ:</span>
+                  <span className="text-amber-800 font-sans text-[10px] block font-bold">{isEn ? 'Total Old:' : 'ਕੁੱਲ ਪੁਰਾਣਾ:'}</span>
                   <strong className="text-amber-950 font-black text-xs">{totalOldBagsInBatch} Bags</strong>
                 </div>
                 <div>
-                  <span className="text-slate-500 font-sans text-[11px] block">ਕੁੱਲ ਬੋਰੀਆਂ:</span>
+                  <span className="text-slate-500 font-sans text-[11px] block">{isEn ? 'Total Bags:' : 'ਕੁੱਲ ਬੋਰੀਆਂ:'}</span>
                   <strong className="text-slate-900 font-bold text-sm">{totalBagsInBatch}</strong>
                 </div>
                 <div>
-                  <span className="text-slate-500 font-sans text-[11px] block">ਕੁੱਲ ਟੋਟਾ:</span>
+                  <span className="text-slate-500 font-sans text-[11px] block">{isEn ? 'Total Tota:' : 'ਕੁੱਲ ਟੋਟਾ:'}</span>
                   <strong className="text-amber-800 font-bold text-sm">{totalTotaKg} Kg</strong>
                 </div>
                 <div>
-                  <span className="text-slate-500 font-sans text-[11px] block">ਗ੍ਰੈਂਡ ਟੋਟਲ ਵਜ਼ਨ:</span>
+                  <span className="text-slate-500 font-sans text-[11px] block">{isEn ? 'Grand Total Wt:' : 'ਗ੍ਰੈਂਡ ਟੋਟਲ ਵਜ਼ਨ:'}</span>
                   <strong className="text-emerald-900 font-black text-sm">{grandTotalBreakdown.displayEn}</strong>
                 </div>
                 <div>
-                  <span className="text-slate-500 font-sans text-[11px] block">ਕੁੱਲ ਗ੍ਰਾਸ ਰਕਮ:</span>
+                  <span className="text-slate-500 font-sans text-[11px] block">{isEn ? 'Gross Value:' : 'ਕੁੱਲ ਗ੍ਰਾਸ ਰਕਮ:'}</span>
                   <strong className="text-slate-800 font-bold text-sm">{formatCurrency(totalGrossAmount)}</strong>
                 </div>
                 {totalDeductionsInBatch > 0 && (
                   <div>
-                    <span className="text-rose-600 font-sans text-[11px] block">ਕੁੱਲ ਮਜ਼ਦੂਰੀ ਕਟੌਤੀ:</span>
+                    <span className="text-rose-600 font-sans text-[11px] block">{isEn ? 'Total Deductions:' : 'ਕੁੱਲ ਮਜ਼ਦੂਰੀ ਕਟੌਤੀ:'}</span>
                     <strong className="text-rose-700 font-bold text-sm">-{formatCurrency(totalDeductionsInBatch)}</strong>
                   </div>
                 )}
                 <div>
-                  <span className="text-emerald-700 font-sans text-[11px] font-bold block">ਸ਼ੁੱਧ ਕੁੱਲ ਅਦਾਇਗੀ:</span>
+                  <span className="text-emerald-700 font-sans text-[11px] font-bold block">{isEn ? 'Net Total Payable:' : 'ਸ਼ੁੱਧ ਕੁੱਲ ਅਦਾਇਗੀ:'}</span>
                   <strong className="text-emerald-950 font-black text-base">{formatCurrency(totalNetAmountInBatch)}</strong>
                 </div>
 
@@ -849,12 +953,12 @@ export const SameDateMultiFarmerEntry: React.FC = () => {
                   {isSaving ? (
                     <>
                       <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                      <span>ਸੇਵ ਹੋ ਰਿਹਾ ਹੈ... (Saving Batch...)</span>
+                      <span>{isEn ? 'Saving Batch...' : 'ਸੇਵ ਹੋ ਰਿਹਾ ਹੈ... (Saving Batch...)'}</span>
                     </>
                   ) : (
                     <>
                       <Save className="w-3.5 h-3.5" />
-                      <span>ਸਾਰੀਆਂ ਐਂਟਰੀਆਂ ਸੇਵ ਕਰੋ (Save All Batch)</span>
+                      <span>{isEn ? 'Save All Entries' : 'ਸਾਰੀਆਂ ਐਂਟਰੀਆਂ ਸੇਵ ਕਰੋ (Save All Batch)'}</span>
                     </>
                   )}
                 </button>
@@ -875,10 +979,10 @@ export const SameDateMultiFarmerEntry: React.FC = () => {
                 </div>
                 <div>
                   <h3 className="font-black text-slate-900 text-sm">
-                    ਕਿਸਾਨ ਮਜ਼ਦੂਰੀ ਤੇ ਕਟੌਤੀਆਂ ਸੋਧੋ (Row Deductions)
+                    {isEn ? 'Edit Row Deductions' : 'ਕਿਸਾਨ ਮਜ਼ਦੂਰੀ ਤੇ ਕਟੌਤੀਆਂ ਸੋਧੋ (Row Deductions)'}
                   </h3>
                   <p className="text-xs text-slate-500">
-                    {editingRowFarmer?.farmerNamePa} ({editingRowFarmer?.id}) • ਕੁੱਲ ਵਜ਼ਨ: {editingRowGrandTotal.displayEn}
+                    {isEn ? editingRowFarmer?.farmerName : `${editingRowFarmer?.farmerNamePa} (${editingRowFarmer?.id})`} • {isEn ? 'Total Weight:' : 'ਕੁੱਲ ਵਜ਼ਨ:'} {editingRowGrandTotal.displayEn}
                   </p>
                 </div>
               </div>
@@ -905,7 +1009,7 @@ export const SameDateMultiFarmerEntry: React.FC = () => {
                 onClick={() => setEditingRowDeductionId(null)}
                 className="bg-slate-900 hover:bg-slate-800 text-white font-bold px-4 py-2 rounded-lg text-xs"
               >
-                ਠੀਕ ਹੈ / ਪੂਰਾ ਹੋਇਆ (Done)
+                {isEn ? 'Done' : 'ਠੀਕ ਹੈ / ਪੂਰਾ ਹੋਇਆ (Done)'}
               </button>
             </div>
           </div>

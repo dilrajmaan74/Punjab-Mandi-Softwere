@@ -1,5 +1,11 @@
 import { jsPDF } from 'jspdf';
 import { Farmer, MandiSettings } from '../types/mandi';
+import { cleanPdfText } from './translations';
+import { renderStandardPdfHeader } from './pdfHeaderHelper';
+
+function cleanText(text: string | number | null | undefined): string {
+  return cleanPdfText(text);
+}
 
 /**
  * Generate and download a formatted Farmer Profile PDF
@@ -15,34 +21,16 @@ export async function exportFarmerProfilePDF(farmer: Farmer, settings: MandiSett
   const margin = 14;
   const contentWidth = pageWidth - margin * 2;
 
-  // Background banner / Header
-  doc.setFillColor(16, 44, 38); // Dark emerald/forest green
-  doc.rect(margin, 12, contentWidth, 24, 'F');
-
-  doc.setTextColor(255, 255, 255);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(14);
-  doc.text(settings.mandiNameEn.toUpperCase(), margin + 6, 20);
-
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
-  doc.text(`${settings.marketCommitteeEn} | Punjab Mandi Board`, margin + 6, 26);
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10);
-  doc.text(`FARMER REGISTRATION CERTIFICATE / KISAN CARD`, margin + 6, 32);
-
-  // Top Right ID Badge
-  doc.setFillColor(245, 158, 11); // Amber
-  doc.roundedRect(pageWidth - margin - 42, 16, 38, 16, 2, 2, 'F');
-  doc.setTextColor(0, 0, 0);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(7);
-  doc.text('FARMER ID / ਕਿਸਾਨ ਆਈ.ਡੀ', pageWidth - margin - 40, 21);
-  doc.setFontSize(12);
-  doc.text(farmer.id, pageWidth - margin - 40, 28);
-
-  let currentY = 42;
+  // Standardized Firm Header
+  let currentY = renderStandardPdfHeader({
+    doc,
+    settings,
+    title: 'FARMER REGISTRATION CERTIFICATE / KISAN CARD',
+    subtitle: `Registration Date: ${new Date().toLocaleDateString('en-GB')}`,
+    badgeLabel: 'FARMER ID',
+    badgeValue: farmer.id,
+    startY: 8
+  });
 
   // Section 1: Farmer Identity & Photo
   doc.setFillColor(248, 250, 252);
@@ -74,39 +62,39 @@ export async function exportFarmerProfilePDF(farmer: Farmer, settings: MandiSett
   doc.setTextColor(30, 41, 59);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(12);
-  doc.text(`${farmer.farmerName}  (${farmer.farmerNamePa || ''})`, detailsX, textY);
+  doc.text(cleanText(farmer.farmerName) || 'Farmer Name', detailsX, textY);
 
   textY += 7;
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
-  doc.text(`Father's Name: `, detailsX, textY);
+  doc.text("Father Name:", detailsX, textY);
   doc.setFont('helvetica', 'bold');
-  doc.text(`${farmer.fatherName || '—'}  (${farmer.fatherNamePa || ''})`, detailsX + 28, textY);
+  doc.text(cleanText(farmer.fatherName) || '-', detailsX + 28, textY);
 
   textY += 6;
   doc.setFont('helvetica', 'normal');
-  doc.text(`Village / Pind: `, detailsX, textY);
+  doc.text('Village / District:', detailsX, textY);
   doc.setFont('helvetica', 'bold');
-  doc.text(`${farmer.village}  (${farmer.villagePa || ''})`, detailsX + 28, textY);
+  doc.text(cleanText(farmer.village) || '-', detailsX + 28, textY);
 
   textY += 6;
   doc.setFont('helvetica', 'normal');
-  doc.text(`PIN Code / Post: `, detailsX, textY);
+  doc.text('PIN Code:', detailsX, textY);
   doc.setFont('helvetica', 'bold');
   doc.text(`${farmer.pinCode || '141401'}`, detailsX + 28, textY);
 
   textY += 6;
   doc.setFont('helvetica', 'normal');
-  doc.text(`Mobile Number: `, detailsX, textY);
+  doc.text('Mobile Number:', detailsX, textY);
   doc.setFont('helvetica', 'bold');
-  doc.text(`+91 ${farmer.mobile || '—'}`, detailsX + 28, textY);
+  doc.text(farmer.mobile ? `+91 ${farmer.mobile}` : '-', detailsX + 28, textY);
 
   textY += 6;
   doc.setFont('helvetica', 'normal');
-  doc.text(`Aadhaar Number: `, detailsX, textY);
+  doc.text('Aadhaar Number:', detailsX, textY);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(15, 118, 110);
-  doc.text(farmer.aadhaar || '—', detailsX + 28, textY);
+  doc.text(farmer.aadhaar || '-', detailsX + 28, textY);
 
   currentY += 64;
 
@@ -121,7 +109,7 @@ export async function exportFarmerProfilePDF(farmer: Farmer, settings: MandiSett
     doc.setTextColor(15, 23, 42);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(9);
-    doc.text(`${farmer.address}`, margin + 4, currentY + 10);
+    doc.text(cleanText(farmer.address), margin + 4, currentY + 10);
     currentY += 18;
   }
 
@@ -208,12 +196,12 @@ export async function exportFarmerProfilePDF(farmer: Farmer, settings: MandiSett
     doc.setFontSize(8.5);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(15, 23, 42);
-    doc.text(farmer.bankDetails.accountHolderName || farmer.farmerName, col1, currentY + 11);
+    doc.text(cleanText(farmer.bankDetails.accountHolderName || farmer.farmerName), col1, currentY + 11);
     
     // Bank name wrapped if needed
-    const bankNameLines = doc.splitTextToSize(farmer.bankDetails.bankName || '—', 62);
+    const bankNameLines = doc.splitTextToSize(cleanText(farmer.bankDetails.bankName) || '-', 62);
     doc.text(bankNameLines, col2, currentY + 11);
-    doc.text(farmer.bankDetails.ifscCode || '—', col3, currentY + 11);
+    doc.text(farmer.bankDetails.ifscCode || '-', col3, currentY + 11);
 
     doc.setFontSize(8);
     doc.setFont('helvetica', 'normal');
@@ -225,16 +213,16 @@ export async function exportFarmerProfilePDF(farmer: Farmer, settings: MandiSett
     doc.setFontSize(8.5);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(15, 23, 42);
-    doc.text(farmer.bankDetails.accountNumber || '—', col1, currentY + 23);
-    doc.text(farmer.bankDetails.branchName || 'Main Branch', col2, currentY + 23);
-    const locStr = [farmer.bankDetails.city || farmer.bankDetails.district, farmer.bankDetails.state].filter(Boolean).join(', ');
+    doc.text(farmer.bankDetails.accountNumber || '-', col1, currentY + 23);
+    doc.text(cleanText(farmer.bankDetails.branchName) || 'Main Branch', col2, currentY + 23);
+    const locStr = [cleanText(farmer.bankDetails.city || farmer.bankDetails.district), cleanText(farmer.bankDetails.state)].filter(Boolean).join(', ');
     doc.text(locStr || 'Punjab', col3, currentY + 23);
 
     if (farmer.bankDetails.branchAddress) {
       doc.setFontSize(7.5);
       doc.setFont('helvetica', 'normal');
       doc.setTextColor(71, 85, 105);
-      const addrLines = doc.splitTextToSize(`Complete Bank Address: ${farmer.bankDetails.branchAddress}`, contentWidth - 8);
+      const addrLines = doc.splitTextToSize(`Complete Bank Address: ${cleanText(farmer.bankDetails.branchAddress)}`, contentWidth - 8);
       doc.text(addrLines, col1, currentY + 29);
     }
   } else {
@@ -255,7 +243,7 @@ export async function exportFarmerProfilePDF(farmer: Farmer, settings: MandiSett
   doc.setTextColor(100, 116, 139);
   doc.setFont('helvetica', 'normal');
   doc.text(`Generated on: ${new Date().toLocaleDateString('en-GB')} at ${new Date().toLocaleTimeString()}`, margin, currentY);
-  doc.text(`Official Punjab Mandi Portal • System Verified Record`, pageWidth - margin - 75, currentY);
+  doc.text(`Official Punjab Mandi Portal | System Verified Record`, pageWidth - margin - 75, currentY);
 
   currentY += 12;
   doc.text('_____________________________', margin + 6, currentY);
@@ -263,11 +251,11 @@ export async function exportFarmerProfilePDF(farmer: Farmer, settings: MandiSett
 
   currentY += 4;
   doc.setFont('helvetica', 'bold');
-  doc.text('Farmer Signature / Angutha (ਕਿਸਾਨ ਦਸਤਖਤ)', margin + 6, currentY);
-  doc.text('Authorized Mandi Sign & Stamp (ਮੰਡੀ ਮੋਹਰ)', pageWidth - margin - 60, currentY);
+  doc.text('Farmer Signature / Thumb Impression', margin + 6, currentY);
+  doc.text('Authorized Mandi Sign & Stamp', pageWidth - margin - 56, currentY);
 
   // Save the PDF
-  const filename = `Farmer_${farmer.id}_${farmer.farmerName.replace(/\s+/g, '_')}.pdf`;
+  const filename = `Farmer_${farmer.id}_${cleanText(farmer.farmerName).replace(/\s+/g, '_')}.pdf`;
   doc.save(filename);
 }
 
@@ -426,8 +414,14 @@ export function openFarmerPrintWindow(farmer: Farmer, settings: MandiSettings) {
     <body>
       <div class="header">
         <div>
-          <h1 class="header-title">${settings.mandiNameEn} • ${settings.mandiNamePa}</h1>
-          <div class="header-sub">${settings.marketCommitteeEn} | Punjab Mandi Board</div>
+          <h1 class="header-title">${settings.firmNameEn || settings.mandiNameEn}</h1>
+          <div class="header-sub">${settings.firmAddress || settings.mandiNameEn}</div>
+          <div style="font-size: 11px; color: #cbd5e1; margin-top: 3px;">
+            Licence No: <strong>${settings.firmLicence || 'N/A'}</strong> &nbsp;|&nbsp; Mobile: <strong>${settings.firmMobile || 'N/A'}</strong> &nbsp;|&nbsp; PAN: <strong>${settings.firmPan || 'N/A'}</strong>
+          </div>
+          <div style="font-size: 10px; color: #86efac; margin-top: 2px;">
+            ${settings.marketCommitteeEn || 'Market Committee'} • Punjab Mandi Board
+          </div>
         </div>
         <div class="badge">
           <div style="font-size: 9px;">FARMER ID</div>

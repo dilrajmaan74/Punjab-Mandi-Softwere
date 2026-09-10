@@ -95,6 +95,8 @@ export const DEFAULT_FIRM: MandiFirm = {
   marketCommitteePa: 'ਲੋਹੀਆਂ ਖਾਸ',
   mobile: '98147-74651',
   licenceNo: 'JAL/LKH/133',
+  pan: 'AAACJ1234F',
+  gstin: '03AAACJ1234F1Z5',
   isDefault: true,
   createdAt: '01/04/2024'
 };
@@ -230,6 +232,7 @@ interface MandiContextType {
   deleteBoliRecord: (id: string) => boolean;
 
   // Bags operations
+  getNextParchiNo: () => number;
   addBagsEntry: (entry: Omit<BagsEntryRecord, 'id' | 'entryNumber' | 'createdAt'>) => BagsEntryRecord;
   addMultipleBagsEntries: (entries: Omit<BagsEntryRecord, 'id' | 'entryNumber' | 'createdAt'>[]) => BagsEntryRecord[];
   updateBagsEntry: (id: string, updates: Partial<BagsEntryRecord>) => boolean;
@@ -342,6 +345,8 @@ const DEFAULT_SETTINGS: MandiSettings = {
   firmAddress: 'Dana Mandi Kang Khurd, Teh. Shahkot, Distt. Jalandhar, Punjab - 144629',
   firmMobile: '98147-74651',
   firmLicence: 'JAL/LKH/133',
+  firmPan: 'AAACJ1234F',
+  firmGstin: '03AAACJ1234F1Z5',
   fixedRatePerQtl: 2461,
   fixedBagWeightKg: 37.50,
   defaultPakkiLabourRate: 7, // default ₹7 / Bag
@@ -594,7 +599,14 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   // 12. Navigation & UI States
   const [activeSection, setActiveSection] = useState<NavigationSection>('dashboard');
-  const [language, setLanguage] = useState<AppLanguage>('pa');
+  const [language, setLanguage] = useState<AppLanguage>(() => {
+    try {
+      const stored = localStorage.getItem(LOCAL_STORAGE_KEYS.LANGUAGE);
+      return stored === 'en' || stored === 'pa' ? stored : 'pa';
+    } catch {
+      return 'pa';
+    }
+  });
   const [activeReceipt, setActiveReceipt] = useState<BagsEntryRecord | null>(null);
   const [selectedFarmerForBags, setSelectedFarmerForBags] = useState<Farmer | null>(null);
   const [selectedFarmerForAccount, setSelectedFarmerForAccount] = useState<Farmer | null>(null);
@@ -789,6 +801,10 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, [activeFiscalYear]);
 
   useEffect(() => {
+    localStorage.setItem(LOCAL_STORAGE_KEYS.LANGUAGE, language);
+  }, [language]);
+
+  useEffect(() => {
     localStorage.setItem(LOCAL_STORAGE_KEYS.SELLERS, JSON.stringify(sellers));
   }, [sellers]);
 
@@ -802,6 +818,8 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         firmAddress: activeFirm.address,
         firmMobile: activeFirm.mobile,
         firmLicence: activeFirm.licenceNo,
+        firmPan: activeFirm.pan || prev.firmPan || 'AAACJ1234F',
+        firmGstin: activeFirm.gstin || prev.firmGstin,
         mandiNameEn: activeFirm.address.split(',')[0]?.trim() || prev.mandiNameEn,
         mandiNamePa: activeFirm.addressPa?.split(',')[0]?.trim() || prev.mandiNamePa,
         marketCommitteeEn: `Market Committee ${activeFirm.marketCommittee}`,
@@ -1613,13 +1631,26 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   /**
-   * Add a single Bags Entry
+   * Generates next sequential Parchi number
+   */
+  const getNextParchiNo = (): number => {
+    if (bagsEntries.length === 0) return 1;
+    const numbers = bagsEntries
+      .map((e) => Number(e.parchiNo) || parseInt(e.entryNumber?.replace(/\D/g, '') || '0', 10))
+      .filter((n) => !isNaN(n) && n > 0);
+    return (numbers.length > 0 ? Math.max(...numbers) : 0) + 1;
+  };
+
+  /**
+   * Add a single Bags Entry with separated Parchi No and safe Supabase persistence
    */
   const addBagsEntry = (entryData: Omit<BagsEntryRecord, 'id' | 'entryNumber' | 'createdAt'>): BagsEntryRecord => {
-    const nextEntryNumber = `BAG-${(bagsEntries.length + 1).toString().padStart(5, '0')}`;
+    const nextParchi = entryData.parchiNo || getNextParchiNo();
+    const nextEntryNumber = `BAG-${nextParchi.toString().padStart(5, '0')}`;
     const newRecord: BagsEntryRecord = {
       ...entryData,
       id: `be_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      parchiNo: nextParchi,
       entryNumber: nextEntryNumber,
       createdAt: new Date().toISOString()
     };
@@ -1632,13 +1663,15 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const addMultipleBagsEntries = (
     entriesData: Omit<BagsEntryRecord, 'id' | 'entryNumber' | 'createdAt'>[]
   ): BagsEntryRecord[] => {
-    let currentCount = bagsEntries.length;
+    let currentParchi = getNextParchiNo() - 1;
     const newRecords: BagsEntryRecord[] = entriesData.map((data, idx) => {
-      currentCount++;
+      currentParchi++;
+      const rowParchi = data.parchiNo || currentParchi;
       return {
         ...data,
         id: `be_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 7)}`,
-        entryNumber: `BAG-${currentCount.toString().padStart(5, '0')}`,
+        parchiNo: rowParchi,
+        entryNumber: `BAG-${rowParchi.toString().padStart(5, '0')}`,
         createdAt: new Date().toISOString()
       };
     });
@@ -1668,6 +1701,11 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return updated;
   };
 
+  /**
+   * Delete Bags Entry:
+   * Moves to Recycle Bin, deletes from Supabase, and automatically re-sequences
+   * Parchi numbers sequentially (1, 2, 3...) so there are no missing gaps!
+   */
   const deleteBagsEntry = (id: string): boolean => {
     const entry = bagsEntries.find((b) => b.id === id);
     if (entry) {
@@ -1675,8 +1713,8 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         id: `BIN-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
         originalId: entry.id,
         type: 'BAGS_ENTRY',
-        titleEn: `Mandi Arrival Entry #${entry.entryNumber || entry.id}`,
-        titlePa: `ਮੰਡੀ ਆਮਦ ਐਂਟਰੀ #${entry.entryNumber || entry.id}`,
+        titleEn: `Mandi Arrival Entry #${entry.parchiNo || entry.entryNumber || entry.id}`,
+        titlePa: `ਮੰਡੀ ਆਮਦ ਐਂਟਰੀ #${entry.parchiNo || entry.entryNumber || entry.id}`,
         subtitle: `Farmer: ${entry.farmerName} • Bags: ${entry.bags} • Date: ${entry.date}`,
         deletedAt: new Date().toLocaleString('en-IN'),
         recordData: entry
@@ -1684,7 +1722,26 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       setRecycleBinItems((prev) => [binItem, ...prev]);
       supabaseUpsertRecycleItem(binItem, activeFirmId).catch(console.error);
     }
-    setBagsEntries((prev) => prev.filter((e) => e.id !== id));
+
+    setBagsEntries((prev) => {
+      const remaining = prev.filter((e) => e.id !== id);
+      // Re-sequence remaining entries oldest-to-newest so 1..N order is strictly sequential
+      const chronological = [...remaining].reverse();
+      const resequenced = chronological.map((rec, index) => {
+        const sequentialParchi = index + 1;
+        const sequentialEntryNum = `BAG-${sequentialParchi.toString().padStart(5, '0')}`;
+        return {
+          ...rec,
+          parchiNo: sequentialParchi,
+          entryNumber: sequentialEntryNum
+        };
+      });
+      const finalResult = resequenced.reverse(); // restore newest-first order
+      // Sync resequenced entries to Supabase safely
+      finalResult.forEach((r) => supabaseUpsertBagsEntry(r, activeFirmId, activeFiscalYear).catch(console.error));
+      return finalResult;
+    });
+
     supabaseDeleteBagsEntry(id).catch(console.error);
     return true;
   };
@@ -2975,6 +3032,7 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         deleteFarmerAdvance,
         addBoliRecord,
         deleteBoliRecord,
+        getNextParchiNo,
         addBagsEntry,
         addMultipleBagsEntries,
         updateBagsEntry,

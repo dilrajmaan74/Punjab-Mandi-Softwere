@@ -239,7 +239,7 @@ export const SellerMasterModal: React.FC<SellerMasterModalProps> = ({
                 </label>
                 <input
                   type="text"
-                  value={name}
+                  value={name || ''}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="e.g. Kang Modern Rice Mill"
                   className="w-full px-3 py-2 text-xs font-medium border border-slate-200 rounded-lg bg-white focus:ring-2 focus:ring-slate-900 focus:outline-none"
@@ -253,7 +253,7 @@ export const SellerMasterModal: React.FC<SellerMasterModalProps> = ({
                 </label>
                 <input
                   type="text"
-                  value={namePa}
+                  value={namePa || ''}
                   onChange={(e) => setNamePa(e.target.value)}
                   placeholder="ਉਦਾਹਰਣ: ਕੰਗ ਮਾਡਰਨ ਰਾਈਸ ਮਿੱਲ"
                   className="w-full px-3 py-2 text-xs font-medium border border-slate-200 rounded-lg bg-white focus:ring-2 focus:ring-slate-900 focus:outline-none"
@@ -266,7 +266,7 @@ export const SellerMasterModal: React.FC<SellerMasterModalProps> = ({
                 </label>
                 <input
                   type="text"
-                  value={address}
+                  value={address || ''}
                   onChange={(e) => setAddress(e.target.value)}
                   placeholder="e.g. Shahkot Road, Kang Khurd, Teh. Shahkot, Distt. Jalandhar - 144629"
                   className="w-full px-3 py-2 text-xs font-medium border border-slate-200 rounded-lg bg-white focus:ring-2 focus:ring-slate-900 focus:outline-none"
@@ -280,7 +280,7 @@ export const SellerMasterModal: React.FC<SellerMasterModalProps> = ({
                 </label>
                 <input
                   type="tel"
-                  value={mobile}
+                  value={mobile || ''}
                   onChange={(e) => setMobile(e.target.value)}
                   placeholder="e.g. 98147-74651"
                   className="w-full px-3 py-2 text-xs font-medium border border-slate-200 rounded-lg bg-white focus:ring-2 focus:ring-slate-900 focus:outline-none"
@@ -293,7 +293,7 @@ export const SellerMasterModal: React.FC<SellerMasterModalProps> = ({
                 </label>
                 <input
                   type="text"
-                  value={licenceNo}
+                  value={licenceNo || ''}
                   onChange={(e) => setLicenceNo(e.target.value)}
                   placeholder="e.g. MLR-JAL-2024-88"
                   className="w-full px-3 py-2 text-xs font-medium border border-slate-200 rounded-lg bg-white focus:ring-2 focus:ring-slate-900 focus:outline-none"
@@ -359,7 +359,7 @@ export const SellerMasterModal: React.FC<SellerMasterModalProps> = ({
                 <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
-                  value={searchQuery}
+                  value={searchQuery || ''}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="ਸੈਲਰ, ਪਤਾ ਜਾਂ ਫੋਨ ਖੋਜੋ..."
                   className="w-full pl-8 pr-3 py-1.5 text-xs border border-slate-200 rounded-xl bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900"

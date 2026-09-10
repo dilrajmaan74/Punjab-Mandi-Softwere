@@ -1,7 +1,9 @@
-import React, { useState, useMemo } from 'react';
-import { DailyPurchaseRecord, Farmer, FarmerPurchaseSummary } from '../../types/mandi';
+import React, { useState, useMemo, useEffect } from 'react';
+import { DailyPurchaseRecord, Farmer, FarmerPurchaseSummary, LabourAndDeductions } from '../../types/mandi';
 import { useMandi } from '../../context/MandiContext';
 import { useNotification } from '../../context/NotificationContext';
+import { useFormDraft } from '../../hooks/useFormDraft';
+import { SearchableSelect, SearchableSelectOption } from '../common/SearchableSelect';
 import {
   ShoppingBag,
   Building2,
@@ -52,8 +54,11 @@ export const DailyPurchase: React.FC = () => {
     settings,
     addDailyPurchase,
     deleteDailyPurchase,
-    getFarmerPurchaseSummary
+    getFarmerPurchaseSummary,
+    language
   } = useMandi();
+
+  const isEn = language === 'en';
 
   const {
     notifySaveSuccess,
@@ -63,34 +68,99 @@ export const DailyPurchase: React.FC = () => {
   } = useNotification();
 
   // ==================================================
-  // 1. FIXED AGENCY & DATE AT TOP
+  // 1. UNIVERSAL AUTO-SAVE DRAFT & INITIAL STATE
   // ==================================================
-  const [fixedAgency, setFixedAgency] = useState<string>(() => {
-    return agencies.length > 0 ? agencies[0].nameEn : 'Markfed';
-  });
-
-  const [purchaseDate, setPurchaseDate] = useState<string>(() => {
+  const getTodayFormatted = () => {
     const today = new Date();
     const dd = String(today.getDate()).padStart(2, '0');
     const mm = String(today.getMonth() + 1).padStart(2, '0');
     const yyyy = today.getFullYear();
     return `${dd}/${mm}/${yyyy}`;
+  };
+
+  interface DailyPurchaseDraft {
+    fixedAgency: string;
+    purchaseDate: string;
+    rows: MultiFarmerPurchaseRow[];
+    labourType: 'NONE' | 'PAKKI' | 'DOUBLE' | 'SUKKI' | 'CUSTOM';
+    labourUnit: 'PER_QTL' | 'PER_BAG';
+    customLabourRate: number;
+  }
+
+  const { draft, saveDraft, clearDraft } = useFormDraft<DailyPurchaseDraft>({
+    formKey: 'draft_daily_purchase',
+    initialValues: {
+      fixedAgency: agencies.length > 0 ? agencies[0].nameEn : 'Markfed',
+      purchaseDate: getTodayFormatted(),
+      rows: [{ rowId: `row_${Date.now()}_1`, farmerId: '', newBags: 0, oldBags: 0, bags: 0 }],
+      labourType: 'NONE',
+      labourUnit: 'PER_QTL',
+      customLabourRate: 7
+    }
   });
 
+  const [fixedAgency, setFixedAgency] = useState<string>(
+    draft.fixedAgency || (agencies.length > 0 ? agencies[0].nameEn : 'Markfed')
+  );
+  const [purchaseDate, setPurchaseDate] = useState<string>(draft.purchaseDate || getTodayFormatted());
   const [customRate] = useState<number>(settings.fixedRatePerQtl || FIXED_RATE_PER_QTL);
+
+  // Labour auto-calculation state
+  const [labourType, setLabourType] = useState<'NONE' | 'PAKKI' | 'DOUBLE' | 'SUKKI' | 'CUSTOM'>(
+    draft.labourType || 'NONE'
+  );
+  const [labourUnit, setLabourUnit] = useState<'PER_QTL' | 'PER_BAG'>(draft.labourUnit || 'PER_QTL');
+  const [customLabourRate, setCustomLabourRate] = useState<number>(draft.customLabourRate || 7);
 
   // ==================================================
   // 2. MULTI FARMER PURCHASE TABLE STATE
   // Continuously reduces available mandi balance per row
   // ==================================================
-  const [rows, setRows] = useState<MultiFarmerPurchaseRow[]>([
-    { rowId: `row_${Date.now()}_1`, farmerId: '', newBags: 0, oldBags: 0, bags: 0 }
-  ]);
+  const [rows, setRows] = useState<MultiFarmerPurchaseRow[]>(
+    draft.rows && draft.rows.length > 0
+      ? draft.rows
+      : [{ rowId: `row_${Date.now()}_1`, farmerId: '', newBags: 0, oldBags: 0, bags: 0 }]
+  );
+
+  // Sync back to universal draft on every change
+  useEffect(() => {
+    saveDraft({
+      fixedAgency,
+      purchaseDate,
+      rows,
+      labourType,
+      labourUnit,
+      customLabourRate
+    });
+  }, [fixedAgency, purchaseDate, rows, labourType, labourUnit, customLabourRate, saveDraft]);
 
   const [farmerSearchQuery, setFarmerSearchQuery] = useState<string>('');
   const [showFarmerSearchDropdown, setShowFarmerSearchDropdown] = useState<boolean>(false);
   const [formError, setFormError] = useState<string>('');
   const [isSaving, setIsSaving] = useState<boolean>(false);
+
+  const agencyOptions: SearchableSelectOption[] = useMemo(() => {
+    return agencies.map((ag) => ({
+      value: ag.nameEn,
+      label: isEn ? ag.nameEn : `${ag.nameEn} (${ag.namePa})`,
+      subLabel: isEn ? (ag.namePa || undefined) : ag.nameEn,
+      badge: ag.code,
+      keywords: [ag.nameEn, ag.namePa, ag.code]
+    }));
+  }, [agencies, isEn]);
+
+  const farmerOptions: SearchableSelectOption[] = useMemo(() => {
+    return farmers.map((f) => {
+      const sum = getFarmerPurchaseSummary(f.id);
+      return {
+        value: f.id,
+        label: isEn ? `${f.farmerName} (${f.id})` : `${f.farmerNamePa} (${f.farmerName})`,
+        subLabel: `${isEn ? 'Village' : 'ਪਿੰਡ'}: ${isEn ? f.village : (f.villagePa || f.village)} • ${isEn ? 'Remaining' : 'ਬਾਕੀ'}: ${sum.remainingBags}`,
+        badge: f.id,
+        keywords: [f.farmerName, f.farmerNamePa, f.village, f.villagePa, f.mobile, f.id, f.fatherName, f.fatherNamePa]
+      };
+    });
+  }, [farmers, isEn, getFarmerPurchaseSummary]);
 
   // ==================================================
   // 3. DATE-WISE SUMMARY BOX STATE
@@ -198,7 +268,26 @@ export const DailyPurchase: React.FC = () => {
     );
   };
 
-  // Multi-Farmer Rows Live Totals (New, Old, Grand Total, Weight Qul+Kg)
+  // Active Labour Rate from selection (Pakki ₹7, Double ₹14, Sukki ₹5, Custom)
+  const activeLabourRate = useMemo(() => {
+    if (labourType === 'NONE') return 0;
+    if (labourType === 'PAKKI') return settings.defaultPakkiLabourRate || 7;
+    if (labourType === 'DOUBLE') return settings.defaultPakkaDoubleLabourRate || 14;
+    if (labourType === 'SUKKI') return settings.defaultSukhiLabourRate || 5;
+    if (labourType === 'CUSTOM') return Number(customLabourRate) || 0;
+    return 0;
+  }, [labourType, customLabourRate, settings]);
+
+  const getRowLabourAmount = (rowBags: number, rowWeightKg: number) => {
+    if (activeLabourRate <= 0) return 0;
+    if (labourUnit === 'PER_QTL') {
+      return Math.round(((rowWeightKg / 100) * activeLabourRate) * 100) / 100;
+    } else {
+      return Math.round((rowBags * activeLabourRate) * 100) / 100;
+    }
+  };
+
+  // Multi-Farmer Rows Live Totals (New, Old, Grand Total, Weight Qul+Kg, Gross, Total Labour, Net Amount)
   const rowTotals = useMemo(() => {
     let totalNewBags = 0;
     let totalOldBags = 0;
@@ -220,6 +309,8 @@ export const DailyPurchase: React.FC = () => {
     const totalWeightKg = totalBags * FIXED_BAG_WEIGHT_KG;
     const bDown = formatKgToQulKg(totalWeightKg);
     const amount = calculatePayableAmount(totalWeightKg, customRate);
+    const totalLabour = getRowLabourAmount(totalBags, totalWeightKg);
+    const netAmount = Math.max(0, Math.round((amount - totalLabour) * 100) / 100);
 
     return {
       validFarmersCount,
@@ -229,9 +320,11 @@ export const DailyPurchase: React.FC = () => {
       totalWeightKg,
       qul: bDown.qtl,
       kg: bDown.kg,
-      amount
+      amount,
+      totalLabour,
+      netAmount
     };
-  }, [rows, customRate]);
+  }, [rows, customRate, activeLabourRate, labourUnit]);
 
   // Handle Save Multi-Farmer Purchases with strict balance reduction checks
   const handleSavePurchases = () => {
@@ -275,6 +368,25 @@ export const DailyPurchase: React.FC = () => {
         const totalWeightKg = row.bags * FIXED_BAG_WEIGHT_KG;
         const bDown = formatKgToQulKg(totalWeightKg);
         const amt = calculatePayableAmount(totalWeightKg, customRate);
+        const rowLabour = getRowLabourAmount(row.bags, totalWeightKg);
+        const rowNet = Math.max(0, Math.round((amt - rowLabour) * 100) / 100);
+
+        const rowLabourDeductions: LabourAndDeductions | undefined = labourType !== 'NONE' ? {
+          pakkiLabourEnabled: labourType === 'PAKKI',
+          pakkiLabourRate: labourType === 'PAKKI' ? activeLabourRate : 0,
+          pakkiLabourAmount: labourType === 'PAKKI' ? rowLabour : 0,
+          pakkaDoubleLabourEnabled: labourType === 'DOUBLE',
+          pakkaDoubleLabourRate: labourType === 'DOUBLE' ? activeLabourRate : 0,
+          pakkaDoubleLabourAmount: labourType === 'DOUBLE' ? rowLabour : 0,
+          sukhiLabourEnabled: labourType === 'SUKKI',
+          sukhiLabourRate: labourType === 'SUKKI' ? activeLabourRate : 0,
+          sukhiLabourAmount: labourType === 'SUKKI' ? rowLabour : 0,
+          totalLabourDeduction: rowLabour,
+          totalOtherDeduction: 0,
+          grandTotalDeductions: rowLabour,
+          grossAmount: amt,
+          netPayableAmount: rowNet
+        } : undefined;
 
         const result = addDailyPurchase({
           date: purchaseDate.trim(),
@@ -295,7 +407,8 @@ export const DailyPurchase: React.FC = () => {
           totalWeightKg,
           rate: customRate,
           totalAmount: amt,
-          netAmount: amt
+          labourDeductions: rowLabourDeductions,
+          netAmount: rowNet
         });
 
         if (result.success) {
@@ -303,12 +416,19 @@ export const DailyPurchase: React.FC = () => {
         }
       }
 
+      const labourMsg = rowTotals.totalLabour > 0
+        ? ` • ਮਜ਼ਦੂਰੀ: -₹${rowTotals.totalLabour.toLocaleString('en-IN')} • ਸ਼ੁੱਧ ਰਕਮ: ₹${rowTotals.netAmount.toLocaleString('en-IN')}`
+        : '';
+
       notifySaveSuccess({
         titlePa: `${savedCount} ਕਿਸਾਨਾਂ ਦੀ ਖਰੀਦ ਸਫਲਤਾਪੂਰਵਕ ਸੇਵ ਹੋ ਗਈ`,
         titleEn: 'Purchases Saved Successfully',
-        messagePa: `ਮਿਤੀ: ${purchaseDate} | ਏਜੰਸੀ: ${fixedAgency} | ਕੁੱਲ ਬੋਰੀਆਂ: ${rowTotals.totalBags} (ਨਵਾਂ: ${rowTotals.totalNewBags}, ਪੁਰਾਣਾ: ${rowTotals.totalOldBags}) | ਵਜ਼ਨ: ${rowTotals.qul} ਕੁਇੰਟਲ ${rowTotals.kg} ਕਿਲੋ`,
-        details: `${savedCount} Farmers • ${rowTotals.totalBags} Bags`
+        messagePa: `ਮਿਤੀ: ${purchaseDate} | ਏਜੰਸੀ: ${fixedAgency} | ਕੁੱਲ ਬੋਰੀਆਂ: ${rowTotals.totalBags} (ਨਵਾਂ: ${rowTotals.totalNewBags}, ਪੁਰਾਣਾ: ${rowTotals.totalOldBags}) | ਵਜ਼ਨ: ${rowTotals.qul} ਕੁਇੰਟਲ ${rowTotals.kg} ਕਿਲੋ${labourMsg}`,
+        details: `${savedCount} Farmers • ${rowTotals.totalBags} Bags • ₹${rowTotals.netAmount.toLocaleString('en-IN')}`
       });
+
+      // Clear draft upon successful save
+      clearDraft();
 
       // Reset rows to one blank row
       setRows([{ rowId: `row_${Date.now()}_1`, farmerId: '', newBags: 0, oldBags: 0, bags: 0 }]);
@@ -356,6 +476,8 @@ export const DailyPurchase: React.FC = () => {
         totalBags: number;
         totalWeightKg: number;
         totalAmount: number;
+        totalLabour: number;
+        totalNetAmount: number;
       };
     } = {};
 
@@ -366,14 +488,24 @@ export const DailyPurchase: React.FC = () => {
           uniqueFarmers: new Set(),
           totalBags: 0,
           totalWeightKg: 0,
-          totalAmount: 0
+          totalAmount: 0,
+          totalLabour: 0,
+          totalNetAmount: 0
         };
       }
+      const gross = Number(rec.totalAmount) || 0;
+      const net = rec.netAmount !== undefined ? Number(rec.netAmount) : gross;
+      const labour = rec.labourDeductions?.grandTotalDeductions !== undefined
+        ? Number(rec.labourDeductions.grandTotalDeductions)
+        : Math.max(0, gross - net);
+
       groups[rec.date].records.push(rec);
       groups[rec.date].uniqueFarmers.add(rec.farmerId);
       groups[rec.date].totalBags += Number(rec.bags) || 0;
       groups[rec.date].totalWeightKg += Number(rec.totalWeightKg) || 0;
-      groups[rec.date].totalAmount += Number(rec.totalAmount) || 0;
+      groups[rec.date].totalAmount += gross;
+      groups[rec.date].totalLabour += labour;
+      groups[rec.date].totalNetAmount += net;
     });
 
     // Sort dates descending (newest first)
@@ -395,7 +527,9 @@ export const DailyPurchase: React.FC = () => {
       totalBags: groups[date].totalBags,
       totalWeightKg: groups[date].totalWeightKg,
       totalQul: (groups[date].totalWeightKg / 100).toFixed(2),
-      totalAmount: groups[date].totalAmount
+      totalAmount: groups[date].totalAmount,
+      totalLabour: groups[date].totalLabour,
+      totalNetAmount: groups[date].totalNetAmount
     }));
   }, [dailyPurchaseRecords]);
 
@@ -477,9 +611,9 @@ export const DailyPurchase: React.FC = () => {
           {/* Rate indicator badge */}
           <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-lg text-xs">
             <Scale className="w-4 h-4 text-emerald-600" />
-            <span className="text-slate-600 font-bold">ਸਰਕਾਰੀ ਭਾਅ:</span>
-            <span className="font-mono font-black text-emerald-950">₹{customRate} / ਕੁਇੰਟਲ</span>
-            <span className="text-slate-400 text-[10px]">(37.50 ਕਿਲੋ ਪ੍ਰਤੀ ਬੋਰੀ)</span>
+            <span className="text-slate-600 font-bold">{isEn ? 'Govt Rate:' : 'ਸਰਕਾਰੀ ਭਾਅ:'}</span>
+            <span className="font-mono font-black text-emerald-950">₹{customRate} / {isEn ? 'Qtl' : 'ਕੁਇੰਟਲ'}</span>
+            <span className="text-slate-400 text-[10px]">({isEn ? '37.50 Kg / bag' : '37.50 ਕਿਲੋ ਪ੍ਰਤੀ ਬੋਰੀ'})</span>
           </div>
         </div>
 
@@ -489,19 +623,17 @@ export const DailyPurchase: React.FC = () => {
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1.5">
               <Building2 className="w-3.5 h-3.5 text-emerald-600" />
-              <span>ਖਰੀਦ ਏਜੰਸੀ ਚੁਣੋ (Procurement Agency):</span>
+              <span>{isEn ? 'Procurement Agency:' : 'ਖਰੀਦ ਏਜੰਸੀ ਚੁਣੋ (Procurement Agency):'}</span>
             </label>
-            <select
-              value={fixedAgency}
-              onChange={(e) => setFixedAgency(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 text-xs font-bold text-slate-900 focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-            >
-              {agencies.map((ag) => (
-                <option key={ag.id} value={ag.nameEn}>
-                  {ag.nameEn} ({ag.namePa})
-                </option>
-              ))}
-            </select>
+            <SearchableSelect
+              id="daily-purchase-agency"
+              value={fixedAgency || ''}
+              onChange={(val) => setFixedAgency(val)}
+              options={agencyOptions}
+              placeholder={isEn ? "Select agency..." : "ਏਜੰਸੀ ਚੁਣੋ..."}
+              searchPlaceholder={isEn ? "Search agency..." : "ਏਜੰਸੀ ਖੋਜੋ..."}
+              emptyMessage={isEn ? "No agency found" : "ਕੋਈ ਏਜੰਸੀ ਨਹੀਂ ਮਿਲੀ"}
+            />
           </div>
 
           {/* Date Selector */}
@@ -509,7 +641,7 @@ export const DailyPurchase: React.FC = () => {
             <DateInput
               value={purchaseDate}
               onChange={setPurchaseDate}
-              label="ਖਰੀਦ ਮਿਤੀ (Purchase Date)"
+              label={isEn ? "Purchase Date" : "ਖਰੀਦ ਮਿਤੀ (Purchase Date)"}
               required
             />
           </div>
@@ -517,17 +649,97 @@ export const DailyPurchase: React.FC = () => {
           {/* Quick Stats Banner */}
           <div className="bg-emerald-50/70 border border-emerald-200 rounded-lg p-2.5 flex items-center justify-between text-xs sm:col-span-2 lg:col-span-1">
             <div>
-              <span className="text-[10px] text-emerald-800 font-bold block">ਕੁੱਲ ਰਜਿਸਟਰਡ ਖਰੀਦ:</span>
+              <span className="text-[10px] text-emerald-800 font-bold block">
+                {isEn ? 'Total Purchase Records:' : 'ਕੁੱਲ ਰਜਿਸਟਰਡ ਖਰੀਦ:'}
+              </span>
               <span className="text-base font-mono font-black text-emerald-950">
-                {dailyPurchaseRecords.length} ਰਿਕਾਰਡ
+                {dailyPurchaseRecords.length} {isEn ? 'Records' : 'ਰਿਕਾਰਡ'}
               </span>
             </div>
             <div className="text-right">
-              <span className="text-[10px] text-emerald-800 font-bold block">ਕੁੱਲ ਖਰੀਦ ਬੋਰੀਆਂ:</span>
+              <span className="text-[10px] text-emerald-800 font-bold block">
+                {isEn ? 'Total Purchased Bags:' : 'ਕੁੱਲ ਖਰੀਦ ਬੋਰੀਆਂ:'}
+              </span>
               <span className="text-base font-mono font-black text-emerald-950">
                 {dailyPurchaseRecords.reduce((sum, r) => sum + (Number(r.bags) || 0), 0).toLocaleString('en-IN')}
               </span>
             </div>
+          </div>
+        </div>
+
+        {/* Labour Auto-Calculation Selector */}
+        <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-2">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-black text-slate-800">ਮਜ਼ਦੂਰੀ ਕਟੌਤੀ ਆਟੋ-ਕੈਲਕੂਲੇਸ਼ਨ (Labour Auto-Calculation):</span>
+              <span className="text-[10px] text-slate-500 font-medium hidden sm:inline">• ਚੋਣ ਅਨੁਸਾਰ ਆਟੋਮੈਟਿਕ ਕਟੌਤੀ</span>
+            </div>
+            {/* Unit Toggle: Per Qtl vs Per Bag */}
+            <div className="flex items-center gap-1 bg-white border border-slate-300 p-0.5 rounded-lg text-xs self-start sm:self-auto shadow-2xs">
+              <button
+                type="button"
+                onClick={() => setLabourUnit('PER_QTL')}
+                className={`px-2.5 py-1 rounded font-bold transition text-xs ${
+                  labourUnit === 'PER_QTL'
+                    ? 'bg-emerald-600 text-white shadow-2xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                ਪ੍ਰਤੀ ਕੁਇੰਟਲ (/ Qtl)
+              </button>
+              <button
+                type="button"
+                onClick={() => setLabourUnit('PER_BAG')}
+                className={`px-2.5 py-1 rounded font-bold transition text-xs ${
+                  labourUnit === 'PER_BAG'
+                    ? 'bg-emerald-600 text-white shadow-2xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                ਪ੍ਰਤੀ ਬੋਰੀ (/ Bag)
+              </button>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {[
+              { id: 'NONE', label: 'ਬਿਨਾਂ ਮਜ਼ਦੂਰੀ (No Labour)', rate: 0 },
+              { id: 'PAKKI', label: `ਪੱਕੀ ਮਜ਼ਦੂਰੀ (Pakki ₹${settings.defaultPakkiLabourRate || 7})`, rate: settings.defaultPakkiLabourRate || 7 },
+              { id: 'DOUBLE', label: `ਪੱਕਾ ਡਬਲ (Double ₹${settings.defaultPakkaDoubleLabourRate || 14})`, rate: settings.defaultPakkaDoubleLabourRate || 14 },
+              { id: 'SUKKI', label: `ਸੁੱਕੀ (Sukki ₹${settings.defaultSukhiLabourRate || 5})`, rate: settings.defaultSukhiLabourRate || 5 },
+              { id: 'CUSTOM', label: 'ਹੋਰ / ਕਸਟਮ (Custom)', rate: customLabourRate }
+            ].map((opt) => (
+              <button
+                key={opt.id}
+                type="button"
+                onClick={() => setLabourType(opt.id as any)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition flex items-center gap-1.5 ${
+                  labourType === opt.id
+                    ? 'bg-emerald-700 text-white border-emerald-700 shadow-2xs'
+                    : 'bg-white text-slate-700 border-slate-300 hover:border-emerald-400 hover:bg-emerald-50/50'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+
+            {labourType === 'CUSTOM' && (
+              <div className="flex items-center gap-1.5 ml-1">
+                <span className="text-xs font-bold text-slate-700">₹</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.5"
+                  value={customLabourRate}
+                  onChange={(e) => setCustomLabourRate(Math.max(0, parseFloat(e.target.value) || 0))}
+                  placeholder="Rate"
+                  className="w-20 bg-white border border-emerald-400 rounded-lg px-2 py-1 text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+                <span className="text-[11px] text-slate-500 font-bold">
+                  {labourUnit === 'PER_QTL' ? '/ Qtl' : '/ Bag'}
+                </span>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -568,7 +780,7 @@ export const DailyPurchase: React.FC = () => {
             <input
               type="text"
               placeholder="ਕਿਸਾਨ ਖੋਜੋ ਤੇ ਸਿੱਧਾ ਕਤਾਰ ਵਿੱਚ ਸ਼ਾਮਲ ਕਰੋ (Search Farmer by Name, Village, ID, Mobile)..."
-              value={farmerSearchQuery}
+              value={farmerSearchQuery || ''}
               onChange={(e) => {
                 setFarmerSearchQuery(e.target.value);
                 setShowFarmerSearchDropdown(true);
@@ -673,24 +885,24 @@ export const DailyPurchase: React.FC = () => {
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-100 text-slate-800 font-bold border-b border-slate-200">
                 <tr>
-                  <th className="py-2.5 px-3 w-12 text-center">Sr No</th>
-                  <th className="py-2.5 px-3 min-w-[220px]">Farmer Name (ਕਿਸਾਨ ਦਾ ਨਾਂ)</th>
-                  <th className="py-2.5 px-3 min-w-[130px]">Father Name (ਪਿਤਾ ਦਾ ਨਾਂ)</th>
-                  <th className="py-2.5 px-3 min-w-[100px]">Mobile (ਮੋਬਾਈਲ)</th>
-                  <th className="py-2.5 px-3 min-w-[110px]">Village (ਪਿੰਡ)</th>
+                  <th className="py-2.5 px-3 w-12 text-center">{isEn ? 'Sr No' : 'ਲੜੀ ਨੰ'}</th>
+                  <th className="py-2.5 px-3 min-w-[240px]">{isEn ? 'Farmer Name' : 'Farmer Name (ਕਿਸਾਨ ਦਾ ਨਾਂ)'}</th>
+                  <th className="py-2.5 px-3 min-w-[130px]">{isEn ? 'Father Name' : 'Father Name (ਪਿਤਾ ਦਾ ਨਾਂ)'}</th>
+                  <th className="py-2.5 px-3 min-w-[100px]">{isEn ? 'Mobile' : 'Mobile (ਮੋਬਾਈਲ)'}</th>
+                  <th className="py-2.5 px-3 min-w-[110px]">{isEn ? 'Village' : 'Village (ਪਿੰਡ)'}</th>
                   <th className="py-2.5 px-2 w-28 text-center bg-amber-50 text-amber-950 font-black">
-                    New Bags (ਨਵਾਂ)
+                    {isEn ? 'New Bags' : 'New Bags (ਨਵਾਂ)'}
                   </th>
                   <th className="py-2.5 px-2 w-28 text-center bg-orange-50 text-orange-950 font-black">
-                    Old Bags (ਪੁਰਾਣਾ)
+                    {isEn ? 'Old Bags' : 'Old Bags (ਪੁਰਾਣਾ)'}
                   </th>
                   <th className="py-2.5 px-2 w-28 text-center bg-emerald-50 text-emerald-950 font-black">
-                    Total Bags (ਕੁੱਲ)
+                    {isEn ? 'Total Bags' : 'Total Bags (ਕੁੱਲ)'}
                   </th>
                   <th className="py-2.5 px-3 min-w-[130px] text-right bg-indigo-50 text-indigo-950 font-black">
-                    Weight (ਕੁਇੰਟਲ + ਕਿਲੋ)
+                    {isEn ? 'Weight (Qtl + Kg)' : 'Weight (ਕੁਇੰਟਲ + ਕਿਲੋ)'}
                   </th>
-                  <th className="py-2.5 px-2 w-10 text-center">ਹਟਾਓ</th>
+                  <th className="py-2.5 px-2 w-10 text-center">{isEn ? 'Del' : 'ਹਟਾਓ'}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-medium">
@@ -711,50 +923,47 @@ export const DailyPurchase: React.FC = () => {
                       </td>
 
                       {/* 2. Farmer Name */}
-                      <td className="py-2.5 px-3">
-                        <select
-                          value={row.farmerId}
-                          onChange={(e) => updateRow(row.rowId, 'farmerId', e.target.value)}
-                          className="w-full bg-slate-50 border border-slate-300 rounded p-1.5 text-xs font-bold text-slate-900 focus:bg-white focus:outline-none"
-                        >
-                          <option value="">-- ਕਿਸਾਨ ਚੁਣੋ (Select Farmer) --</option>
-                          {farmers.map((f) => (
-                            <option key={f.id} value={f.id}>
-                              {f.farmerName} s/o {f.fatherName} • {f.village} ({f.farmerNamePa} - ID: {f.id})
-                            </option>
-                          ))}
-                        </select>
+                      <td className="py-2.5 px-3 min-w-[260px]">
+                        <SearchableSelect
+                          id={`dp-row-farmer-${row.rowId}`}
+                          value={row.farmerId || ''}
+                          onChange={(val) => updateRow(row.rowId, 'farmerId', val)}
+                          options={farmerOptions}
+                          placeholder={isEn ? "Select farmer..." : "ਕਿਸਾਨ ਚੁਣੋ..."}
+                          searchPlaceholder={isEn ? "Search farmer..." : "ਕਿਸਾਨ ਖੋਜੋ..."}
+                          emptyMessage={isEn ? "No farmer found" : "ਕੋਈ ਕਿਸਾਨ ਨਹੀਂ ਮਿਲਿਆ"}
+                        />
 
                         {/* Continuous Balance Display */}
                         {summary && (
                           <div className="mt-1 text-[10px] p-1.5 rounded-md border space-y-0.5 bg-emerald-50/60 border-emerald-200">
                             {summary.isLinkedFarmer ? (
                               <div className="text-emerald-900">
-                                <span className="font-bold">ਮੁੱਖ ਕਿਸਾਨ ਪੂਲ: </span>
+                                <span className="font-bold">{isEn ? 'Main Farmer Pool: ' : 'ਮੁੱਖ ਕਿਸਾਨ ਪੂਲ: '}</span>
                                 <span className="font-black">{summary.linkedToMainFarmerName}</span>
                                 <span className="block text-[9px] text-emerald-800">
-                                  ਮੁੱਖ ਆਮਦ: {summary.mandiArrivalBags} ਬੋਰੀਆਂ • ਕੁੱਲ ਖਰੀਦ: {summary.alreadyPurchasedBags} • 
-                                  <strong className="text-emerald-950 font-black"> ਬਾਕੀ ਸਟਾਕ: {summary.remainingBags}</strong>
+                                  {isEn ? `Arrival: ${summary.mandiArrivalBags} bags • Purchased: ${summary.alreadyPurchasedBags} • ` : `ਮੁੱਖ ਆਮਦ: ${summary.mandiArrivalBags} ਬੋਰੀਆਂ • ਕੁੱਲ ਖਰੀਦ: ${summary.alreadyPurchasedBags} • `}
+                                  <strong className="text-emerald-950 font-black"> {isEn ? `Remaining: ${summary.remainingBags}` : `ਬਾਕੀ ਸਟਾਕ: ${summary.remainingBags}`}</strong>
                                 </span>
                               </div>
                             ) : (
                               <div className="text-slate-800">
-                                <span>ਮੰਡੀ ਆਮਦ: <strong>{summary.mandiArrivalBags}</strong></span>
+                                <span>{isEn ? 'Arrival: ' : 'ਮੰਡੀ ਆਮਦ: '}<strong>{summary.mandiArrivalBags}</strong></span>
                                 <span className="mx-1">•</span>
-                                <span>ਪਹਿਲਾਂ ਖਰੀਦ: <strong>{summary.alreadyPurchasedBags}</strong></span>
+                                <span>{isEn ? 'Purchased: ' : 'ਪਹਿਲਾਂ ਖਰੀਦ: '}<strong>{summary.alreadyPurchasedBags}</strong></span>
                                 <span className="mx-1">•</span>
-                                <span>ਕੁੱਲ ਬਾਕੀ: <strong>{summary.remainingBags}</strong></span>
+                                <span>{isEn ? 'Remaining: ' : 'ਕੁੱਲ ਬਾਕੀ: '}<strong>{summary.remainingBags}</strong></span>
                               </div>
                             )}
                             <div className="pt-0.5 border-t border-emerald-200 flex items-center justify-between">
-                              <span className="text-slate-600 font-bold">ਇਸ ਕਤਾਰ ਲਈ ਉਪਲਬਧ (Max for row):</span>
+                              <span className="text-slate-600 font-bold">{isEn ? 'Available for Row:' : 'ਇਸ ਕਤਾਰ ਲਈ ਉਪਲਬਧ (Max for row):'}</span>
                               <span className={`font-mono font-black ${availableForThisRow > 0 ? 'text-emerald-950' : 'text-rose-600'}`}>
-                                {availableForThisRow} ਬੋਰੀਆਂ
+                                {availableForThisRow} {isEn ? 'Bags' : 'ਬੋਰੀਆਂ'}
                               </span>
                             </div>
                             {isOverLimit && (
                               <div className="text-rose-700 bg-rose-100/90 border border-rose-300 px-1.5 py-0.5 rounded font-black text-[9.5px]">
-                                ਵੱਧ ਖਰੀਦ! ਵੱਧ ਤੋਂ ਵੱਧ {availableForThisRow} ਬੋਰੀਆਂ ਸੰਭਵ ਹਨ
+                                {isEn ? `Excess purchase! Max ${availableForThisRow} bags possible` : `ਵੱਧ ਖਰੀਦ! ਵੱਧ ਤੋਂ ਵੱਧ ${availableForThisRow} ਬੋਰੀਆਂ ਸੰਭਵ ਹਨ`}
                               </div>
                             )}
                           </div>
@@ -802,7 +1011,7 @@ export const DailyPurchase: React.FC = () => {
                           placeholder="0"
                           value={row.newBags || ''}
                           onChange={(e) => updateRow(row.rowId, 'newBags', e.target.value)}
-                          className="w-24 min-w-[5.5rem] mx-auto text-center bg-white border border-amber-400 rounded p-1 text-xs font-mono font-black text-amber-950 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                          className="w-28 min-w-[6.5rem] mx-auto text-center bg-white border border-amber-400 rounded p-1 text-sm font-mono font-black text-amber-950 focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-2xs"
                         />
                       </td>
 
@@ -814,7 +1023,7 @@ export const DailyPurchase: React.FC = () => {
                           placeholder="0"
                           value={row.oldBags || ''}
                           onChange={(e) => updateRow(row.rowId, 'oldBags', e.target.value)}
-                          className="w-24 min-w-[5.5rem] mx-auto text-center bg-white border border-orange-400 rounded p-1 text-xs font-mono font-black text-orange-950 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                          className="w-28 min-w-[6.5rem] mx-auto text-center bg-white border border-orange-400 rounded p-1 text-sm font-mono font-black text-orange-950 focus:outline-none focus:ring-2 focus:ring-orange-500 shadow-2xs"
                         />
                       </td>
 
@@ -846,40 +1055,44 @@ export const DailyPurchase: React.FC = () => {
             </table>
           </div>
 
-          {/* Table Bottom Action Bar: Totals + Save Button */}
-          <div className="bg-slate-50 border-t border-slate-200 p-3 flex flex-col md:flex-row items-center justify-between gap-3">
-            <div className="flex flex-wrap items-center gap-2 text-xs">
-              <div className="bg-white border border-slate-200 px-2.5 py-1 rounded-lg">
-                <span className="text-slate-500 font-bold">ਕੁੱਲ ਕਿਸਾਨ: </span>
-                <span className="font-mono font-black text-slate-900">{rowTotals.validFarmersCount}</span>
+          {/* Table Bottom Action Bar: Required Summary Box (Total Bags, Purchase Qtl, Gross Amount, Total Labour, Net Amount) + Save Button */}
+          <div className="bg-slate-50 border-t border-slate-200 p-3 flex flex-col lg:flex-row items-center justify-between gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 xl:flex xl:flex-wrap items-center gap-2 text-xs w-full lg:w-auto">
+              <div className="bg-white border border-slate-200 px-2.5 py-1.5 rounded-lg shadow-2xs">
+                <span className="text-slate-500 font-bold block text-[10px]">ਕੁੱਲ ਕਿਸਾਨ (Farmers)</span>
+                <span className="font-mono font-black text-slate-900 text-sm">{rowTotals.validFarmersCount}</span>
               </div>
-              <div className="bg-amber-100/80 border border-amber-300 px-2.5 py-1 rounded-lg">
-                <span className="text-amber-800 font-bold">ਨਵਾਂ ਬਾਰਦਾਨਾ: </span>
-                <span className="font-mono font-black text-amber-950">{rowTotals.totalNewBags}</span>
+              <div className="bg-emerald-100/90 border border-emerald-300 px-2.5 py-1.5 rounded-lg shadow-2xs">
+                <span className="text-emerald-800 font-bold block text-[10px]">ਕੁੱਲ ਬੋਰੀਆਂ (Total Bags)</span>
+                <span className="font-mono font-black text-emerald-950 text-sm">
+                  {rowTotals.totalBags} <span className="text-[10px] font-normal text-emerald-800">(ਨ: {rowTotals.totalNewBags}, ਪੁ: {rowTotals.totalOldBags})</span>
+                </span>
               </div>
-              <div className="bg-orange-100/80 border border-orange-300 px-2.5 py-1 rounded-lg">
-                <span className="text-orange-800 font-bold">ਪੁਰਾਣਾ ਬਾਰਦਾਨਾ: </span>
-                <span className="font-mono font-black text-orange-950">{rowTotals.totalOldBags}</span>
+              <div className="bg-indigo-100/90 border border-indigo-300 px-2.5 py-1.5 rounded-lg shadow-2xs">
+                <span className="text-indigo-800 font-bold block text-[10px]">ਖਰੀਦ ਕੁਇੰਟਲ (Purchase Qtl)</span>
+                <span className="font-mono font-black text-indigo-950 text-sm">{rowTotals.qul} Qul {rowTotals.kg} Kg</span>
               </div>
-              <div className="bg-emerald-100/80 border border-emerald-300 px-2.5 py-1 rounded-lg">
-                <span className="text-emerald-800 font-bold">ਗ੍ਰੈਂਡ ਕੁੱਲ: </span>
-                <span className="font-mono font-black text-emerald-950">{rowTotals.totalBags} ਬੋਰੀਆਂ</span>
+              <div className="bg-blue-100/90 border border-blue-300 px-2.5 py-1.5 rounded-lg shadow-2xs">
+                <span className="text-blue-800 font-bold block text-[10px]">ਗ੍ਰਾਸ ਰਕਮ (Gross Amount)</span>
+                <span className="font-mono font-black text-blue-950 text-sm">₹{rowTotals.amount.toLocaleString('en-IN')}</span>
               </div>
-              <div className="bg-indigo-100/80 border border-indigo-300 px-2.5 py-1 rounded-lg">
-                <span className="text-indigo-800 font-bold">ਕੁੱਲ ਵਜ਼ਨ: </span>
-                <span className="font-mono font-black text-indigo-950">{rowTotals.qul} Qul {rowTotals.kg} Kg</span>
+              <div className="bg-rose-100/90 border border-rose-300 px-2.5 py-1.5 rounded-lg shadow-2xs">
+                <span className="text-rose-800 font-bold block text-[10px]">ਕੁੱਲ ਮਜ਼ਦੂਰੀ (Total Labour)</span>
+                <span className="font-mono font-black text-rose-950 text-sm">
+                  {rowTotals.totalLabour > 0 ? `-₹${rowTotals.totalLabour.toLocaleString('en-IN')}` : '₹0'}
+                </span>
               </div>
-              <div className="bg-slate-100 border border-slate-300 px-2.5 py-1 rounded-lg">
-                <span className="text-slate-700 font-bold">ਰਕਮ: </span>
-                <span className="font-mono font-black text-slate-900">₹{rowTotals.amount.toLocaleString('en-IN')}</span>
+              <div className="bg-emerald-700 text-white border border-emerald-800 px-3 py-1.5 rounded-lg shadow-2xs col-span-2 sm:col-span-1">
+                <span className="text-emerald-200 font-bold block text-[10px]">ਸ਼ੁੱਧ ਰਕਮ (Net Amount)</span>
+                <span className="font-mono font-black text-white text-base">₹{rowTotals.netAmount.toLocaleString('en-IN')}</span>
               </div>
             </div>
 
-            <div className="flex items-center gap-2 w-full md:w-auto">
+            <div className="flex items-center gap-2 w-full lg:w-auto shrink-0">
               <button
                 type="button"
                 onClick={addRow}
-                className="flex-1 md:flex-initial bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold px-3 py-2 rounded-lg text-xs flex items-center justify-center gap-1 transition"
+                className="flex-1 lg:flex-initial bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold px-3.5 py-2 rounded-lg text-xs flex items-center justify-center gap-1 transition"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>ਕਤਾਰ ਸ਼ਾਮਲ ਕਰੋ</span>
@@ -888,7 +1101,7 @@ export const DailyPurchase: React.FC = () => {
                 type="button"
                 onClick={handleSavePurchases}
                 disabled={isSaving || rowTotals.totalBags <= 0}
-                className="flex-1 md:flex-initial bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-black px-5 py-2 rounded-lg text-xs flex items-center justify-center gap-1.5 shadow-2xs transition"
+                className="flex-1 lg:flex-initial bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-black px-5 py-2 rounded-lg text-xs flex items-center justify-center gap-1.5 shadow-2xs transition"
               >
                 <Check className="w-4 h-4" />
                 <span>{isSaving ? 'ਸੇਵ ਹੋ ਰਿਹਾ ਹੈ...' : 'ਖਰੀਦ ਸੇਵ ਕਰੋ (Save Purchases)'}</span>
@@ -969,9 +1182,23 @@ export const DailyPurchase: React.FC = () => {
                         <span className="font-mono font-black text-indigo-900">{dateGroup.totalQul} Qtl</span>
                       </div>
                       <div className="bg-white border border-slate-200 px-2.5 py-1 rounded-lg text-xs">
-                        <span className="text-slate-500 font-bold">ਕੁੱਲ ਰਕਮ: </span>
+                        <span className="text-slate-500 font-bold">ਗ੍ਰਾਸ: </span>
                         <span className="font-mono font-black text-slate-900">
                           ₹{dateGroup.totalAmount.toLocaleString('en-IN')}
+                        </span>
+                      </div>
+                      {dateGroup.totalLabour > 0 && (
+                        <div className="bg-rose-50 border border-rose-200 px-2.5 py-1 rounded-lg text-xs">
+                          <span className="text-rose-700 font-bold">ਮਜ਼ਦੂਰੀ: </span>
+                          <span className="font-mono font-black text-rose-900">
+                            -₹{dateGroup.totalLabour.toLocaleString('en-IN')}
+                          </span>
+                        </div>
+                      )}
+                      <div className="bg-emerald-50 border border-emerald-300 px-2.5 py-1 rounded-lg text-xs">
+                        <span className="text-emerald-800 font-bold">ਸ਼ੁੱਧ: </span>
+                        <span className="font-mono font-black text-emerald-950">
+                          ₹{dateGroup.totalNetAmount.toLocaleString('en-IN')}
                         </span>
                       </div>
 
@@ -980,7 +1207,7 @@ export const DailyPurchase: React.FC = () => {
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          exportDailyPurchaseRegisterPDF(dateGroup.records, settings, 'All Agencies', dateGroup.date);
+                          exportDailyPurchaseRegisterPDF(dateGroup.records, settings, 'All Agencies', dateGroup.date, dailyPurchaseRecords);
                         }}
                         className="bg-slate-900 hover:bg-slate-800 text-white font-bold px-2.5 py-1 rounded-lg text-[11px] flex items-center gap-1 shadow-2xs transition"
                         title="PDF ਰਿਪੋਰਟ ਡਾਊਨਲੋਡ ਕਰੋ"

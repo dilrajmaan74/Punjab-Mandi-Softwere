@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useMandi } from '../../context/MandiContext';
 import { useNotification } from '../../context/NotificationContext';
 import { Farmer, FarmerAccountSummary, FarmerAdvanceRecord } from '../../types/mandi';
+import { SearchableSelect, SearchableSelectOption } from '../common/SearchableSelect';
 import {
   User,
   Search,
@@ -65,6 +66,8 @@ export const FarmerAccount: React.FC = () => {
     settings,
     language
   } = useMandi();
+
+  const isEn = language === 'en';
 
   const { confirmDelete, notifyDeleteSuccess, notifySaveSuccess, notifyError } = useNotification();
 
@@ -142,6 +145,32 @@ export const FarmerAccount: React.FC = () => {
       cleanAadhaar.includes(q.replace(/\s+/g, ''))
     );
   });
+
+  const farmerSelectOptions: SearchableSelectOption[] = useMemo(() => {
+    return farmers.map((f) => ({
+      value: f.id,
+      label: isEn ? f.farmerName : `${f.farmerNamePa} (${f.farmerName})`,
+      subLabel: `${isEn ? 'Village' : 'ਪਿੰਡ'}: ${isEn ? f.village : f.villagePa} | ${isEn ? 'S/o' : 'ਪਿਤਾ'}: ${f.fatherName || '-'}`,
+      badge: f.linkedMainFarmerId ? (isEn ? 'Linked' : 'ਸੰਬੰਧਿਤ') : f.id,
+      badgeColor: f.linkedMainFarmerId ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-700',
+      keywords: [f.farmerName, f.farmerNamePa, f.village, f.villagePa, f.id, f.mobile || '', f.aadhaar || '']
+    }));
+  }, [farmers, isEn]);
+
+  const advancePaymentModeOptions: SearchableSelectOption[] = useMemo(() => [
+    { value: 'CASH', label: isEn ? 'Cash' : 'Cash (ਨਕਦ)' },
+    { value: 'BANK_TRANSFER', label: isEn ? 'Bank Transfer' : 'Bank Transfer (ਬੈਂਕ)' },
+    { value: 'CHEQUE', label: isEn ? 'Cheque' : 'Cheque (ਚੈੱਕ)' },
+    { value: 'OTHER', label: isEn ? 'Other' : 'Other (ਹੋਰ)' }
+  ], [isEn]);
+
+  const paymentModeOptions: SearchableSelectOption[] = useMemo(() => [
+    { value: 'BANK_TRANSFER', label: isEn ? 'Bank Transfer' : 'Bank Transfer (ਬੈਂਕ)' },
+    { value: 'RTGS', label: 'RTGS' },
+    { value: 'NEFT', label: 'NEFT' },
+    { value: 'CHEQUE', label: isEn ? 'Cheque' : 'Cheque (ਚੈੱਕ)' },
+    { value: 'CASH', label: isEn ? 'Cash' : 'Cash (ਨਕਦ)' }
+  ], [isEn]);
 
   // Copy Farmer ID
   const handleCopyFarmerId = () => {
@@ -424,47 +453,29 @@ export const FarmerAccount: React.FC = () => {
           </div>
           <div>
             <h1 className="text-xl font-black text-slate-900 flex items-center gap-2">
-              <span>ਕਿਸਾਨ ਖਾਤਾ / FARMER ACCOUNT & STATEMENT</span>
+              <span>{isEn ? 'Farmer Account & Statement' : 'ਕਿਸਾਨ ਖਾਤਾ / FARMER ACCOUNT & STATEMENT'}</span>
             </h1>
             <p className="text-xs text-slate-500 font-medium">
-              ਮੰਡੀ ਆਮਦ, ਖਰੀਦ, ਬਾਰਦਾਨਾ, ਲੇਬਰ ਕਟੌਤੀਆਂ, ਪੇਸ਼ਗੀ (ਐਡਵਾਂਸ), ਵਿਆਜ ਅਤੇ ਅੰਤਿਮ ਹਿਸਾਬ-ਕਿਤਾਬ
+              {isEn ? 'Arrivals, purchase, bardana, labour deductions, advances, interest and final settlement' : 'ਮੰਡੀ ਆਮਦ, ਖਰੀਦ, ਬਾਰਦਾਨਾ, ਲੇਬਰ ਕਟੌਤੀਆਂ, ਪੇਸ਼ਗੀ (ਐਡਵਾਂਸ), ਵਿਆਜ ਅਤੇ ਅੰਤਿਮ ਹਿਸਾਬ-ਕਿਤਾਬ'}
             </p>
           </div>
         </div>
 
-        {/* Search and Dropdown Filter */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
-          <div className="relative min-w-[280px]">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="ਨਾਮ, ਆਈ.ਡੀ, ਪਿੰਡ ਜਾਂ ਆਧਾਰ ਨਾਲ ਖੋਜੋ..."
-              className="w-full pl-9 pr-4 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none transition-all"
-            />
-          </div>
-
-          <select
-            value={selectedFarmerId}
-            onChange={(e) => {
-              setSelectedFarmerId(e.target.value);
-              const found = farmers.find((f) => f.id === e.target.value);
+        {/* Searchable Farmer Dropdown */}
+        <div className="w-full sm:w-80">
+          <SearchableSelect
+            id="farmer-account-select"
+            value={selectedFarmerId || ''}
+            onChange={(val) => {
+              setSelectedFarmerId(val);
+              const found = farmers.find((f) => f.id === val);
               if (found) setSelectedFarmerForAccount(found);
             }}
-            className="px-3 py-2 text-xs font-bold text-slate-800 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none shadow-xs"
-          >
-            {filteredFarmers.length === 0 ? (
-              <option value="">ਕੋਈ ਕਿਸਾਨ ਨਹੀਂ ਮਿਲਿਆ</option>
-            ) : (
-              filteredFarmers.map((f) => (
-                <option key={f.id} value={f.id}>
-                  {f.farmerNamePa} ({f.farmerName}) • {f.villagePa} [{f.id}]
-                  {f.linkedMainFarmerId ? ' ↳ Linked' : ''}
-                </option>
-              ))
-            )}
-          </select>
+            options={farmerSelectOptions}
+            placeholder={isEn ? "Search and select farmer..." : "ਕਿਸਾਨ ਖੋਜੋ ਤੇ ਚੁਣੋ..."}
+            searchPlaceholder={isEn ? "Type name, village, ID..." : "ਨਾਮ, ਪਿੰਡ, ਆਈ.ਡੀ ਲਿਖੋ..."}
+            emptyMessage={isEn ? "No farmer found" : "ਕੋਈ ਕਿਸਾਨ ਨਹੀਂ ਮਿਲਿਆ"}
+          />
         </div>
       </div>
 
@@ -1953,7 +1964,7 @@ export const FarmerAccount: React.FC = () => {
                   <input
                     type="text"
                     required
-                    value={advanceForm.date}
+                    value={advanceForm.date || ''}
                     onChange={(e) => setAdvanceForm({ ...advanceForm, date: e.target.value })}
                     className="w-full px-3 py-2 border border-slate-300 rounded-xl font-medium focus:ring-2 focus:ring-amber-500 focus:outline-none"
                     placeholder="DD/MM/YYYY"
@@ -1968,7 +1979,7 @@ export const FarmerAccount: React.FC = () => {
                     <input
                       type="text"
                       required
-                      value={advanceForm.interestTillDate}
+                      value={advanceForm.interestTillDate || ''}
                       onChange={(e) => setAdvanceForm({ ...advanceForm, interestTillDate: e.target.value })}
                       className="w-full px-3 py-2 border border-slate-300 rounded-xl font-medium focus:ring-2 focus:ring-amber-500 focus:outline-none"
                       placeholder="DD/MM/YYYY"
@@ -2003,7 +2014,7 @@ export const FarmerAccount: React.FC = () => {
                     type="number"
                     step="any"
                     required
-                    value={advanceForm.amount}
+                    value={advanceForm.amount || ''}
                     onChange={(e) => setAdvanceForm({ ...advanceForm, amount: e.target.value })}
                     className="w-full px-3 py-2 border border-slate-300 rounded-xl font-bold text-sm text-slate-900 focus:ring-2 focus:ring-amber-500 focus:outline-none"
                     placeholder="e.g. 50000"
@@ -2018,7 +2029,7 @@ export const FarmerAccount: React.FC = () => {
                     type="number"
                     step="0.05"
                     required
-                    value={advanceForm.monthlyInterestRate}
+                    value={advanceForm.monthlyInterestRate || ''}
                     onChange={(e) => setAdvanceForm({ ...advanceForm, monthlyInterestRate: e.target.value })}
                     className="w-full px-3 py-2 border border-slate-300 rounded-xl font-bold text-slate-900 focus:ring-2 focus:ring-amber-500 focus:outline-none"
                     placeholder="e.g. 2.0"
@@ -2029,24 +2040,25 @@ export const FarmerAccount: React.FC = () => {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">ਅਦਾਇਗੀ ਦਾ ਢੰਗ (Mode)</label>
-                  <select
-                    value={advanceForm.paymentMode}
-                    onChange={(e) => setAdvanceForm({ ...advanceForm, paymentMode: e.target.value as any })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-xl font-medium focus:ring-2 focus:ring-amber-500 focus:outline-none"
-                  >
-                    <option value="CASH">Cash (ਨਕਦ)</option>
-                    <option value="BANK_TRANSFER">Bank Transfer (ਬੈਂਕ)</option>
-                    <option value="CHEQUE">Cheque (ਚੈੱਕ)</option>
-                    <option value="OTHER">Other</option>
-                  </select>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    {isEn ? 'Payment Mode' : 'ਅਦਾਇਗੀ ਦਾ ਢੰਗ (Mode)'}
+                  </label>
+                  <SearchableSelect
+                    id="advance-payment-mode"
+                    value={advanceForm.paymentMode || 'CASH'}
+                    onChange={(val) => setAdvanceForm({ ...advanceForm, paymentMode: val as any })}
+                    options={advancePaymentModeOptions}
+                    placeholder={isEn ? "Select mode..." : "ਢੰਗ ਚੁਣੋ..."}
+                  />
                 </div>
 
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">ਟ੍ਰਾਂਜੈਕਸ਼ਨ / ਚੈੱਕ ਨੰਬਰ (Ref / Cheque #)</label>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    {isEn ? 'Ref / Cheque #' : 'ਟ੍ਰਾਂਜੈਕਸ਼ਨ / ਚੈੱਕ ਨੰਬਰ (Ref / Cheque #)'}
+                  </label>
                   <input
                     type="text"
-                    value={advanceForm.referenceNumber}
+                    value={advanceForm.referenceNumber || ''}
                     onChange={(e) => setAdvanceForm({ ...advanceForm, referenceNumber: e.target.value })}
                     className="w-full px-3 py-2 border border-slate-300 rounded-xl font-medium focus:ring-2 focus:ring-amber-500 focus:outline-none"
                     placeholder="Optional reference"
@@ -2058,7 +2070,7 @@ export const FarmerAccount: React.FC = () => {
                 <label className="block font-semibold text-slate-700 mb-1">ਟਿੱਪਣੀ (Remarks / Notes)</label>
                 <input
                   type="text"
-                  value={advanceForm.remarks}
+                  value={advanceForm.remarks || ''}
                   onChange={(e) => setAdvanceForm({ ...advanceForm, remarks: e.target.value })}
                   className="w-full px-3 py-2 border border-slate-300 rounded-xl font-medium focus:ring-2 focus:ring-amber-500 focus:outline-none"
                   placeholder="e.g. ਫਸਲ ਦੀ ਬਿਜਾਈ ਲਈ ਪੇਸ਼ਗੀ"
@@ -2151,7 +2163,7 @@ export const FarmerAccount: React.FC = () => {
                 <input
                   type="text"
                   required
-                  value={paymentForm.date}
+                  value={paymentForm.date || ''}
                   onChange={(e) => setPaymentForm({ ...paymentForm, date: e.target.value })}
                   className="w-full px-3 py-2 border border-slate-300 rounded-xl font-medium focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                   placeholder="DD/MM/YYYY"
@@ -2166,7 +2178,7 @@ export const FarmerAccount: React.FC = () => {
                   type="number"
                   step="any"
                   required
-                  value={paymentForm.amount}
+                  value={paymentForm.amount || ''}
                   onChange={(e) => setPaymentForm({ ...paymentForm, amount: e.target.value })}
                   className="w-full px-3 py-2 border border-slate-300 rounded-xl font-bold text-sm text-slate-900 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                   placeholder="e.g. 50000"
@@ -2175,25 +2187,23 @@ export const FarmerAccount: React.FC = () => {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">ਅਦਾਇਗੀ ਦਾ ਢੰਗ (Mode)</label>
-                  <select
-                    value={paymentForm.paymentMode}
-                    onChange={(e) => setPaymentForm({ ...paymentForm, paymentMode: e.target.value as any })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-xl font-medium focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                  >
-                    <option value="BANK_TRANSFER">Bank Transfer (ਬੈਂਕ)</option>
-                    <option value="RTGS">RTGS</option>
-                    <option value="NEFT">NEFT</option>
-                    <option value="CHEQUE">Cheque (ਚੈੱਕ)</option>
-                    <option value="CASH">Cash (ਨਕਦ)</option>
-                  </select>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    {isEn ? 'Payment Mode' : 'ਅਦਾਇਗੀ ਦਾ ਢੰਗ (Mode)'}
+                  </label>
+                  <SearchableSelect
+                    id="settlement-payment-mode"
+                    value={paymentForm.paymentMode || 'BANK_TRANSFER'}
+                    onChange={(val) => setPaymentForm({ ...paymentForm, paymentMode: val as any })}
+                    options={paymentModeOptions}
+                    placeholder={isEn ? "Select mode..." : "ਢੰਗ ਚੁਣੋ..."}
+                  />
                 </div>
 
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">ਖਰੀਦ ਏਜੰਸੀ (Agency)</label>
                   <input
                     type="text"
-                    value={paymentForm.agency}
+                    value={paymentForm.agency || ''}
                     onChange={(e) => setPaymentForm({ ...paymentForm, agency: e.target.value })}
                     className="w-full px-3 py-2 border border-slate-300 rounded-xl font-medium focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                     placeholder="e.g. Markfed"
@@ -2205,7 +2215,7 @@ export const FarmerAccount: React.FC = () => {
                 <label className="block font-semibold text-slate-700 mb-1">ਟ੍ਰਾਂਜੈਕਸ਼ਨ / ਰੈਫਰੈਂਸ ਨੰਬਰ (Ref / UTR No.)</label>
                 <input
                   type="text"
-                  value={paymentForm.referenceNumber}
+                  value={paymentForm.referenceNumber || ''}
                   onChange={(e) => setPaymentForm({ ...paymentForm, referenceNumber: e.target.value })}
                   className="w-full px-3 py-2 border border-slate-300 rounded-xl font-medium focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                   placeholder="e.g. UTR123456789"
@@ -2216,7 +2226,7 @@ export const FarmerAccount: React.FC = () => {
                 <label className="block font-semibold text-slate-700 mb-1">ਟਿੱਪਣੀ (Remarks / Notes)</label>
                 <input
                   type="text"
-                  value={paymentForm.remarks}
+                  value={paymentForm.remarks || ''}
                   onChange={(e) => setPaymentForm({ ...paymentForm, remarks: e.target.value })}
                   className="w-full px-3 py-2 border border-slate-300 rounded-xl font-medium focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                   placeholder="Optional remarks"

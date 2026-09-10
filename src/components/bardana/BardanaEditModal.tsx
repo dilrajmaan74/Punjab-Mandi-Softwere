@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { BardanaReceivedRecord, BardanaSourceType, BardanaType } from '../../types/mandi';
 import { useMandi } from '../../context/MandiContext';
 import { useNotification } from '../../context/NotificationContext';
+import { SearchableSelect, SearchableSelectOption } from '../common/SearchableSelect';
 import {
   Edit,
   X,
@@ -35,7 +36,8 @@ export const BardanaEditModal: React.FC<BardanaEditModalProps> = ({
   isOpen,
   onClose
 }) => {
-  const { updateBardanaRecord } = useMandi();
+  const { updateBardanaRecord, language } = useMandi();
+  const isEn = language === 'en';
   const { notifyUpdateSuccess, notifyError } = useNotification();
 
   const [date, setDate] = useState('');
@@ -48,6 +50,21 @@ export const BardanaEditModal: React.FC<BardanaEditModalProps> = ({
   const [bags, setBags] = useState<number>(500);
   const [remarks, setRemarks] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
+
+  const agencyOptions: SearchableSelectOption[] = useMemo(() => {
+    const opts: SearchableSelectOption[] = STANDARD_AGENCIES.map((ag) => ({
+      value: ag,
+      label: isEn ? ag.split('(')[0].trim() : ag,
+      subLabel: isEn ? ag.split('(')[1]?.replace(')', '') : undefined,
+      keywords: [ag]
+    }));
+    opts.push({
+      value: 'CUSTOM',
+      label: isEn ? '+ Other Custom Agency...' : '+ ਹੋਰ ਕਸਟਮ ਏਜੰਸੀ (Other Custom Agency)...',
+      keywords: ['custom', 'other']
+    });
+    return opts;
+  }, [isEn]);
 
   useEffect(() => {
     if (record) {
@@ -175,32 +192,28 @@ export const BardanaEditModal: React.FC<BardanaEditModalProps> = ({
           {/* Section 1: Fixed Agency Section */}
           <div className="bg-emerald-50/70 border border-emerald-300 rounded-xl p-3.5 space-y-2">
             <label className="block text-[11px] font-extrabold uppercase tracking-wider text-emerald-900">
-              AGENCY / ਏਜੰਸੀ (FIXED ALLOCATION) <span className="text-rose-500">*</span>
+              {isEn ? 'AGENCY (FIXED ALLOCATION)' : 'AGENCY / ਏਜੰਸੀ (FIXED ALLOCATION)'} <span className="text-rose-500">*</span>
             </label>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <select
-                value={STANDARD_AGENCIES.includes(agency) ? agency : 'CUSTOM'}
-                onChange={(e) => {
-                  if (e.target.value === 'CUSTOM') {
+              <SearchableSelect
+                id="edit-bardana-agency"
+                value={STANDARD_AGENCIES.includes(agency) ? agency : (agency ? 'CUSTOM' : '')}
+                onChange={(val) => {
+                  if (val === 'CUSTOM') {
                     setAgency('CUSTOM');
                   } else {
-                    setAgency(e.target.value);
+                    setAgency(val);
                   }
                 }}
-                className="w-full bg-white border border-emerald-400 rounded-lg px-3 py-2 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
-              >
-                {STANDARD_AGENCIES.map((ag) => (
-                  <option key={ag} value={ag}>
-                    {ag}
-                  </option>
-                ))}
-                <option value="CUSTOM">+ ਹੋਰ ਕਸਟਮ ਏਜੰਸੀ (Other Custom Agency)...</option>
-              </select>
+                options={agencyOptions}
+                placeholder={isEn ? "Select agency..." : "ਏਜੰਸੀ ਚੁਣੋ..."}
+                searchPlaceholder={isEn ? "Search agency..." : "ਏਜੰਸੀ ਖੋਜੋ..."}
+              />
 
               {agency === 'CUSTOM' && (
                 <input
                   type="text"
-                  placeholder="ਕਸਟਮ ਏਜੰਸੀ ਦਾ ਨਾਂ ਲਿਖੋ"
+                  placeholder={isEn ? "Enter custom agency name" : "ਕਸਟਮ ਏਜੰਸੀ ਦਾ ਨਾਂ ਲਿਖੋ"}
                   value={customAgency}
                   onChange={(e) => setCustomAgency(e.target.value)}
                   className="w-full bg-white border border-emerald-400 rounded-lg px-3 py-2 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"

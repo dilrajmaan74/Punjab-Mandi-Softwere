@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useMandi } from '../../context/MandiContext';
 import { useNotification } from '../../context/NotificationContext';
+import { useFormDraft } from '../../hooks/useFormDraft';
+import { DateInput } from '../common/DateInput';
 import {
   PackageCheck,
   Calendar,
@@ -14,7 +16,9 @@ import {
   Building,
   Phone,
   CreditCard,
-  Scissors
+  Scissors,
+  Search,
+  Hash
 } from 'lucide-react';
 import {
   FIXED_BAG_WEIGHT_KG,
@@ -29,22 +33,36 @@ import {
 } from '../../utils/calculations';
 import { BardanaType, LabourAndDeductions } from '../../types/mandi';
 import { LabourDeductionsSection } from '../common/LabourDeductionsSection';
+import { SearchableSelect, SearchableSelectOption } from '../common/SearchableSelect';
+
+interface BagsEntryDraft {
+  dateInput: string;
+  selectedFarmerId: string;
+  newBagsInput: string;
+  oldBagsInput: string;
+  totaInput: string;
+  labourDeductions: LabourAndDeductions;
+}
 
 export const BagsEntry: React.FC = () => {
   const {
     farmers,
     addBagsEntry,
+    getNextParchiNo,
     selectedFarmerForBags,
     setSelectedFarmerForBags,
     setActiveReceipt,
     setActiveSection,
     getBardanaSummary,
-    settings
+    settings,
+    language
   } = useMandi();
+  const isEn = language === 'en';
   const { notifySaveSuccess, notifyError } = useNotification();
   const [isSaving, setIsSaving] = useState(false);
 
   const bardanaSummary = getBardanaSummary();
+  const nextParchiNo = getNextParchiNo();
 
   // Current Date in DD/MM/YYYY format
   const getTodayFormatted = () => {
@@ -55,17 +73,44 @@ export const BagsEntry: React.FC = () => {
     return `${day}/${month}/${year}`;
   };
 
-  // Form State
-  const [dateInput, setDateInput] = useState<string>(getTodayFormatted());
+  // Universal Auto-Save Draft
+  const defaultLabour = useMemo(() => createDefaultLabourDeductions(settings), [settings]);
+  const { draft, saveDraft, clearDraft } = useFormDraft<BagsEntryDraft>({
+    formKey: 'draft_bags_entry',
+    initialValues: {
+      dateInput: getTodayFormatted(),
+      selectedFarmerId: selectedFarmerForBags?.id || farmers[0]?.id || '',
+      newBagsInput: '',
+      oldBagsInput: '',
+      totaInput: '',
+      labourDeductions: defaultLabour
+    }
+  });
+
+  // Form State initialized from draft
+  const [dateInput, setDateInput] = useState<string>(draft.dateInput || getTodayFormatted());
   const [selectedFarmerId, setSelectedFarmerId] = useState<string>(
-    selectedFarmerForBags?.id || farmers[0]?.id || ''
+    selectedFarmerForBags?.id || draft.selectedFarmerId || farmers[0]?.id || ''
   );
-  const [newBagsInput, setNewBagsInput] = useState<string>('');
-  const [oldBagsInput, setOldBagsInput] = useState<string>('');
-  const [totaInput, setTotaInput] = useState<string>('');
-  const [labourDeductions, setLabourDeductions] = useState<LabourAndDeductions>(() =>
-    createDefaultLabourDeductions(settings)
+  const [newBagsInput, setNewBagsInput] = useState<string>(draft.newBagsInput || '');
+  const [oldBagsInput, setOldBagsInput] = useState<string>(draft.oldBagsInput || '');
+  const [totaInput, setTotaInput] = useState<string>(draft.totaInput || '');
+  const [labourDeductions, setLabourDeductions] = useState<LabourAndDeductions>(
+    draft.labourDeductions || defaultLabour
   );
+  const [farmerSearchTerm, setFarmerSearchTerm] = useState('');
+
+  // Auto-save draft on every change
+  useEffect(() => {
+    saveDraft({
+      dateInput,
+      selectedFarmerId,
+      newBagsInput,
+      oldBagsInput,
+      totaInput,
+      labourDeductions
+    });
+  }, [dateInput, selectedFarmerId, newBagsInput, oldBagsInput, totaInput, labourDeductions, saveDraft]);
 
   // Notification / Saved Receipt State
   const [savedReceiptRecord, setSavedReceiptRecord] = useState<any | null>(null);
@@ -77,7 +122,37 @@ export const BagsEntry: React.FC = () => {
     }
   }, [selectedFarmerForBags]);
 
+  // Filtered farmers based on search
+  const filteredFarmers = useMemo(() => {
+    if (!farmerSearchTerm.trim()) return farmers;
+    const q = farmerSearchTerm.toLowerCase();
+    return farmers.filter(
+      (f) =>
+        f.id.toLowerCase().includes(q) ||
+        (f.farmerName && f.farmerName.toLowerCase().includes(q)) ||
+        (f.farmerNamePa && f.farmerNamePa.includes(q)) ||
+        (f.mobile && f.mobile.includes(q)) ||
+        (f.village && f.village.toLowerCase().includes(q)) ||
+        (f.villagePa && f.villagePa.includes(q))
+    );
+  }, [farmers, farmerSearchTerm]);
+
   const selectedFarmer = farmers.find((f) => f.id === selectedFarmerId);
+
+  // SearchableSelect options for farmers
+  const farmerOptions: SearchableSelectOption[] = useMemo(() => {
+    return farmers.map((f) => ({
+      value: f.id,
+      label: isEn
+        ? `${f.id} - ${f.farmerName}`
+        : `${f.id} - ${f.farmerNamePa} (${f.farmerName})`,
+      subLabel: isEn
+        ? `Village: ${f.village} • Mob: ${f.mobile}`
+        : `ਪਿੰਡ: ${f.villagePa || f.village} • ਮੋਬਾਈਲ: ${f.mobile}`,
+      badge: f.linkedMainFarmerId ? (isEn ? 'Linked' : 'ਲਿੰਕਡ') : undefined,
+      keywords: `${f.farmerName} ${f.farmerNamePa} ${f.fatherName || ''} ${f.fatherNamePa || ''} ${f.village} ${f.villagePa || ''} ${f.mobile} ${f.aadhaar || ''} ${f.id}`
+    }));
+  }, [farmers, isEn]);
 
   // Date Auto-Formatting as typed: e.g. "28082026" -> "28/08/2026"
   const handleDateChange = (val: string) => {
@@ -150,6 +225,19 @@ export const BagsEntry: React.FC = () => {
 
     const activeLabour = hasActiveDeductions ? labourDeductions : undefined;
 
+    // Condition breakdown
+    const doubleBags = labourDeductions.pakkaDoubleLabourEnabled ? (labourDeductions.doubleBagsCount ?? bagsCount) : 0;
+    const sukkiBags = labourDeductions.sukhiLabourEnabled ? (labourDeductions.sukkiBagsCount ?? bagsCount) : 0;
+    const pakkiBags = labourDeductions.pakkiLabourEnabled ? (labourDeductions.pakkiBagsCount ?? bagsCount) : 0;
+    const remainingBalanceBags = Math.max(0, bagsCount - (doubleBags + sukkiBags));
+
+    const conditionBreakdown = (labourDeductions.pakkaDoubleLabourEnabled || labourDeductions.sukhiLabourEnabled) ? {
+      doubleBags,
+      sukkiBags,
+      pakkiBags,
+      remainingBalanceBags
+    } : undefined;
+
     const newRecord = addBagsEntry({
       date: dateInput || getTodayFormatted(),
       farmerId: selectedFarmer.id,
@@ -174,6 +262,7 @@ export const BagsEntry: React.FC = () => {
       ratePerQtl: FIXED_RATE_PER_QTL, // 2461
       totalAmount: calculatedGrossAmount,
       labourDeductions: activeLabour,
+      conditionBreakdown,
       netAmount: netPayableAmount
     });
 
@@ -191,9 +280,15 @@ export const BagsEntry: React.FC = () => {
     notifySaveSuccess({
       titlePa: 'ਬੋਰੀਆਂ ਦੀ ਐਂਟਰੀ ਸਫਲਤਾਪੂਰਵਕ ਸੇਵ ਹੋ ਗਈ!',
       titleEn: 'Bags Entry Saved Successfully',
-      messagePa: `${selectedFarmer.farmerNamePa || selectedFarmer.farmerName} (${selectedFarmer.villagePa || selectedFarmer.village}) ਲਈ ${bagsCount} ਬੋਰੀਆਂ ${bardanaText} ਦਰਜ ਹੋ ਗਈਆਂ।`,
-      details: `ਰਸੀਦ ਨੰ: ${newRecord.id} • ਰਕਮ: ${formatCurrency(calculatedGrossAmount)}${deductionMsg}`
+      messagePa: `${selectedFarmer.farmerNamePa || selectedFarmer.farmerName} (${selectedFarmer.villagePa || selectedFarmer.village}) ਲਈ ${bagsCount} ਬੋਰੀਆਂ ${bardanaText} ਦਰਜ ਹੋ ਗਈਆਂ। ਪਰਚੀ ਨੰ: #${newRecord.parchiNo || newRecord.entryNumber}`,
+      details: `ਪਰਚੀ ਨੰ: #${newRecord.parchiNo || newRecord.entryNumber} • ਰਕਮ: ${formatCurrency(calculatedGrossAmount)}${deductionMsg}`
     });
+
+    // Clear universal auto-save draft only upon successful save
+    clearDraft();
+    setNewBagsInput('');
+    setOldBagsInput('');
+    setTotaInput('');
 
     setSavedReceiptRecord(newRecord);
     setIsSaving(false);
@@ -208,11 +303,25 @@ export const BagsEntry: React.FC = () => {
             <PackageCheck className="w-5 h-5" />
           </div>
           <div>
-            <h2 className="text-sm sm:text-base font-black text-slate-900">
-              ਕਿਸਾਨ ਬੋਰੀਆਂ ਐਂਟਰੀ (Farmer Bags Entry)
-            </h2>
-            <p className="text-[11px] text-slate-500">
-              ਫਿਕਸਡ 37.50 KG ਬੋਰੀ ਵਜ਼ਨ • ਵੱਖਰਾ ਟੋਟਾ • ਕੁਇੰਟਲ+ਕਿਲੋ ਫਾਰਮੈਟ • ਸਰਕਾਰੀ ਭਾਅ ₹2,461/ਕੁਇੰਟਲ
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="text-sm sm:text-base font-black text-slate-900">
+                {isEn ? 'Farmer Bags Entry' : 'ਕਿਸਾਨ ਬੋਰੀਆਂ ਐਂਟਰੀ (Farmer Bags Entry)'}
+              </h2>
+              {/* Separate Parchi Number Badge */}
+              <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-950 border border-amber-300 font-mono font-black text-xs px-2.5 py-0.5 rounded-full shadow-2xs">
+                <Hash className="w-3 h-3 text-amber-700" />
+                <span>{isEn ? `Slip #${nextParchiNo}` : `ਪਰਚੀ ਨੰ: #${nextParchiNo}`}</span>
+              </span>
+              {/* Separate Date Badge */}
+              <span className="inline-flex items-center gap-1 bg-slate-100 text-slate-800 border border-slate-300 font-mono font-bold text-xs px-2.5 py-0.5 rounded-full">
+                <Calendar className="w-3 h-3 text-slate-500" />
+                <span>{isEn ? `Date: ${dateInput}` : `ਮਿਤੀ: ${dateInput}`}</span>
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-500 mt-0.5">
+              {isEn
+                ? 'Fixed 37.50 KG bag weight • Separate Tota • Quintal+Kg format • Govt. MSP ₹2,461/Qtl'
+                : 'ਫਿਕਸਡ 37.50 KG ਬੋਰੀ ਵਜ਼ਨ • ਵੱਖਰਾ ਟੋਟਾ • ਕੁਇੰਟਲ+ਕਿਲੋ ਫਾਰਮੈਟ • ਸਰਕਾਰੀ ਭਾਅ ₹2,461/ਕੁਇੰਟਲ'}
             </p>
           </div>
         </div>
@@ -222,7 +331,7 @@ export const BagsEntry: React.FC = () => {
             onClick={() => setActiveSection('same-date-multi-entry')}
             className="text-xs bg-slate-900 hover:bg-slate-800 text-white font-bold px-3 py-1.5 rounded-lg shadow-2xs transition"
           >
-            ਇੱਕੋ ਮਿਤੀ ਮਲਟੀ ਕਿਸਾਨ ਐਂਟਰੀ →
+            {isEn ? 'Same Date Multi-Farmer Entry →' : 'ਇੱਕੋ ਮਿਤੀ ਮਲਟੀ ਕਿਸਾਨ ਐਂਟਰੀ →'}
           </button>
         </div>
       </div>
@@ -235,12 +344,12 @@ export const BagsEntry: React.FC = () => {
               <CheckCircle2 className="w-5 h-5 text-emerald-600" />
               <div>
                 <h3 className="font-black text-emerald-900 text-sm">
-                  ਬੋਰੀਆਂ ਐਂਟਰੀ ਸਫਲਤਾਪੂਰਵਕ ਦਰਜ ਹੋ ਗਈ ਹੈ! (Bags Entry Saved)
+                  {isEn ? 'Bags Entry Saved Successfully!' : 'ਬੋਰੀਆਂ ਐਂਟਰੀ ਸਫਲਤਾਪੂਰਵਕ ਦਰਜ ਹੋ ਗਈ ਹੈ! (Bags Entry Saved)'}
                 </h3>
                 <p className="text-xs text-emerald-800">
-                  ਰਸੀਦ ਨੰ: <strong className="font-mono">{savedReceiptRecord.entryNumber}</strong> • ਕਿਸਾਨ:{' '}
-                  <strong>{savedReceiptRecord.farmerNamePa} ({savedReceiptRecord.farmerId})</strong> • ਕੁੱਲ ਵਜ਼ਨ:{' '}
-                  <strong className="font-mono">{savedReceiptRecord.grandTotalDisplay}</strong> • ਰਕਮ:{' '}
+                  {isEn ? 'Receipt #' : 'ਰਸੀਦ ਨੰ:'} <strong className="font-mono">{savedReceiptRecord.entryNumber}</strong> • {isEn ? 'Farmer:' : 'ਕਿਸਾਨ:'}{' '}
+                  <strong>{isEn ? savedReceiptRecord.farmerName : `${savedReceiptRecord.farmerNamePa} (${savedReceiptRecord.farmerName})`}</strong> • {isEn ? 'Total Weight:' : 'ਕੁੱਲ ਵਜ਼ਨ:'}{' '}
+                  <strong className="font-mono">{savedReceiptRecord.grandTotalDisplay}</strong> • {isEn ? 'Amount:' : 'ਰਕਮ:'}{' '}
                   <strong className="font-mono">{formatCurrency(savedReceiptRecord.totalAmount)}</strong>
                 </p>
               </div>
@@ -249,7 +358,7 @@ export const BagsEntry: React.FC = () => {
               onClick={() => setSavedReceiptRecord(null)}
               className="text-xs text-emerald-700 hover:text-emerald-900 font-bold"
             >
-              ✕ ਬੰਦ ਕਰੋ
+              ✕ {isEn ? 'Close' : 'ਬੰਦ ਕਰੋ'}
             </button>
           </div>
 
@@ -259,7 +368,7 @@ export const BagsEntry: React.FC = () => {
               className="bg-emerald-700 hover:bg-emerald-600 text-white font-black px-4 py-1.5 rounded-lg text-xs flex items-center gap-1.5 shadow-2xs"
             >
               <Printer className="w-3.5 h-3.5" />
-              <span>ਰਸੀਦ ਪ੍ਰਿੰਟ ਕਰੋ (Print Weighment Slip)</span>
+              <span>{isEn ? 'Print Weighment Slip' : 'ਰਸੀਦ ਪ੍ਰਿੰਟ ਕਰੋ (Print Weighment Slip)'}</span>
             </button>
             <button
               onClick={() => {
@@ -270,7 +379,7 @@ export const BagsEntry: React.FC = () => {
               }}
               className="bg-white hover:bg-emerald-100 text-emerald-900 border border-emerald-300 font-bold px-3 py-1.5 rounded-lg text-xs"
             >
-              + ਅਗਲੀ ਐਂਟਰੀ ਕਰੋ (Next Entry)
+              {isEn ? '+ New Entry' : '+ ਅਗਲੀ ਐਂਟਰੀ ਕਰੋ (Next Entry)'}
             </button>
           </div>
         </div>
@@ -283,17 +392,19 @@ export const BagsEntry: React.FC = () => {
           </div>
           <div>
             <h3 className="text-xs sm:text-sm font-bold text-slate-800">
-              ਕੋਈ ਕਿਸਾਨ ਰਜਿਸਟਰਡ ਨਹੀਂ ਹੈ (No Farmers Registered)
+              {isEn ? 'No Farmers Registered' : 'ਕੋਈ ਕਿਸਾਨ ਰਜਿਸਟਰਡ ਨਹੀਂ ਹੈ (No Farmers Registered)'}
             </h3>
             <p className="text-[11px] text-slate-500 max-w-md mx-auto mt-1">
-              ਬੋਰੀਆਂ ਦਰਜ ਕਰਨ ਲਈ ਪਹਿਲਾਂ ਕਿਸਾਨ ਰਜਿਸਟਰ ਕਰਨਾ ਲਾਜ਼ਮੀ ਹੈ ਤਾਂ ਜੋ ਉਸਦਾ ਨਾਂ, ਆਈ.ਡੀ ਅਤੇ ਫੋਟੋ ਆਟੋਮੈਟਿਕ ਦਿਖਾਈ ਦੇਵੇ।
+              {isEn
+                ? 'Farmer registration is required before adding bags to associate name, ID, and village.'
+                : 'ਬੋਰੀਆਂ ਦਰਜ ਕਰਨ ਲਈ ਪਹਿਲਾਂ ਕਿਸਾਨ ਰਜਿਸਟਰ ਕਰਨਾ ਲਾਜ਼ਮੀ ਹੈ ਤਾਂ ਜੋ ਉਸਦਾ ਨਾਂ, ਆਈ.ਡੀ ਅਤੇ ਫੋਟੋ ਆਟੋਮੈਟਿਕ ਦਿਖਾਈ ਦੇਵੇ।'}
             </p>
           </div>
           <button
             onClick={() => setActiveSection('farmer-registration')}
             className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-4 py-2 rounded-lg text-xs shadow-2xs"
           >
-            + ਕਿਸਾਨ ਰਜਿਸਟਰ ਕਰੋ (Register Farmer)
+            {isEn ? '+ Register Farmer' : '+ ਕਿਸਾਨ ਰਜਿਸਟਰ ਕਰੋ (Register Farmer)'}
           </button>
         </div>
       ) : (
@@ -302,51 +413,40 @@ export const BagsEntry: React.FC = () => {
           <div className="lg:col-span-2 space-y-4">
             <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xs space-y-3.5">
               <h3 className="font-black text-slate-900 text-xs sm:text-sm border-b border-slate-100 pb-2">
-                1. ਮਿਤੀ ਤੇ ਕਿਸਾਨ ਦੀ ਚੋਣ (Date & Farmer Selection)
+                {isEn ? '1. Date & Farmer Selection' : '1. ਮਿਤੀ ਤੇ ਕਿਸਾਨ ਦੀ ਚੋਣ (Date & Farmer Selection)'}
               </h3>
 
-              {/* Date Input with Auto-Formatting */}
+              {/* Date Input with Auto-Formatting & Calendar Picker */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center justify-between">
-                    <span>ਮਿਤੀ (Date - DD/MM/YYYY)</span>
-                    <span className="text-[10px] text-emerald-700 font-mono">Auto /</span>
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      maxLength={10}
-                      placeholder="28/08/2026"
-                      value={dateInput}
-                      onChange={(e) => handleDateChange(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 text-xs font-mono font-black text-slate-900 focus:bg-white focus:outline-none focus:border-amber-500"
-                      required
-                    />
-                  </div>
-                  <span className="text-[10px] text-slate-400">ਉਦਾਹਰਨ: 28082026 ਲਿਖਣ 'ਤੇ 28/08/2026 ਬਣੇਗਾ</span>
+                  <DateInput
+                    value={dateInput}
+                    onChange={setDateInput}
+                    label={isEn ? "Date (DD/MM/YYYY)" : "ਮਿਤੀ (Date - DD/MM/YYYY)"}
+                    required
+                  />
+                  <span className="text-[10px] text-slate-400">
+                    {isEn ? 'Click calendar icon to pick date' : "ਕੈਲੰਡਰ ਆਈਕਨ 'ਤੇ ਕਲਿੱਕ ਕਰਕੇ ਮਿਤੀ ਚੁਣੋ"}
+                  </span>
                 </div>
 
-                {/* Farmer Selection Dropdown */}
+                {/* Farmer Selection Dropdown with Search Box */}
                 <div className="sm:col-span-2">
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    ਕਿਸਾਨ ਚੁਣੋ (Select Registered Farmer by ID or Name) <span className="text-rose-500">*</span>
-                  </label>
-                  <select
-                    value={selectedFarmerId}
-                    onChange={(e) => {
-                      setSelectedFarmerId(e.target.value);
-                      const f = farmers.find((farm) => farm.id === e.target.value);
+                  <SearchableSelect
+                    id="farmer-select"
+                    label={isEn ? "Select Registered Farmer" : "ਕਿਸਾਨ ਚੁਣੋ (Select Registered Farmer)"}
+                    value={selectedFarmerId || ''}
+                    onChange={(val) => {
+                      setSelectedFarmerId(val);
+                      const f = farmers.find((farm) => farm.id === val);
                       if (f) setSelectedFarmerForBags(f);
                     }}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 text-xs font-bold text-slate-900 focus:bg-white focus:outline-none focus:border-amber-500"
+                    options={farmerOptions}
+                    placeholder={isEn ? "Search and select farmer..." : "ਕਿਸਾਨ ਖੋਜੋ ਤੇ ਚੁਣੋ..."}
+                    searchPlaceholder={isEn ? "Type farmer name, ID, village, phone..." : "ਕਿਸਾਨ ਖੋਜੋ (ਨਾਮ, ਆਈ.ਡੀ, ਮੋਬਾਈਲ, ਪਿੰਡ)..."}
+                    emptyMessage={isEn ? "No farmer found matching search" : "ਕੋਈ ਕਿਸਾਨ ਨਹੀਂ ਮਿਲਿਆ"}
                     required
-                  >
-                    {farmers.map((f) => (
-                      <option key={f.id} value={f.id}>
-                        {f.id} - {f.farmerNamePa} ({f.farmerName}) • ਪਿੰਡ: {f.villagePa || f.village}
-                      </option>
-                    ))}
-                  </select>
+                  />
                 </div>
               </div>
 
@@ -355,34 +455,34 @@ export const BagsEntry: React.FC = () => {
                 <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 flex items-center justify-between gap-3 text-xs">
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-1 w-full">
                     <div>
-                      <span className="text-slate-500 text-[10px] block">ਕਿਸਾਨ ਆਈ.ਡੀ:</span>
+                      <span className="text-slate-500 text-[10px] block">{isEn ? 'Farmer ID:' : 'ਕਿਸਾਨ ਆਈ.ਡੀ:'}</span>
                       <strong className="font-mono font-black text-emerald-800">{selectedFarmer.id}</strong>
                     </div>
                     <div>
-                      <span className="text-slate-500 text-[10px] block">ਕਿਸਾਨ ਦਾ ਨਾਂ:</span>
+                      <span className="text-slate-500 text-[10px] block">{isEn ? 'Farmer Name:' : 'ਕਿਸਾਨ ਦਾ ਨਾਂ:'}</span>
                       <strong className="text-slate-900">
-                        {selectedFarmer.farmerNamePa} ({selectedFarmer.farmerName})
+                        {isEn ? selectedFarmer.farmerName : `${selectedFarmer.farmerNamePa} (${selectedFarmer.farmerName})`}
                       </strong>
                     </div>
                     <div>
-                      <span className="text-slate-500 text-[10px] block">ਪਿਤਾ ਦਾ ਨਾਂ:</span>
+                      <span className="text-slate-500 text-[10px] block">{isEn ? "Father's Name:" : 'ਪਿਤਾ ਦਾ ਨਾਂ:'}</span>
                       <strong className="text-slate-800">
-                        {selectedFarmer.fatherNamePa || selectedFarmer.fatherName || '—'}
+                        {isEn ? (selectedFarmer.fatherName || '—') : (selectedFarmer.fatherNamePa || selectedFarmer.fatherName || '—')}
                       </strong>
                     </div>
                     <div>
-                      <span className="text-slate-500 text-[10px] block">ਪਿੰਡ (Village):</span>
+                      <span className="text-slate-500 text-[10px] block">{isEn ? 'Village:' : 'ਪਿੰਡ (Village):'}</span>
                       <strong className="text-slate-900">
-                        {selectedFarmer.villagePa || selectedFarmer.village} ({selectedFarmer.pinCode})
+                        {isEn ? selectedFarmer.village : `${selectedFarmer.villagePa || selectedFarmer.village} (${selectedFarmer.pinCode})`}
                       </strong>
                     </div>
                     <div>
-                      <span className="text-slate-500 text-[10px] block">ਮੋਬਾਈਲ (Mobile):</span>
+                      <span className="text-slate-500 text-[10px] block">{isEn ? 'Mobile:' : 'ਮੋਬਾਈਲ (Mobile):'}</span>
                       <strong className="font-mono text-slate-900">{selectedFarmer.mobile}</strong>
                     </div>
                     <div>
-                      <span className="text-slate-500 text-[10px] block">ਆਧਾਰ (Aadhaar):</span>
-                      <strong className="font-mono text-slate-900">{selectedFarmer.aadhaar}</strong>
+                      <span className="text-slate-500 text-[10px] block">{isEn ? 'Aadhaar:' : 'ਆਧਾਰ (Aadhaar):'}</span>
+                      <strong className="font-mono text-slate-900">{selectedFarmer.aadhaar || '—'}</strong>
                     </div>
                   </div>
 
@@ -406,15 +506,15 @@ export const BagsEntry: React.FC = () => {
             <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xs space-y-3.5">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-2">
                 <h3 className="font-black text-slate-900 text-xs sm:text-sm">
-                  2. ਬਾਰਦਾਨਾ ਤੇ ਵਜ਼ਨ ਵੇਰਵੇ (Bardana & Weighment Entry)
+                  {isEn ? '2. Bardana & Weighment Entry' : '2. ਬਾਰਦਾਨਾ ਤੇ ਵਜ਼ਨ ਵੇਰਵੇ (Bardana & Weighment Entry)'}
                 </h3>
                 <div className="flex items-center gap-1.5 text-[11px]">
-                  <span className="text-slate-500 font-medium">ਉਪਲਬਧ ਸਟਾਕ:</span>
+                  <span className="text-slate-500 font-medium">{isEn ? 'Available Stock:' : 'ਉਪਲਬਧ ਸਟਾਕ:'}</span>
                   <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded font-bold">
-                    ਨਵਾਂ: {bardanaSummary.newBagsRemaining.toLocaleString('en-IN')}
+                    {isEn ? 'New:' : 'ਨਵਾਂ:'} {bardanaSummary.newBagsRemaining.toLocaleString('en-IN')}
                   </span>
                   <span className="bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 rounded font-bold">
-                    ਪੁਰਾਣਾ: {bardanaSummary.oldBagsRemaining.toLocaleString('en-IN')}
+                    {isEn ? 'Old:' : 'ਪੁਰਾਣਾ:'} {bardanaSummary.oldBagsRemaining.toLocaleString('en-IN')}
                   </span>
                 </div>
               </div>
@@ -423,64 +523,64 @@ export const BagsEntry: React.FC = () => {
                 {/* 1. New Bardana Bags Input */}
                 <div className="bg-emerald-50/40 border border-emerald-200 rounded-lg p-3">
                   <label className="block text-xs font-bold text-emerald-950 mb-1 flex items-center justify-between">
-                    <span>1. ਨਵਾਂ ਬਾਰਦਾਨਾ (New Bags)</span>
+                    <span>{isEn ? '1. New Bags' : '1. ਨਵਾਂ ਬਾਰਦਾਨਾ (New Bags)'}</span>
                     <span className="text-[10px] bg-emerald-100 text-emerald-800 font-black px-1.5 py-0.5 rounded">
-                      ਨਵਾਂ
+                      {isEn ? 'NEW' : 'ਨਵਾਂ'}
                     </span>
                   </label>
                   <input
                     type="number"
                     min="0"
                     step="1"
-                    placeholder="e.g. 500"
-                    value={newBagsInput}
+                    placeholder="0"
+                    value={newBagsInput || ''}
                     onChange={(e) => setNewBagsInput(e.target.value)}
-                    className="w-full bg-white border border-emerald-300 rounded-lg p-2 text-xs font-mono font-black text-emerald-950 focus:bg-white focus:outline-none focus:border-emerald-500"
+                    className="w-full bg-white border-2 border-emerald-300 rounded-lg py-2.5 px-3 text-lg font-mono font-black text-emerald-950 focus:bg-white focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
                   />
                   <div className="mt-1 text-[10px] text-emerald-700 font-medium">
-                    ਨਵੇਂ ਬਾਰਦਾਨੇ ਵਿੱਚ ਭਰੀਆਂ ਬੋਰੀਆਂ
+                    {isEn ? 'Bags packed in new bardana (e.g. 1500)' : 'ਨਵੇਂ ਬਾਰਦਾਨੇ ਵਿੱਚ ਭਰੀਆਂ ਬੋਰੀਆਂ (e.g. 1500)'}
                   </div>
                 </div>
 
                 {/* 2. Old Bardana Bags Input */}
                 <div className="bg-amber-50/40 border border-amber-200 rounded-lg p-3">
                   <label className="block text-xs font-bold text-amber-950 mb-1 flex items-center justify-between">
-                    <span>2. ਪੁਰਾਣਾ ਬਾਰਦਾਨਾ (Old Bags)</span>
+                    <span>{isEn ? '2. Old Bags' : '2. ਪੁਰਾਣਾ ਬਾਰਦਾਨਾ (Old Bags)'}</span>
                     <span className="text-[10px] bg-amber-100 text-amber-800 font-black px-1.5 py-0.5 rounded">
-                      ਪੁਰਾਣਾ
+                      {isEn ? 'OLD' : 'ਪੁਰਾਣਾ'}
                     </span>
                   </label>
                   <input
                     type="number"
                     min="0"
                     step="1"
-                    placeholder="e.g. 500"
-                    value={oldBagsInput}
+                    placeholder="0"
+                    value={oldBagsInput || ''}
                     onChange={(e) => setOldBagsInput(e.target.value)}
-                    className="w-full bg-white border border-amber-300 rounded-lg p-2 text-xs font-mono font-black text-amber-950 focus:bg-white focus:outline-none focus:border-amber-500"
+                    className="w-full bg-white border-2 border-amber-300 rounded-lg py-2.5 px-3 text-lg font-mono font-black text-amber-950 focus:bg-white focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-200"
                   />
                   <div className="mt-1 text-[10px] text-amber-700 font-medium">
-                    ਪੁਰਾਣੇ ਬਾਰਦਾਨੇ ਵਿੱਚ ਭਰੀਆਂ ਬੋਰੀਆਂ
+                    {isEn ? 'Bags packed in old bardana (e.g. 500)' : 'ਪੁਰਾਣੇ ਬਾਰਦਾਨੇ ਵਿੱਚ ਭਰੀਆਂ ਬੋਰੀਆਂ (e.g. 500)'}
                   </div>
                 </div>
 
                 {/* 3. Separate Tota Input */}
                 <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
                   <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center justify-between">
-                    <span>3. ਵੱਖਰਾ ਟੋਟਾ (Tota in Kg)</span>
+                    <span>{isEn ? '3. Separate Tota (Kg)' : '3. ਵੱਖਰਾ ਟੋਟਾ (Tota in Kg)'}</span>
                     <span className="text-[10px] text-amber-800 font-bold bg-amber-100 px-1 rounded">Kg</span>
                   </label>
                   <input
                     type="number"
                     min="0"
                     step="0.01"
-                    placeholder="e.g. 20"
-                    value={totaInput}
+                    placeholder="0"
+                    value={totaInput || ''}
                     onChange={(e) => setTotaInput(e.target.value)}
-                    className="w-full bg-white border border-slate-300 rounded-lg p-2 text-xs font-mono font-black text-amber-900 focus:bg-white focus:outline-none focus:border-amber-500"
+                    className="w-full bg-white border-2 border-slate-300 rounded-lg py-2.5 px-3 text-lg font-mono font-black text-amber-950 focus:bg-white focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-200"
                   />
                   <div className="mt-1 text-[10px] text-slate-500">
-                    ਟੋਟਾ ਬੋਰੀ ਵਜ਼ਨ ਤੋਂ ਵੱਖਰਾ ਜੋੜਿਆ ਜਾਂਦਾ ਹੈ
+                    {isEn ? 'Tota added separately from bag calculation' : 'ਟੋਟਾ ਬੋਰੀ ਵਜ਼ਨ ਤੋਂ ਵੱਖਰਾ ਜੋੜਿਆ ਜਾਂਦਾ ਹੈ'}
                   </div>
                 </div>
               </div>
@@ -488,16 +588,16 @@ export const BagsEntry: React.FC = () => {
               {/* Auto-Calculated Total Bags Summary Bar */}
               <div className="bg-gradient-to-r from-slate-50 to-slate-100 border border-slate-200 rounded-lg p-2.5 flex flex-wrap items-center justify-between gap-2 text-xs">
                 <div className="flex items-center gap-2">
-                  <span className="text-slate-700 font-bold">ਕੁੱਲ ਬੋਰੀਆਂ (Total Bags):</span>
+                  <span className="text-slate-700 font-bold">{isEn ? 'Total Bags:' : 'ਕੁੱਲ ਬੋਰੀਆਂ (Total Bags):'}</span>
                   <span className="font-mono font-black text-sm text-slate-900 bg-white px-2 py-0.5 rounded border border-slate-300 shadow-2xs">
-                    {bagsCount} ਬੋਰੀਆਂ
+                    {bagsCount} {isEn ? 'Bags' : 'ਬੋਰੀਆਂ'}
                   </span>
                   <span className="text-[11px] text-slate-500 font-medium">
-                    (ਨਵਾਂ: {newBagsCount} + ਪੁਰਾਣਾ: {oldBagsCount})
+                    ({isEn ? 'New:' : 'ਨਵਾਂ:'} {newBagsCount} + {isEn ? 'Old:' : 'ਪੁਰਾਣਾ:'} {oldBagsCount})
                   </span>
                 </div>
                 <div className="flex items-center gap-1.5 text-emerald-900 font-bold text-[11px]">
-                  <span>ਨਿਰਧਾਰਿਤ ਵਜ਼ਨ:</span>
+                  <span>{isEn ? 'Std Bag Weight:' : 'ਨਿਰਧਾਰਿਤ ਵਜ਼ਨ:'}</span>
                   <strong className="font-mono bg-emerald-100 px-1.5 py-0.5 rounded">37.50 KG / Bag</strong>
                 </div>
               </div>
@@ -519,21 +619,23 @@ export const BagsEntry: React.FC = () => {
           <div className="space-y-4">
             <div className="bg-slate-900 text-white rounded-xl p-4 shadow-2xs border border-slate-800 space-y-3.5">
               <h3 className="font-black text-xs uppercase tracking-wider text-emerald-400 border-b border-slate-800 pb-2 flex items-center justify-between">
-                <span>ਲਾਈਵ ਹਿਸਾਬ (Live Calculation)</span>
+                <span>{isEn ? 'Live Calculation' : 'ਲਾਈਵ ਹਿਸਾਬ (Live Calculation)'}</span>
                 <span className="text-[10px] text-slate-400 font-mono">₹2,461 / Qul</span>
               </h3>
 
               <div className="space-y-2.5 text-xs">
                 {/* 0. Bardana Breakdown */}
                 <div className="bg-slate-800/90 rounded-lg p-2.5 border border-slate-700">
-                  <div className="text-[11px] text-slate-400 font-semibold mb-1">ਬਾਰਦਾਨਾ ਵੇਰਵਾ (Bardana Split):</div>
+                  <div className="text-[11px] text-slate-400 font-semibold mb-1">
+                    {isEn ? 'Bardana Split:' : 'ਬਾਰਦਾਨਾ ਵੇਰਵਾ (Bardana Split):'}
+                  </div>
                   <div className="grid grid-cols-2 gap-2 text-center text-xs font-mono">
                     <div className="bg-emerald-950/80 border border-emerald-700/60 rounded p-1 text-emerald-300">
-                      <span className="text-[10px] block text-emerald-400/80">ਨਵਾਂ ਬਾਰਦਾਨਾ</span>
+                      <span className="text-[10px] block text-emerald-400/80">{isEn ? 'New Bardana' : 'ਨਵਾਂ ਬਾਰਦਾਨਾ'}</span>
                       <strong>{newBagsCount} Bags</strong>
                     </div>
                     <div className="bg-amber-950/80 border border-amber-700/60 rounded p-1 text-amber-300">
-                      <span className="text-[10px] block text-amber-400/80">ਪੁਰਾਣਾ ਬਾਰਦਾਨਾ</span>
+                      <span className="text-[10px] block text-amber-400/80">{isEn ? 'Old Bardana' : 'ਪੁਰਾਣਾ ਬਾਰਦਾਨਾ'}</span>
                       <strong>{oldBagsCount} Bags</strong>
                     </div>
                   </div>
@@ -542,19 +644,19 @@ export const BagsEntry: React.FC = () => {
                 {/* 1. Bags Weight breakdown */}
                 <div className="bg-slate-800/80 rounded-lg p-2.5 border border-slate-700/60">
                   <div className="text-[11px] text-slate-400 flex justify-between">
-                    <span>ਕੁੱਲ ਬੋਰੀਆਂ ਦਾ ਵਜ਼ਨ:</span>
+                    <span>{isEn ? 'Bags Total Weight:' : 'ਕੁੱਲ ਬੋਰੀਆਂ ਦਾ ਵਜ਼ਨ:'}</span>
                     <span className="font-mono text-slate-300">{bagsCount} × 37.50 KG</span>
                   </div>
                   <div className="text-base font-mono font-black text-white mt-0.5">
                     {bagsWeightBreakdown.displayEn}
                   </div>
-                  <div className="text-[10px] text-slate-400">{bagsWeightBreakdown.displayPa}</div>
+                  {!isEn && <div className="text-[10px] text-slate-400">{bagsWeightBreakdown.displayPa}</div>}
                 </div>
 
                 {/* 2. Separate Tota */}
                 <div className="bg-slate-800/80 rounded-lg p-2.5 border border-slate-700/60 flex items-center justify-between">
                   <div>
-                    <div className="text-[11px] text-slate-400">ਵੱਖਰਾ ਟੋਟਾ (Separate Tota):</div>
+                    <div className="text-[11px] text-slate-400">{isEn ? 'Separate Tota:' : 'ਵੱਖਰਾ ਟੋਟਾ (Separate Tota):'}</div>
                     <div className="text-sm font-mono font-bold text-amber-400 mt-0.5">
                       {totaKg} Kg
                     </div>
@@ -567,23 +669,23 @@ export const BagsEntry: React.FC = () => {
                 {/* 3. Grand Total (Qul + Kg) */}
                 <div className="bg-emerald-950/70 border border-emerald-600/50 rounded-lg p-2.5">
                   <div className="text-[11px] text-emerald-300 flex justify-between">
-                    <span>ਗ੍ਰੈਂਡ ਟੋਟਲ ਵਜ਼ਨ (Grand Total):</span>
+                    <span>{isEn ? 'Grand Total Weight:' : 'ਗ੍ਰੈਂਡ ਟੋਟਲ ਵਜ਼ਨ (Grand Total):'}</span>
                     <span className="font-mono text-[10px] text-emerald-400">Bags + Tota</span>
                   </div>
                   <div className="text-lg font-mono font-black text-emerald-300 mt-0.5">
                     {grandTotalBreakdown.displayEn}
                   </div>
-                  <div className="text-[10px] text-emerald-400">{grandTotalBreakdown.displayPa}</div>
+                  {!isEn && <div className="text-[10px] text-emerald-400">{grandTotalBreakdown.displayPa}</div>}
                 </div>
 
                 {/* 4. Mandi Rate & Total Payable Amount */}
                 <div className="pt-2 border-t border-slate-800 flex justify-between items-center">
-                  <span className="text-slate-400 text-xs font-semibold">ਸਰਕਾਰੀ ਭਾਅ:</span>
+                  <span className="text-slate-400 text-xs font-semibold">{isEn ? 'Govt. MSP Rate:' : 'ਸਰਕਾਰੀ ਭਾਅ:'}</span>
                   <span className="font-mono font-bold text-white text-xs">₹2,461 / Qul</span>
                 </div>
 
                 <div className="bg-slate-800 rounded-lg p-3 border border-slate-700">
-                  <div className="text-[11px] text-slate-400">ਕੁੱਲ ਗ੍ਰਾਸ ਰਕਮ (Gross Value):</div>
+                  <div className="text-[11px] text-slate-400">{isEn ? 'Gross Value:' : 'ਕੁੱਲ ਗ੍ਰਾਸ ਰਕਮ (Gross Value):'}</div>
                   <div className="text-lg font-mono font-black text-white mt-0.5">
                     {formatCurrency(calculatedGrossAmount)}
                   </div>
@@ -595,7 +697,7 @@ export const BagsEntry: React.FC = () => {
                     <div className="flex items-center justify-between text-rose-300 text-[11px]">
                       <span className="flex items-center gap-1 font-bold">
                         <Scissors className="w-3 h-3" />
-                        ਮਜ਼ਦੂਰੀ / ਕਟੌਤੀਆਂ:
+                        {isEn ? 'Labour / Deductions:' : 'ਮਜ਼ਦੂਰੀ / ਕਟੌਤੀਆਂ:'}
                       </span>
                       <span className="font-mono font-bold">
                         -{formatCurrency(labourDeductions.grandTotalDeductions)}
@@ -605,19 +707,19 @@ export const BagsEntry: React.FC = () => {
                     <div className="text-[10px] text-rose-200/80 pl-4 space-y-0.5">
                       {labourDeductions.pakkiLabourEnabled && (
                         <div className="flex justify-between">
-                          <span>ਪੱਕੀ ਮਜ਼ਦੂਰੀ (@ ₹{labourDeductions.pakkiLabourRate}):</span>
+                          <span>{isEn ? 'Pakki Labour' : 'ਪੱਕੀ ਮਜ਼ਦੂਰੀ'} (@ ₹{labourDeductions.pakkiLabourRate}):</span>
                           <span className="font-mono">₹{labourDeductions.pakkiLabourAmount.toFixed(2)}</span>
                         </div>
                       )}
                       {labourDeductions.pakkaDoubleLabourEnabled && (
                         <div className="flex justify-between">
-                          <span>ਪੱਕੀ ਡਬਲ ਮਜ਼ਦੂਰੀ (@ ₹{labourDeductions.pakkaDoubleLabourRate}):</span>
+                          <span>{isEn ? 'Pakka Double Labour' : 'ਪੱਕੀ ਡਬਲ ਮਜ਼ਦੂਰੀ'} (@ ₹{labourDeductions.pakkaDoubleLabourRate}):</span>
                           <span className="font-mono">₹{labourDeductions.pakkaDoubleLabourAmount.toFixed(2)}</span>
                         </div>
                       )}
                       {labourDeductions.sukhiLabourEnabled && (
                         <div className="flex justify-between">
-                          <span>ਸੁੱਕੀ ਮਜ਼ਦੂਰੀ (@ ₹{labourDeductions.sukhiLabourRate}):</span>
+                          <span>{isEn ? 'Sukhi Labour' : 'ਸੁੱਕੀ ਮਜ਼ਦੂਰੀ'} (@ ₹{labourDeductions.sukhiLabourRate}):</span>
                           <span className="font-mono">₹{labourDeductions.sukhiLabourAmount.toFixed(2)}</span>
                         </div>
                       )}
@@ -628,7 +730,7 @@ export const BagsEntry: React.FC = () => {
                 {/* Net Payable to Farmer */}
                 <div className="bg-emerald-900/60 border border-emerald-500/60 rounded-lg p-3">
                   <div className="text-[11px] text-emerald-300 font-bold uppercase tracking-wide">
-                    ਕਿਸਾਨ ਨੂੰ ਸ਼ੁੱਧ ਅਦਾਇਗੀ (Net Payable):
+                    {isEn ? 'Net Payable to Farmer:' : 'ਕਿਸਾਨ ਨੂੰ ਸ਼ੁੱਧ ਅਦਾਇਗੀ (Net Payable):'}
                   </div>
                   <div className="text-xl font-mono font-black text-emerald-300 mt-1">
                     {formatCurrency(netPayableAmount)}
@@ -645,12 +747,12 @@ export const BagsEntry: React.FC = () => {
                 {isSaving ? (
                   <>
                     <PackageCheck className="w-4 h-4 animate-spin" />
-                    <span>ਸੇਵ ਹੋ ਰਿਹਾ ਹੈ... (Saving Bags Entry...)</span>
+                    <span>{isEn ? 'Saving Bags Entry...' : 'ਸੇਵ ਹੋ ਰਿਹਾ ਹੈ... (Saving Bags Entry...)'}</span>
                   </>
                 ) : (
                   <>
                     <PackageCheck className="w-4 h-4" />
-                    <span>ਐਂਟਰੀ ਸੇਵ ਕਰੋ (Save Bags Entry)</span>
+                    <span>{isEn ? 'Save Bags Entry' : 'ਐਂਟਰੀ ਸੇਵ ਕਰੋ (Save Bags Entry)'}</span>
                   </>
                 )}
               </button>

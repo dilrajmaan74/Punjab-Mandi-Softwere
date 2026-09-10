@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useMandi } from '../../context/MandiContext';
 import { useNotification } from '../../context/NotificationContext';
 import { LeftingRecord, BardanaType, SellerMaster } from '../../types/mandi';
+import { SearchableSelect, SearchableSelectOption } from '../common/SearchableSelect';
 import {
   Truck,
   FileText,
@@ -53,8 +54,11 @@ export const LeftingManagement: React.FC = () => {
     settings,
     addLeftingRecord,
     updateLeftingRecord,
-    deleteLeftingRecord
+    deleteLeftingRecord,
+    language
   } = useMandi();
+
+  const isEn = language === 'en';
 
   const { notifySaveSuccess, notifyDeleteSuccess, notifyError, confirmDelete } = useNotification();
 
@@ -122,6 +126,68 @@ export const LeftingManagement: React.FC = () => {
   const [editShortageKg, setEditShortageKg] = useState<string>('0');
   const [editReceivingDate, setEditReceivingDate] = useState<string>('');
   const [editRemarks, setEditRemarks] = useState<string>('');
+
+  const agencyOptions: SearchableSelectOption[] = useMemo(() => {
+    const opts: SearchableSelectOption[] = STANDARD_AGENCIES.map((ag) => ({
+      value: ag,
+      label: isEn ? ag.split('(')[0].trim() : ag,
+      subLabel: isEn ? ag.split('(')[1]?.replace(')', '') : undefined,
+      keywords: [ag]
+    }));
+    opts.push({
+      value: 'CUSTOM',
+      label: isEn ? '+ Other Custom Agency' : '+ ਹੋਰ ਏਜੰਸੀ (Custom)',
+      keywords: ['custom', 'other']
+    });
+    return opts;
+  }, [isEn]);
+
+  const sellerOptions: SearchableSelectOption[] = useMemo(() => {
+    return sellers.map((s) => ({
+      value: s.id,
+      label: isEn ? s.name : `${s.name} ${s.namePa ? `(${s.namePa})` : ''}`,
+      subLabel: `${isEn ? 'Location' : 'ਪਤਾ'}: ${s.address || s.city || '-'}`,
+      badge: s.licenceNo || undefined,
+      keywords: [s.name, s.namePa || '', s.address || '', s.city || '', s.phone || '', s.mobile || '']
+    }));
+  }, [sellers, isEn]);
+
+  const truckOptions: SearchableSelectOption[] = useMemo(() => {
+    return trucks.map((t) => ({
+      value: t.truckNo,
+      label: t.truckNo,
+      subLabel: t.driverName ? `${isEn ? 'Driver' : 'ਡਰਾਈਵਰ'}: ${t.driverName}${t.driverMobile ? ` (${t.driverMobile})` : ''}` : undefined,
+      badge: t.truckNo.slice(-4),
+      keywords: [t.truckNo, t.driverName || '', t.driverMobile || '']
+    }));
+  }, [trucks, isEn]);
+
+  const bardanaTypeOptions: SearchableSelectOption[] = useMemo(() => [
+    { value: 'NEW', label: isEn ? 'New Bags' : 'ਨਵਾਂ ਬਾਰਦਾਨਾ (New Bags)' },
+    { value: 'OLD', label: isEn ? 'Old Bags' : 'ਪੁਰਾਣਾ ਬਾਰਦਾਨਾ (Old Bags)' },
+    { value: 'BOTH', label: isEn ? 'Both (New + Old Mixed)' : 'ਦੋਵੇਂ (New + Old Mixed)' }
+  ], [isEn]);
+
+  const filterAgencyOptions: SearchableSelectOption[] = useMemo(() => [
+    { value: 'ALL', label: isEn ? 'All Agencies' : 'ਸਾਰੀਆਂ ਏਜੰਸੀਆਂ (All Agencies)' },
+    ...STANDARD_AGENCIES.map((ag) => ({
+      value: ag,
+      label: isEn ? ag.split('(')[0].trim() : ag,
+      keywords: [ag]
+    }))
+  ], [isEn]);
+
+  const filterStatusOptions: SearchableSelectOption[] = useMemo(() => [
+    { value: 'ALL', label: isEn ? 'All Status' : 'ਸਾਰੀ ਸਥਿਤੀ (All Status)' },
+    { value: 'DISPATCHED', label: isEn ? 'Dispatched' : 'ਰਵਾਨਾ (Dispatched)' },
+    { value: 'DELIVERED', label: isEn ? 'Delivered' : 'ਪਹੁੰਚਿਆ (Delivered)' }
+  ], [isEn]);
+
+  const editStatusOptions: SearchableSelectOption[] = useMemo(() => [
+    { value: 'DISPATCHED', label: isEn ? 'Dispatched' : 'ਰਵਾਨਾ (Dispatched)' },
+    { value: 'DELIVERED', label: isEn ? 'Delivered to Seller' : 'ਸੈਲਰ ਪਹੁੰਚ ਗਿਆ (Delivered)' },
+    { value: 'REJECTED_PARTIAL', label: isEn ? 'Partial Rejected / Shortage' : 'ਅੰਸ਼ਕ ਰੱਦ / ਸ਼ਾਰਟੇਜ (Rejected/Shortage)' }
+  ], [isEn]);
 
   // Handle Seller selection change
   const handleSellerSelect = (sId: string) => {
@@ -381,10 +447,10 @@ export const LeftingManagement: React.FC = () => {
           </div>
           <div>
             <h1 className="text-xl font-black text-slate-900 flex items-center gap-2">
-              <span>ਲਿਫਟਿੰਗ - ਸ਼ੈਲਰ ਰਵਾਨਗੀ / LEFTING & DISPATCH</span>
+              <span>{isEn ? 'Lefting & Dispatch Management' : 'ਲਿਫਟਿੰਗ - ਸ਼ੈਲਰ ਰਵਾਨਗੀ / LEFTING & DISPATCH'}</span>
             </h1>
             <p className="text-xs text-slate-500 font-medium">
-              ਮੰਡੀ ਤੋਂ ਰਾਈਸ ਮਿੱਲਾਂ / ਸ਼ੈਲਰਾਂ ਨੂੰ ਝੋਨੇ ਦੀ ਰਵਾਨਗੀ, ਗੇਟ ਪਾਸ, ਬਿਲਟੀ ਅਤੇ ਡਲਿਵਰੀ ਰਜਿਸਟਰ
+              {isEn ? 'Mandi to rice mill / sheller dispatch, gate pass, bilti and delivery tracking register' : 'ਮੰਡੀ ਤੋਂ ਰਾਈਸ ਮਿੱਲਾਂ / ਸ਼ੈਲਰਾਂ ਨੂੰ ਝੋਨੇ ਦੀ ਰਵਾਨਗੀ, ਗੇਟ ਪਾਸ, ਬਿਲਟੀ ਅਤੇ ਡਲਿਵਰੀ ਰਜਿਸਟਰ'}
             </p>
           </div>
         </div>
@@ -400,7 +466,7 @@ export const LeftingManagement: React.FC = () => {
             }`}
           >
             <Plus className="w-4 h-4" />
-            <span>ਨਵੀਂ ਰਵਾਨਗੀ (New Dispatch)</span>
+            <span>{isEn ? 'New Dispatch' : 'ਨਵੀਂ ਰਵਾਨਗੀ (New Dispatch)'}</span>
           </button>
           <button
             onClick={() => setActiveTab('history')}
@@ -411,7 +477,7 @@ export const LeftingManagement: React.FC = () => {
             }`}
           >
             <FileText className="w-4 h-4" />
-            <span>ਰਵਾਨਗੀ ਰਜਿਸਟਰ ({leftingRecords.length})</span>
+            <span>{isEn ? `Dispatch Register (${leftingRecords.length})` : `ਰਵਾਨਗੀ ਰਜਿਸਟਰ (${leftingRecords.length})`}</span>
           </button>
         </div>
       </div>
@@ -419,35 +485,35 @@ export const LeftingManagement: React.FC = () => {
       {/* 2. STATS SUMMARY BAR */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
-          <div className="text-[11px] text-slate-500 font-bold uppercase">ਮੰਡੀ ਖਰੀਦ ਬਾਕੀ ਲਿਫਟਿੰਗ</div>
+          <div className="text-[11px] text-slate-500 font-bold uppercase">{isEn ? 'Pending Lefting Stock' : 'ਮੰਡੀ ਖਰੀਦ ਬਾਕੀ ਲਿਫਟਿੰਗ'}</div>
           <div className="text-xl font-black text-amber-600 mt-1">
             {totalPendingLiftingBags.toLocaleString('en-IN')} Bags
           </div>
-          <div className="text-[10px] text-slate-400 mt-0.5">ਸ਼ੈਲਰ ਰਵਾਨਾ ਹੋਣ ਵਾਲਾ ਸਟਾਕ</div>
+          <div className="text-[10px] text-slate-400 mt-0.5">{isEn ? 'Stock awaiting dispatch to shellers' : 'ਸ਼ੈਲਰ ਰਵਾਨਾ ਹੋਣ ਵਾਲਾ ਸਟਾਕ'}</div>
         </div>
 
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
-          <div className="text-[11px] text-slate-500 font-bold uppercase">ਕੁੱਲ ਰਵਾਨਾ ਬੋਰੀਆਂ (Dispatched)</div>
+          <div className="text-[11px] text-slate-500 font-bold uppercase">{isEn ? 'Total Dispatched Bags' : 'ਕੁੱਲ ਰਵਾਨਾ ਬੋਰੀਆਂ (Dispatched)'}</div>
           <div className="text-xl font-black text-slate-900 mt-1">
             {totalDispatchedBags.toLocaleString('en-IN')} Bags
           </div>
-          <div className="text-[10px] text-slate-500 mt-0.5">{(totalDispatchedKg / 100).toFixed(1)} ਕੁਇੰਟਲ ਵਜ਼ਨ</div>
+          <div className="text-[10px] text-slate-500 mt-0.5">{(totalDispatchedKg / 100).toFixed(1)} {isEn ? 'Qtl Weight' : 'ਕੁਇੰਟਲ ਵਜ਼ਨ'}</div>
         </div>
 
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
-          <div className="text-[11px] text-slate-500 font-bold uppercase">ਸਫਲ ਡਲਿਵਰੀ (Delivered)</div>
+          <div className="text-[11px] text-slate-500 font-bold uppercase">{isEn ? 'Delivered Bags' : 'ਸਫਲ ਡਲਿਵਰੀ (Delivered)'}</div>
           <div className="text-xl font-black text-emerald-700 mt-1">
             {totalDeliveredBags.toLocaleString('en-IN')} Bags
           </div>
-          <div className="text-[10px] text-emerald-600 mt-0.5">ਸ਼ੈਲਰ ਵਿਖੇ ਪ੍ਰਾਪਤ ਹੋ ਚੁੱਕਾ ਮਾਲ</div>
+          <div className="text-[10px] text-emerald-600 mt-0.5">{isEn ? 'Goods received at sheller' : 'ਸ਼ੈਲਰ ਵਿਖੇ ਪ੍ਰਾਪਤ ਹੋ ਚੁੱਕਾ ਮਾਲ'}</div>
         </div>
 
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
-          <div className="text-[11px] text-slate-500 font-bold uppercase">ਸ਼ਾਰਟੇਜ / ਰੱਦ (Shortage)</div>
+          <div className="text-[11px] text-slate-500 font-bold uppercase">{isEn ? 'Shortage / Rejection' : 'ਸ਼ਾਰਟੇਜ / ਰੱਦ (Shortage)'}</div>
           <div className="text-xl font-black text-rose-700 mt-1">
             {totalShortageKg > 0 ? `${totalShortageKg} Kg` : `${totalRejectedBags} Bags`}
           </div>
-          <div className="text-[10px] text-rose-600 mt-0.5">ਸ਼ੈਲਰ ਵੱਲੋਂ ਕਟੌਤੀ ਜਾਂ ਇਤਰਾਜ਼</div>
+          <div className="text-[10px] text-rose-600 mt-0.5">{isEn ? 'Deductions or objections by sheller' : 'ਸ਼ੈਲਰ ਵੱਲੋਂ ਕਟੌਤੀ ਜਾਂ ਇਤਰਾਜ਼'}</div>
         </div>
       </div>
 
@@ -482,7 +548,7 @@ export const LeftingManagement: React.FC = () => {
                   ਰਵਾਨਗੀ ਮਿਤੀ (Dispatch Date) <span className="text-rose-500">*</span>
                 </label>
                 <DateInput
-                  value={date}
+                  value={date || ''}
                   onChange={setDate}
                   required
                 />
@@ -491,26 +557,23 @@ export const LeftingManagement: React.FC = () => {
               {/* Procurement Agency */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
-                  ਖਰੀਦ ਏਜੰਸੀ (Procurement Agency) <span className="text-rose-500">*</span>
+                  {isEn ? 'Procurement Agency' : 'ਖਰੀਦ ਏਜੰਸੀ (Procurement Agency)'} <span className="text-rose-500">*</span>
                 </label>
-                <select
-                  value={agency}
-                  onChange={(e) => setAgency(e.target.value)}
-                  className="w-full px-3 py-2 text-xs font-bold text-slate-900 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-slate-900 focus:outline-none"
-                >
-                  {STANDARD_AGENCIES.map((ag) => (
-                    <option key={ag} value={ag}>
-                      {ag}
-                    </option>
-                  ))}
-                  <option value="CUSTOM">+ ਹੋਰ ਏਜੰਸੀ (Custom)</option>
-                </select>
+                <SearchableSelect
+                  id="lefting-agency"
+                  value={agency || ''}
+                  onChange={(val) => setAgency(val)}
+                  options={agencyOptions}
+                  placeholder={isEn ? "Select agency..." : "ਏਜੰਸੀ ਚੁਣੋ..."}
+                  searchPlaceholder={isEn ? "Search agency..." : "ਏਜੰਸੀ ਖੋਜੋ..."}
+                  emptyMessage={isEn ? "No agency found" : "ਕੋਈ ਏਜੰਸੀ ਨਹੀਂ ਮਿਲੀ"}
+                />
                 {agency === 'CUSTOM' && (
                   <input
                     type="text"
-                    value={customAgency}
+                    value={customAgency || ''}
                     onChange={(e) => setCustomAgency(e.target.value)}
-                    placeholder="ਏਜੰਸੀ ਦਾ ਨਾਮ ਦਰਜ ਕਰੋ"
+                    placeholder={isEn ? "Enter agency name" : "ਏਜੰਸੀ ਦਾ ਨਾਮ ਦਰਜ ਕਰੋ"}
                     className="w-full mt-1.5 px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-slate-900 focus:outline-none"
                     required
                   />
@@ -520,16 +583,16 @@ export const LeftingManagement: React.FC = () => {
               {/* Mandi Agency Stock Availability */}
               <div className="bg-emerald-50/70 border border-emerald-200 rounded-xl p-3 flex flex-col justify-center">
                 <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wide">
-                  ਮੰਡੀ ਵਿੱਚ ਉਪਲਬਧ ਖਰੀਦ ਸਟਾਕ
+                  {isEn ? 'Available Mandi Stock' : 'ਮੰਡੀ ਵਿੱਚ ਉਪਲਬਧ ਖਰੀਦ ਸਟਾਕ'}
                 </span>
                 <div className="flex items-baseline gap-2 mt-0.5">
                   <span className="text-lg font-black text-emerald-950 font-mono">
                     {availableBags.toLocaleString('en-IN')}
                   </span>
-                  <span className="text-xs font-bold text-emerald-700">ਬੋਰੀਆਂ (Bags)</span>
+                  <span className="text-xs font-bold text-emerald-700">{isEn ? 'Bags' : 'ਬੋਰੀਆਂ (Bags)'}</span>
                 </div>
                 <span className="text-[10px] text-emerald-600 truncate">
-                  ਕੁੱਲ ਖਰੀਦ: {totalPurchasedForAgency} | ਪਹਿਲਾਂ ਰਵਾਨਾ: {alreadyLiftedForAgency}
+                  {isEn ? `Total Purchase: ${totalPurchasedForAgency} | Already Dispatched: ${alreadyLiftedForAgency}` : `ਕੁੱਲ ਖਰੀਦ: ${totalPurchasedForAgency} | ਪਹਿਲਾਂ ਰਵਾਨਾ: ${alreadyLiftedForAgency}`}
                 </span>
               </div>
             </div>
@@ -539,7 +602,7 @@ export const LeftingManagement: React.FC = () => {
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/80 pb-2">
                 <div className="flex items-center gap-1.5 text-xs font-black text-slate-900">
                   <Building2 className="w-4 h-4 text-emerald-600" />
-                  <span>ਸੈਲਰ / ਸ਼ੈਲਰ ਦੀ ਚੋਣ (Select Seller / Sheller Master)</span>
+                  <span>{isEn ? 'Select Seller / Sheller Master' : 'ਸੈਲਰ / ਸ਼ੈਲਰ ਦੀ ਚੋਣ (Select Seller / Sheller Master)'}</span>
                   <span className="text-rose-500">*</span>
                 </div>
                 <button
@@ -548,27 +611,25 @@ export const LeftingManagement: React.FC = () => {
                   className="px-3 py-1 text-[11px] font-bold bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition flex items-center gap-1 self-start sm:self-auto"
                 >
                   <Plus className="w-3.5 h-3.5" />
-                  <span>ਨਵਾਂ ਸੈਲਰ ਸ਼ਾਮਲ ਕਰੋ (Add New Seller)</span>
+                  <span>{isEn ? 'Add New Seller' : 'ਨਵਾਂ ਸੈਲਰ ਸ਼ਾਮਲ ਕਰੋ (Add New Seller)'}</span>
                 </button>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div className="md:col-span-1">
                   <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    ਸੈਲਰ ਚੁਣੋ (Select Saved Seller)
+                    {isEn ? 'Select Saved Seller' : 'ਸੈਲਰ ਚੁਣੋ (Select Saved Seller)'}
                   </label>
-                  <select
-                    value={selectedSellerId}
-                    onChange={(e) => handleSellerSelect(e.target.value)}
-                    className="w-full px-3 py-2 text-xs font-bold text-slate-900 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-slate-900 focus:outline-none"
-                  >
-                    <option value="">ਸੈਲਰ ਚੁਣੋ (Select from Master)</option>
-                    {sellers.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name} {s.namePa ? `(${s.namePa})` : ''}
-                      </option>
-                    ))}
-                  </select>
+                  <SearchableSelect
+                    id="lefting-seller-select"
+                    value={selectedSellerId || ''}
+                    onChange={(val) => handleSellerSelect(val)}
+                    options={sellerOptions}
+                    placeholder={isEn ? "Search and select seller..." : "ਸੈਲਰ ਖੋਜੋ ਤੇ ਚੁਣੋ..."}
+                    searchPlaceholder={isEn ? "Type seller name, city, licence..." : "ਸੈਲਰ ਨਾਮ, ਸ਼ਹਿਰ ਜਾਂ ਲਾਇਸੈਂਸ ਲਿਖੋ..."}
+                    emptyMessage={isEn ? "No seller found" : "ਕੋਈ ਸੈਲਰ ਨਹੀਂ ਮਿਲਿਆ"}
+                    allowClear
+                  />
                 </div>
 
                 <div className="md:col-span-1">
@@ -577,7 +638,7 @@ export const LeftingManagement: React.FC = () => {
                   </label>
                   <input
                     type="text"
-                    value={shellerName}
+                    value={shellerName || ''}
                     onChange={(e) => setShellerName(e.target.value)}
                     placeholder="e.g. Kang Modern Rice Mill, Shahkot"
                     className="w-full px-3 py-2 text-xs font-bold text-slate-900 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-slate-900 focus:outline-none"
@@ -591,7 +652,7 @@ export const LeftingManagement: React.FC = () => {
                   </label>
                   <input
                     type="tel"
-                    value={sellerMobile}
+                    value={sellerMobile || ''}
                     onChange={(e) => setSellerMobile(e.target.value)}
                     placeholder="e.g. 98147-74651"
                     className="w-full px-3 py-2 text-xs font-medium text-slate-900 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-slate-900 focus:outline-none"
@@ -606,7 +667,7 @@ export const LeftingManagement: React.FC = () => {
                     <MapPin className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                     <input
                       type="text"
-                      value={sellerAddress}
+                      value={sellerAddress || ''}
                       onChange={(e) => setSellerAddress(e.target.value)}
                       placeholder="e.g. Shahkot Road, Kang Khurd, Teh. Shahkot, Distt. Jalandhar - 144629"
                       className="w-full pl-9 pr-3 py-2 text-xs font-medium text-slate-900 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-slate-900 focus:outline-none"
@@ -620,7 +681,7 @@ export const LeftingManagement: React.FC = () => {
                   </label>
                   <input
                     type="text"
-                    value={gatePassNo}
+                    value={gatePassNo || ''}
                     onChange={(e) => setGatePassNo(e.target.value)}
                     placeholder="e.g. GP-2026-0891"
                     className="w-full px-3 py-2 text-xs font-bold text-slate-900 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-slate-900 focus:outline-none"
@@ -683,7 +744,7 @@ export const LeftingManagement: React.FC = () => {
                   </div>
                   <input
                     type="text"
-                    value={truckNo}
+                    value={truckNo || ''}
                     onFocus={() => setShowTruckSuggestions(true)}
                     onChange={(e) => {
                       setTruckNo(e.target.value.toUpperCase());
@@ -734,7 +795,7 @@ export const LeftingManagement: React.FC = () => {
                   <label className="block text-[11px] font-bold text-slate-600 mb-1">ਡਰਾਈਵਰ ਦਾ ਨਾਮ (Driver Name)</label>
                   <input
                     type="text"
-                    value={driverName}
+                    value={driverName || ''}
                     onChange={(e) => setDriverName(e.target.value)}
                     placeholder="ਡਰਾਈਵਰ ਦਾ ਨਾਮ"
                     className="w-full px-3 py-2 text-xs font-bold text-slate-900 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-slate-900 focus:outline-none"
@@ -745,7 +806,7 @@ export const LeftingManagement: React.FC = () => {
                   <label className="block text-[11px] font-bold text-slate-600 mb-1">ਡਰਾਈਵਰ ਮੋਬਾਈਲ (Mobile)</label>
                   <input
                     type="tel"
-                    value={driverPhone}
+                    value={driverPhone || ''}
                     onChange={(e) => setDriverPhone(e.target.value)}
                     placeholder="10 digit mobile"
                     className="w-full px-3 py-2 text-xs font-bold text-slate-900 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-slate-900 focus:outline-none"
@@ -764,7 +825,7 @@ export const LeftingManagement: React.FC = () => {
                   type="number"
                   min="1"
                   max={availableBags || undefined}
-                  value={bags}
+                  value={bags || ''}
                   onChange={(e) => {
                     setBags(e.target.value);
                     const b = parseInt(e.target.value, 10);
@@ -779,16 +840,16 @@ export const LeftingManagement: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">ਬਾਰਦਾਨਾ ਕਿਸਮ (Bardana Type)</label>
-                <select
-                  value={bardanaType}
-                  onChange={(e) => setBardanaType(e.target.value as BardanaType)}
-                  className="w-full px-3 py-2 text-xs font-bold text-slate-900 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-slate-900 focus:outline-none"
-                >
-                  <option value="NEW">ਨਵਾਂ ਬਾਰਦਾਨਾ (New Bags)</option>
-                  <option value="OLD">ਪੁਰਾਣਾ ਬਾਰਦਾਨਾ (Old Bags)</option>
-                  <option value="BOTH">ਦੋਵੇਂ (New + Old Mixed)</option>
-                </select>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  {isEn ? 'Bardana Type' : 'ਬਾਰਦਾਨਾ ਕਿਸਮ (Bardana Type)'}
+                </label>
+                <SearchableSelect
+                  id="lefting-bardana-type"
+                  value={bardanaType || 'NEW'}
+                  onChange={(val) => setBardanaType(val as BardanaType)}
+                  options={bardanaTypeOptions}
+                  placeholder={isEn ? "Select type..." : "ਕਿਸਮ ਚੁਣੋ..."}
+                />
               </div>
 
               <div>
@@ -798,7 +859,7 @@ export const LeftingManagement: React.FC = () => {
                 <input
                   type="number"
                   step="0.01"
-                  value={customWeightKg}
+                  value={customWeightKg || ''}
                   onChange={(e) => setCustomWeightKg(e.target.value)}
                   placeholder="37.50 KG ਪ੍ਰਤੀ ਬੋਰੀ"
                   className="w-full px-3 py-2 text-xs font-bold text-slate-900 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-slate-900 focus:outline-none"
@@ -812,7 +873,7 @@ export const LeftingManagement: React.FC = () => {
                   <label className="block text-xs font-bold text-amber-900 mb-1">ਨਵੀਆਂ ਬੋਰੀਆਂ ਗਿਣਤੀ</label>
                   <input
                     type="number"
-                    value={newBagsCount}
+                    value={newBagsCount || ''}
                     onChange={(e) => setNewBagsCount(e.target.value)}
                     placeholder="ਨਵੀਆਂ ਬੋਰੀਆਂ"
                     className="w-full px-3 py-2 text-xs bg-white border border-amber-300 rounded-xl"
@@ -822,7 +883,7 @@ export const LeftingManagement: React.FC = () => {
                   <label className="block text-xs font-bold text-amber-900 mb-1">ਪੁਰਾਣੀਆਂ ਬੋਰੀਆਂ ਗਿਣਤੀ</label>
                   <input
                     type="number"
-                    value={oldBagsCount}
+                    value={oldBagsCount || ''}
                     onChange={(e) => setOldBagsCount(e.target.value)}
                     placeholder="ਪੁਰਾਣੀਆਂ ਬੋਰੀਆਂ"
                     className="w-full px-3 py-2 text-xs bg-white border border-amber-300 rounded-xl"
@@ -884,7 +945,7 @@ export const LeftingManagement: React.FC = () => {
                 <label className="block text-xs font-bold text-slate-700 mb-1">ਟਿੱਪਣੀ (Remarks)</label>
                 <input
                   type="text"
-                  value={remarks}
+                  value={remarks || ''}
                   onChange={(e) => setRemarks(e.target.value)}
                   placeholder="ਕੋਈ ਹੋਰ ਨੋਟ ਜਾਂ ਹਵਾਲਾ"
                   className="w-full px-3 py-2 text-xs text-slate-900 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-slate-900 focus:outline-none"
@@ -915,36 +976,35 @@ export const LeftingManagement: React.FC = () => {
               <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
-                value={searchQuery}
+                value={searchQuery || ''}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="ਗੇਟ ਪਾਸ, ਟਰੱਕ ਨੰਬਰ, ਕਿਸਾਨ ਜਾਂ ਸ਼ੈਲਰ ਖੋਜੋ..."
                 className="w-full pl-9 pr-4 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-slate-900 focus:outline-none"
               />
             </div>
 
-            <div className="flex items-center gap-2 flex-wrap">
-              <select
-                value={filterAgency}
-                onChange={(e) => setFilterAgency(e.target.value)}
-                className="px-3 py-2 text-xs font-bold text-slate-800 bg-slate-50 border border-slate-200 rounded-xl"
-              >
-                <option value="ALL">ਸਾਰੀਆਂ ਏਜੰਸੀਆਂ (All Agencies)</option>
-                {STANDARD_AGENCIES.map((ag) => (
-                  <option key={ag} value={ag}>
-                    {ag}
-                  </option>
-                ))}
-              </select>
+            <div className="flex items-center gap-2 flex-wrap min-w-[340px]">
+              <div className="w-48">
+                <SearchableSelect
+                  id="lefting-filter-agency"
+                  value={filterAgency || 'ALL'}
+                  onChange={(val) => setFilterAgency(val)}
+                  options={filterAgencyOptions}
+                  placeholder={isEn ? "Filter agency..." : "ਏਜੰਸੀ ਫਿਲਟਰ..."}
+                  size="xs"
+                />
+              </div>
 
-              <select
-                value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value)}
-                className="px-3 py-2 text-xs font-bold text-slate-800 bg-slate-50 border border-slate-200 rounded-xl"
-              >
-                <option value="ALL">ਸਾਰੀ ਸਥਿਤੀ (All Status)</option>
-                <option value="DISPATCHED">ਰਵਾਨਾ (Dispatched)</option>
-                <option value="DELIVERED">ਪਹੁੰਚਿਆ (Delivered)</option>
-              </select>
+              <div className="w-44">
+                <SearchableSelect
+                  id="lefting-filter-status"
+                  value={filterStatus || 'ALL'}
+                  onChange={(val) => setFilterStatus(val)}
+                  options={filterStatusOptions}
+                  placeholder={isEn ? "Filter status..." : "ਸਥਿਤੀ ਫਿਲਟਰ..."}
+                  size="xs"
+                />
+              </div>
             </div>
           </div>
 
@@ -1183,23 +1243,23 @@ export const LeftingManagement: React.FC = () => {
 
             <form onSubmit={handleSaveEdit} className="space-y-4 text-xs">
               <div>
-                <label className="block font-bold text-slate-700 mb-1">ਸਥਿਤੀ (Delivery Status)</label>
-                <select
-                  value={editStatus}
-                  onChange={(e) => setEditStatus(e.target.value as any)}
-                  className="w-full px-3 py-2 text-xs font-bold text-slate-900 bg-slate-50 border border-slate-200 rounded-xl"
-                >
-                  <option value="DISPATCHED">ਰਵਾਨਾ (Dispatched)</option>
-                  <option value="DELIVERED">ਸੈਲਰ ਪਹੁੰਚ ਗਿਆ (Delivered)</option>
-                  <option value="REJECTED_PARTIAL">ਅੰਸ਼ਕ ਰੱਦ / ਸ਼ਾਰਟੇਜ (Rejected/Shortage)</option>
-                </select>
+                <label className="block font-bold text-slate-700 mb-1">
+                  {isEn ? 'Delivery Status' : 'ਸਥਿਤੀ (Delivery Status)'}
+                </label>
+                <SearchableSelect
+                  id="lefting-edit-status"
+                  value={editStatus || 'DISPATCHED'}
+                  onChange={(val) => setEditStatus(val as any)}
+                  options={editStatusOptions}
+                  placeholder={isEn ? "Select status..." : "ਸਥਿਤੀ ਚੁਣੋ..."}
+                />
               </div>
 
               {editStatus === 'DELIVERED' && (
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">ਪਹੁੰਚਣ ਦੀ ਮਿਤੀ (Receiving Date)</label>
                   <DateInput
-                    value={editReceivingDate}
+                    value={editReceivingDate || ''}
                     onChange={setEditReceivingDate}
                   />
                 </div>
@@ -1211,7 +1271,7 @@ export const LeftingManagement: React.FC = () => {
                   <input
                     type="number"
                     step="0.1"
-                    value={editShortageKg}
+                    value={editShortageKg ?? ''}
                     onChange={(e) => setEditShortageKg(e.target.value)}
                     className="w-full px-3 py-2 text-xs font-bold text-slate-900 bg-slate-50 border border-slate-200 rounded-xl"
                   />
@@ -1220,7 +1280,7 @@ export const LeftingManagement: React.FC = () => {
                   <label className="block font-bold text-slate-700 mb-1">ਰੱਦ ਬੋਰੀਆਂ (Rejected Bags)</label>
                   <input
                     type="number"
-                    value={editRejectedBags}
+                    value={editRejectedBags ?? ''}
                     onChange={(e) => setEditRejectedBags(e.target.value)}
                     className="w-full px-3 py-2 text-xs font-bold text-slate-900 bg-slate-50 border border-slate-200 rounded-xl"
                   />
@@ -1231,7 +1291,7 @@ export const LeftingManagement: React.FC = () => {
                 <label className="block font-bold text-slate-700 mb-1">ਟਿੱਪਣੀ (Remarks)</label>
                 <input
                   type="text"
-                  value={editRemarks}
+                  value={editRemarks || ''}
                   onChange={(e) => setEditRemarks(e.target.value)}
                   placeholder="ਡਲਿਵਰੀ ਰਸੀਦ ਜਾਂ ਸ਼ਾਰਟੇਜ ਵੇਰਵਾ"
                   className="w-full px-3 py-2 text-xs text-slate-900 bg-slate-50 border border-slate-200 rounded-xl"

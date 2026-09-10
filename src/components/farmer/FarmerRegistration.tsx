@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useMandi } from '../../context/MandiContext';
 import { useNotification } from '../../context/NotificationContext';
+import { useFormDraft } from '../../hooks/useFormDraft';
+import { MobileInput } from '../common/MobileInput';
 import { Farmer } from '../../types/mandi';
 import {
   UserPlus,
@@ -59,8 +61,8 @@ export const FarmerRegistration: React.FC = () => {
   const { notifySaveSuccess, notifyDuplicateWarning, notifyError } = useNotification();
   const [isSaving, setIsSaving] = useState(false);
 
-  // Registration Form State
-  const [formData, setFormData] = useState({
+  // Registration Form State with Universal Auto-Save Draft
+  const defaultInitialFormData = {
     farmerName: '',
     farmerNamePa: '',
     fatherName: '',
@@ -76,7 +78,18 @@ export const FarmerRegistration: React.FC = () => {
     photoUrl: '',
     aadhaarFrontUrl: '',
     aadhaarBackUrl: ''
+  };
+
+  const { draft, saveDraft, clearDraft } = useFormDraft({
+    formKey: 'draft_farmer_registration',
+    initialValues: defaultInitialFormData
   });
+
+  const [formData, setFormData] = useState(draft);
+
+  useEffect(() => {
+    saveDraft(formData);
+  }, [formData, saveDraft]);
 
   // Camera Modal State
   const [cameraModal, setCameraModal] = useState<{
@@ -259,6 +272,16 @@ export const FarmerRegistration: React.FC = () => {
       return;
     }
 
+    const cleanMobile = (formData.mobile || '').replace(/\D/g, '');
+    if (cleanMobile && cleanMobile.length !== 10) {
+      notifyError({
+        titlePa: 'ਅਵੈਧ ਮੋਬਾਈਲ ਨੰਬਰ (Invalid Mobile)',
+        titleEn: 'Invalid Mobile Number',
+        messagePa: 'ਮੋਬਾਈਲ ਨੰਬਰ ਪੂਰੇ 10 ਅੰਕਾਂ ਦਾ ਹੋਣਾ ਚਾਹੀਦਾ ਹੈ (+91 ਨਾਲ 10 ਅੰਕ)।'
+      });
+      return;
+    }
+
     const cleanAadhaar = formData.aadhaar.replace(/\s+/g, '');
     if (!cleanAadhaar || cleanAadhaar.length !== 12) {
       notifyError({
@@ -299,6 +322,9 @@ export const FarmerRegistration: React.FC = () => {
         messagePa: `${result.farmer.farmerNamePa || result.farmer.farmerName} (${result.farmer.villagePa || result.farmer.village}) ਦਾ ਰਿਕਾਰਡ ਸੇਵ ਹੋ ਗਿਆ।`,
         details: `${result.farmer.id} • Aadhaar: ${result.farmer.aadhaar}`
       });
+
+      // Clear draft on successful save
+      clearDraft();
 
       // Reset form to completely empty state
       setFormData({
@@ -549,7 +575,7 @@ export const FarmerRegistration: React.FC = () => {
                 <input
                   type="text"
                   placeholder="e.g. Gurpreet Singh"
-                  value={formData.farmerName}
+                  value={formData.farmerName || ''}
                   onChange={(e) => handleNameChange(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 text-xs font-bold text-slate-900 focus:bg-white focus:outline-none focus:border-emerald-500"
                   required
@@ -563,7 +589,7 @@ export const FarmerRegistration: React.FC = () => {
                 <input
                   type="text"
                   placeholder="ਗੁਰਪ੍ਰੀਤ ਸਿੰਘ"
-                  value={formData.farmerNamePa}
+                  value={formData.farmerNamePa || ''}
                   onChange={(e) => setFormData({ ...formData, farmerNamePa: e.target.value })}
                   className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 text-xs font-bold text-slate-900 focus:bg-white focus:outline-none focus:border-emerald-500"
                   required
@@ -580,7 +606,7 @@ export const FarmerRegistration: React.FC = () => {
                 <input
                   type="text"
                   placeholder="e.g. Sukhdev Singh"
-                  value={formData.fatherName}
+                  value={formData.fatherName || ''}
                   onChange={(e) => handleFatherNameChange(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 text-xs text-slate-900 focus:bg-white focus:outline-none focus:border-emerald-500"
                 />
@@ -593,7 +619,7 @@ export const FarmerRegistration: React.FC = () => {
                 <input
                   type="text"
                   placeholder="ਸੁਖਦੇਵ ਸਿੰਘ"
-                  value={formData.fatherNamePa}
+                  value={formData.fatherNamePa || ''}
                   onChange={(e) => setFormData({ ...formData, fatherNamePa: e.target.value })}
                   className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 text-xs text-slate-900 focus:bg-white focus:outline-none focus:border-emerald-500"
                 />
@@ -603,9 +629,9 @@ export const FarmerRegistration: React.FC = () => {
             {/* PIN Code & Village Dropdown & Manual Input */}
             <div className="pt-1">
               <PinVillageSelector
-                pinCode={formData.pinCode}
-                village={formData.village}
-                villagePa={formData.villagePa}
+                pinCode={formData.pinCode || '141401'}
+                village={formData.village || ''}
+                villagePa={formData.villagePa || ''}
                 pinCodesList={pinCodes}
                 onPinCodeChange={handlePinCodeChange}
                 onVillageChange={handleVillageChange}
@@ -622,7 +648,7 @@ export const FarmerRegistration: React.FC = () => {
               <input
                 type="text"
                 placeholder="ਮਕਾਨ ਨੰਬਰ, ਗਲੀ, ਨੇੜੇ ਗੁਰਦੁਆਰਾ ਸਾਹਿਬ, ਪਿੰਡ ਦਾ ਵੇਰਵਾ..."
-                value={formData.address}
+                value={formData.address || ''}
                 onChange={(e) => setFormData({ ...formData, address: e.target.value })}
                 className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 text-xs text-slate-900 focus:bg-white focus:outline-none focus:border-emerald-500"
               />
@@ -631,20 +657,12 @@ export const FarmerRegistration: React.FC = () => {
             {/* Mobile Number & Aadhaar Number (with privacy toggle) */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  ਮੋਬਾਈਲ ਨੰਬਰ (10-Digit Mobile)
-                </label>
-                <div className="relative">
-                  <span className="absolute left-2.5 top-2 text-xs text-slate-400 font-mono">+91</span>
-                  <input
-                    type="tel"
-                    maxLength={10}
-                    placeholder="9876543210"
-                    value={formData.mobile}
-                    onChange={(e) => setFormData({ ...formData, mobile: autoFormatMobile(e.target.value) })}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 pl-10 text-xs font-mono font-bold text-slate-900 focus:bg-white focus:outline-none focus:border-emerald-500"
-                  />
-                </div>
+                <MobileInput
+                  value={formData.mobile || ''}
+                  onChange={(val) => setFormData((prev) => ({ ...prev, mobile: val }))}
+                  label="10-Digit Mobile"
+                  labelPa="ਮੋਬਾਈਲ ਨੰਬਰ"
+                />
               </div>
 
               <div>
@@ -665,7 +683,7 @@ export const FarmerRegistration: React.FC = () => {
                   type={showAadhaarInForm ? 'text' : 'password'}
                   maxLength={14}
                   placeholder="0000 0000 0000"
-                  value={formData.aadhaar}
+                  value={formData.aadhaar || ''}
                   onChange={(e) => setFormData({ ...formData, aadhaar: autoFormatAadhaar(e.target.value) })}
                   className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 text-xs font-mono font-black tracking-wider text-slate-900 focus:bg-white focus:outline-none focus:border-emerald-500"
                   required
@@ -961,7 +979,7 @@ export const FarmerRegistration: React.FC = () => {
             <input
               type="text"
               placeholder="ਕਿਸਾਨ ਖੋਜ ਕਰੋ (Search)..."
-              value={searchTerm}
+              value={searchTerm || ''}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full bg-slate-50 border border-slate-300 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-900 font-bold focus:outline-none focus:border-emerald-500"
             />
