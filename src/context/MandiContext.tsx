@@ -182,6 +182,10 @@ interface MandiContextType {
   activeReceipt: BagsEntryRecord | null;
   setActiveReceipt: (rec: BagsEntryRecord | null) => void;
 
+  // Bags Entry Edit Modal State
+  activeBagsEntryToEdit: BagsEntryRecord | null;
+  setActiveBagsEntryToEdit: (rec: BagsEntryRecord | null) => void;
+
   // Selected Farmer for direct routing to Bags Entry
   selectedFarmerForBags: Farmer | null;
   setSelectedFarmerForBags: (farmer: Farmer | null) => void;
@@ -608,6 +612,7 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   });
   const [activeReceipt, setActiveReceipt] = useState<BagsEntryRecord | null>(null);
+  const [activeBagsEntryToEdit, setActiveBagsEntryToEdit] = useState<BagsEntryRecord | null>(null);
   const [selectedFarmerForBags, setSelectedFarmerForBags] = useState<Farmer | null>(null);
   const [selectedFarmerForAccount, setSelectedFarmerForAccount] = useState<Farmer | null>(null);
   const [activePurchaseRecord, setActivePurchaseRecord] = useState<DailyPurchaseRecord | null>(null);
@@ -3009,6 +3014,8 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         setLanguage,
         activeReceipt,
         setActiveReceipt,
+        activeBagsEntryToEdit,
+        setActiveBagsEntryToEdit,
         selectedFarmerForBags,
         setSelectedFarmerForBags,
         selectedFarmerForAccount,

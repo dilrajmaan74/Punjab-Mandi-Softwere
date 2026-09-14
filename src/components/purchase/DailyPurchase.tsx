@@ -24,7 +24,11 @@ import {
   ChevronDown,
   ChevronUp,
   AlertCircle,
-  Printer
+  Printer,
+  CheckSquare,
+  Square,
+  Filter,
+  RotateCcw
 } from 'lucide-react';
 import {
   FIXED_BAG_WEIGHT_KG,
@@ -35,7 +39,11 @@ import {
 } from '../../utils/calculations';
 import { DailyPurchaseViewModal } from './DailyPurchaseViewModal';
 import { DailyPurchaseEditModal } from './DailyPurchaseEditModal';
-import { exportDailyPurchaseRegisterPDF, exportDailyPurchaseVoucherPDF } from '../../utils/purchasePdfExport';
+import {
+  exportDailyPurchaseRegisterPDF,
+  exportDailyPurchaseVoucherPDF,
+  normalizeDateToComparable
+} from '../../utils/purchasePdfExport';
 import { DateInput } from '../common/DateInput';
 
 interface MultiFarmerPurchaseRow {
@@ -163,9 +171,23 @@ export const DailyPurchase: React.FC = () => {
   }, [farmers, isEn, getFarmerPurchaseSummary]);
 
   // ==================================================
-  // 3. DATE-WISE SUMMARY BOX STATE
-  // Expand/collapse dates, modals for View & Edit
+  // 3. SAVED RECORDS VIEW & SELECTION STATE
+  // Mode: 'ALL_FARMERS' | 'DATE_WISE'
+  // Multi-select: selectedRecordIds
+  // Filter states for All Farmers and Date-wise
   // ==================================================
+  const [viewMode, setViewMode] = useState<'ALL_FARMERS' | 'DATE_WISE'>('ALL_FARMERS');
+  const [selectedRecordIds, setSelectedRecordIds] = useState<Set<string>>(new Set());
+
+  // All Farmers View filters
+  const [allFarmersSearch, setAllFarmersSearch] = useState<string>('');
+  const [allFarmersAgency, setAllFarmersAgency] = useState<string>('ALL');
+
+  // Date-wise View filters
+  const [selectedFilterDate, setSelectedFilterDate] = useState<string>('ALL');
+  const [dateViewSearch, setDateViewSearch] = useState<string>('');
+  const [dateViewAgency, setDateViewAgency] = useState<string>('ALL');
+
   const [expandedDates, setExpandedDates] = useState<{ [date: string]: boolean }>({});
   const [viewRecord, setViewRecord] = useState<DailyPurchaseRecord | null>(null);
   const [editRecord, setEditRecord] = useState<DailyPurchaseRecord | null>(null);
@@ -176,6 +198,38 @@ export const DailyPurchase: React.FC = () => {
       ...prev,
       [date]: !prev[date]
     }));
+  };
+
+  // Multi-select helpers
+  const toggleSelectRecord = (id: string) => {
+    setSelectedRecordIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const toggleSelectAll = (targetRecords: DailyPurchaseRecord[]) => {
+    const targetIds = targetRecords.map((r) => r.id);
+    const allSelected = targetIds.length > 0 && targetIds.every((id) => selectedRecordIds.has(id));
+
+    setSelectedRecordIds((prev) => {
+      const next = new Set(prev);
+      if (allSelected) {
+        targetIds.forEach((id) => next.delete(id));
+      } else {
+        targetIds.forEach((id) => next.add(id));
+      }
+      return next;
+    });
+  };
+
+  const clearSelection = () => {
+    setSelectedRecordIds(new Set());
   };
 
   // Dynamic continuous remaining balance calculation for each row
@@ -584,6 +638,322 @@ export const DailyPurchase: React.FC = () => {
     document.body.removeChild(link);
   };
 
+  // Generic CSV export for all farmers or filtered records
+  const exportRecordsCsv = (title: string, records: DailyPurchaseRecord[]) => {
+    const headers = [
+      'Sr No',
+      'Date',
+      'Farmer ID',
+      'Farmer Name',
+      'Farmer Punjabi Name',
+      'Father Name',
+      'Mobile',
+      'Village',
+      'Agency',
+      'New Juths',
+      'Old Juths',
+      'Total Bags',
+      'Qul',
+      'Kg',
+      'Total Weight (Kg)',
+      'Rate (INR/Qtl)',
+      'Gross Amount (INR)',
+      'Labour Deduction (INR)',
+      'Net Amount (INR)'
+    ];
+
+    const csvRows = records.map((rec, idx) => {
+      const gross = Number(rec.totalAmount) || 0;
+      const net = rec.netAmount !== undefined ? Number(rec.netAmount) : gross;
+      const labour = rec.labourDeductions?.grandTotalDeductions !== undefined
+        ? Number(rec.labourDeductions.grandTotalDeductions)
+        : Math.max(0, gross - net);
+
+      return [
+        idx + 1,
+        rec.date,
+        rec.farmerId,
+        `"${rec.farmerName}"`,
+        `"${rec.farmerNamePa || ''}"`,
+        `"${rec.fatherName || ''}"`,
+        rec.mobile || '',
+        `"${rec.village}"`,
+        `"${rec.agency}"`,
+        rec.newBags ?? '',
+        rec.oldBags ?? '',
+        rec.bags,
+        rec.qul,
+        rec.kg,
+        rec.totalWeightKg.toFixed(2),
+        rec.rate,
+        gross.toFixed(2),
+        labour.toFixed(2),
+        net.toFixed(2)
+      ];
+    });
+
+    const csvContent =
+      'data:text/csv;charset=utf-8,' +
+      [headers.join(','), ...csvRows.map((e) => e.join(','))].join('\n');
+
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `${title.replace(/[^a-zA-Z0-9_-]/g, '_')}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // Bulk Delete with confirmation dialog
+  const handleBulkDelete = (recordsToDelete?: DailyPurchaseRecord[]) => {
+    const records = recordsToDelete || dailyPurchaseRecords.filter((r) => selectedRecordIds.has(r.id));
+    if (records.length === 0) return;
+
+    const totalBags = records.reduce((sum, r) => sum + (Number(r.bags) || 0), 0);
+    const totalAmount = records.reduce((sum, r) => sum + (Number(r.totalAmount) || 0), 0);
+    const farmerCount = new Set(records.map((r) => r.farmerId)).size;
+
+    confirmDelete({
+      recordNameEn: `${records.length} Daily Purchase Entries (${totalBags} Bags, ${farmerCount} Farmers)`,
+      recordNamePa: `${records.length} ਖਰੀਦ ਐਂਟਰੀਆਂ (${totalBags} ਬੋਰੀਆਂ, ${farmerCount} ਕਿਸਾਨ)`,
+      recordId: `BULK-${records.length}-ENTRIES`,
+      itemDetails: [
+        { labelEn: 'Selected Records', labelPa: 'ਚੁਣੀਆਂ ਗਈਆਂ ਐਂਟਰੀਆਂ', value: `${records.length} Records` },
+        { labelEn: 'Total Farmers', labelPa: 'ਕੁੱਲ ਕਿਸਾਨ', value: `${farmerCount} Farmers` },
+        { labelEn: 'Total Bags to Return', labelPa: 'ਵਾਪਸ ਹੋਣ ਵਾਲੀਆਂ ਬੋਰੀਆਂ', value: `${totalBags} Bags` },
+        { labelEn: 'Total Amount', labelPa: 'ਕੁੱਲ ਰਕਮ', value: `₹${totalAmount.toLocaleString('en-IN')}` },
+        {
+          labelEn: 'Stock Restored',
+          labelPa: 'ਸਟਾਕ ਵਾਪਸੀ',
+          value: isEn
+            ? 'Bags will be restored to each farmer remaining balance automatically'
+            : 'ਸਾਰੀਆਂ ਬੋਰੀਆਂ ਸੰਬੰਧਿਤ ਕਿਸਾਨਾਂ ਦੇ ਬਕਾਇਆ ਸਟਾਕ ਵਿੱਚ ਵਾਪਸ ਜਮ੍ਹਾਂ ਹੋ ਜਾਣਗੀਆਂ'
+        }
+      ],
+      onConfirm: () => {
+        records.forEach((rec) => {
+          deleteDailyPurchase(rec.id);
+        });
+        setSelectedRecordIds((prev) => {
+          const next = new Set(prev);
+          records.forEach((r) => next.delete(r.id));
+          return next;
+        });
+        notifyDeleteSuccess({
+          titlePa: `${records.length} ਖਰੀਦ ਐਂਟਰੀਆਂ ਸਫਲਤਾਪੂਰਵਕ ਮਿਟਾ ਦਿੱਤੀਆਂ ਗਈਆਂ`,
+          titleEn: `${records.length} Purchase Records Deleted`,
+          messagePa: `ਕੁੱਲ ${totalBags} ਬੋਰੀਆਂ ${farmerCount} ਕਿਸਾਨਾਂ ਦੇ ਬਕਾਇਆ ਸਟਾਕ ਵਿੱਚ ਵਾਪਸ ਜਮ੍ਹਾਂ ਕਰ ਦਿੱਤੀਆਂ ਗਈਆਂ ਹਨ।`
+        });
+      }
+    });
+  };
+
+  // Professional PDF Export for currently viewed / filtered / selected entries
+  const handleExportPdf = (recordsToExport: DailyPurchaseRecord[], dateLabel?: string, agencyLabel?: string) => {
+    if (recordsToExport.length === 0) {
+      notifyError({
+        titlePa: 'ਕੋਈ ਰਿਕਾਰਡ ਨਹੀਂ ਮਿਲਿਆ',
+        titleEn: 'No records to export'
+      });
+      return;
+    }
+
+    const effectiveDate = dateLabel || (selectedFilterDate && selectedFilterDate !== 'ALL' ? selectedFilterDate : 'All Dates');
+    const effectiveAgency = agencyLabel && agencyLabel !== 'ALL' ? agencyLabel : 'All Agencies';
+
+    exportDailyPurchaseRegisterPDF(
+      recordsToExport,
+      settings,
+      effectiveAgency,
+      effectiveDate,
+      dailyPurchaseRecords
+    );
+  };
+
+  // Export selected records into professional PDF
+  const handleExportSelectedPdf = () => {
+    const selected = dailyPurchaseRecords.filter((r) => selectedRecordIds.has(r.id));
+    if (selected.length === 0) return;
+    const currentActiveAgency = viewMode === 'ALL_FARMERS' ? allFarmersAgency : dateViewAgency;
+    handleExportPdf(selected, 'Selected Entries', currentActiveAgency);
+  };
+
+  // Filtered records for "All Farmers View"
+  const filteredAllFarmersRecords = useMemo(() => {
+    return dailyPurchaseRecords.filter((rec) => {
+      // Agency filter
+      if (allFarmersAgency !== 'ALL' && rec.agency !== allFarmersAgency) {
+        return false;
+      }
+
+      // Text search filter
+      if (allFarmersSearch.trim()) {
+        const q = allFarmersSearch.toLowerCase().trim();
+        const matchName = rec.farmerName?.toLowerCase().includes(q);
+        const matchNamePa = rec.farmerNamePa?.toLowerCase().includes(q);
+        const matchFather = rec.fatherName?.toLowerCase().includes(q);
+        const matchVillage = rec.village?.toLowerCase().includes(q);
+        const matchMobile = rec.mobile?.includes(q);
+        const matchAgency = rec.agency?.toLowerCase().includes(q);
+        const matchDate = rec.date?.includes(q);
+        const matchId = rec.id?.toLowerCase().includes(q);
+
+        if (!matchName && !matchNamePa && !matchFather && !matchVillage && !matchMobile && !matchAgency && !matchDate && !matchId) {
+          return false;
+        }
+      }
+
+      return true;
+    }).sort((a, b) => {
+      const dateDiff = normalizeDateToComparable(b.date) - normalizeDateToComparable(a.date);
+      if (dateDiff !== 0) return dateDiff;
+      return b.id.localeCompare(a.id);
+    });
+  }, [dailyPurchaseRecords, allFarmersAgency, allFarmersSearch]);
+
+  // Totals for "All Farmers View"
+  const allFarmersTotals = useMemo(() => {
+    let totalNew = 0;
+    let totalOld = 0;
+    let totalBags = 0;
+    let totalWeightKg = 0;
+    let totalGross = 0;
+    let totalLabour = 0;
+    let totalNet = 0;
+    const uniqueFarmers = new Set<string>();
+
+    filteredAllFarmersRecords.forEach((rec) => {
+      uniqueFarmers.add(rec.farmerId);
+      const b = Number(rec.bags) || 0;
+      const nb = Number(rec.newBags ?? b) || 0;
+      const ob = Number(rec.oldBags ?? 0) || 0;
+      const wKg = Number(rec.totalWeightKg) || 0;
+      const gross = Number(rec.totalAmount) || 0;
+      const net = rec.netAmount !== undefined ? Number(rec.netAmount) : gross;
+      const labour = rec.labourDeductions?.grandTotalDeductions !== undefined
+        ? Number(rec.labourDeductions.grandTotalDeductions)
+        : Math.max(0, gross - net);
+
+      totalBags += b;
+      totalNew += nb;
+      totalOld += ob;
+      totalWeightKg += wKg;
+      totalGross += gross;
+      totalLabour += labour;
+      totalNet += net;
+    });
+
+    const bDown = formatKgToQulKg(totalWeightKg);
+
+    return {
+      count: filteredAllFarmersRecords.length,
+      farmersCount: uniqueFarmers.size,
+      totalBags,
+      totalNew,
+      totalOld,
+      totalWeightKg,
+      totalQul: bDown.qtl,
+      totalRemKg: bDown.kg,
+      totalGross,
+      totalLabour,
+      totalNet
+    };
+  }, [filteredAllFarmersRecords]);
+
+  // Available unique dates with record counts
+  const availableDates = useMemo(() => {
+    const dateCounts: { [date: string]: number } = {};
+    dailyPurchaseRecords.forEach((r) => {
+      dateCounts[r.date] = (dateCounts[r.date] || 0) + 1;
+    });
+
+    return Object.keys(dateCounts)
+      .sort((a, b) => normalizeDateToComparable(b) - normalizeDateToComparable(a))
+      .map((date) => ({
+        date,
+        count: dateCounts[date]
+      }));
+  }, [dailyPurchaseRecords]);
+
+  // Filtered records for "Date-wise View" when a date is selected
+  const filteredDateRecords = useMemo(() => {
+    return dailyPurchaseRecords.filter((rec) => {
+      if (selectedFilterDate !== 'ALL' && rec.date !== selectedFilterDate) {
+        return false;
+      }
+      if (dateViewAgency !== 'ALL' && rec.agency !== dateViewAgency) {
+        return false;
+      }
+      if (dateViewSearch.trim()) {
+        const q = dateViewSearch.toLowerCase().trim();
+        const matchName = rec.farmerName?.toLowerCase().includes(q);
+        const matchNamePa = rec.farmerNamePa?.toLowerCase().includes(q);
+        const matchFather = rec.fatherName?.toLowerCase().includes(q);
+        const matchVillage = rec.village?.toLowerCase().includes(q);
+        const matchMobile = rec.mobile?.includes(q);
+        const matchAgency = rec.agency?.toLowerCase().includes(q);
+        if (!matchName && !matchNamePa && !matchFather && !matchVillage && !matchMobile && !matchAgency) {
+          return false;
+        }
+      }
+      return true;
+    }).sort((a, b) => {
+      const dateDiff = normalizeDateToComparable(b.date) - normalizeDateToComparable(a.date);
+      if (dateDiff !== 0) return dateDiff;
+      return b.id.localeCompare(a.id);
+    });
+  }, [dailyPurchaseRecords, selectedFilterDate, dateViewAgency, dateViewSearch]);
+
+  // Totals for selected date in "Date-wise View"
+  const dateViewTotals = useMemo(() => {
+    let totalNew = 0;
+    let totalOld = 0;
+    let totalBags = 0;
+    let totalWeightKg = 0;
+    let totalGross = 0;
+    let totalLabour = 0;
+    let totalNet = 0;
+    const uniqueFarmers = new Set<string>();
+
+    filteredDateRecords.forEach((rec) => {
+      uniqueFarmers.add(rec.farmerId);
+      const b = Number(rec.bags) || 0;
+      const nb = Number(rec.newBags ?? b) || 0;
+      const ob = Number(rec.oldBags ?? 0) || 0;
+      const wKg = Number(rec.totalWeightKg) || 0;
+      const gross = Number(rec.totalAmount) || 0;
+      const net = rec.netAmount !== undefined ? Number(rec.netAmount) : gross;
+      const labour = rec.labourDeductions?.grandTotalDeductions !== undefined
+        ? Number(rec.labourDeductions.grandTotalDeductions)
+        : Math.max(0, gross - net);
+
+      totalBags += b;
+      totalNew += nb;
+      totalOld += ob;
+      totalWeightKg += wKg;
+      totalGross += gross;
+      totalLabour += labour;
+      totalNet += net;
+    });
+
+    const bDown = formatKgToQulKg(totalWeightKg);
+
+    return {
+      count: filteredDateRecords.length,
+      farmersCount: uniqueFarmers.size,
+      totalBags,
+      totalNew,
+      totalOld,
+      totalWeightKg,
+      totalQul: bDown.qtl,
+      totalRemKg: bDown.kg,
+      totalGross,
+      totalLabour,
+      totalNet
+    };
+  }, [filteredDateRecords]);
+
   return (
     <div className="space-y-6">
       {/* ==================================================
@@ -891,10 +1261,10 @@ export const DailyPurchase: React.FC = () => {
                   <th className="py-2.5 px-3 min-w-[100px]">{isEn ? 'Mobile' : 'Mobile (ਮੋਬਾਈਲ)'}</th>
                   <th className="py-2.5 px-3 min-w-[110px]">{isEn ? 'Village' : 'Village (ਪਿੰਡ)'}</th>
                   <th className="py-2.5 px-2 w-28 text-center bg-amber-50 text-amber-950 font-black">
-                    {isEn ? 'New Bags' : 'New Bags (ਨਵਾਂ)'}
+                    {isEn ? 'New Juths' : 'New Juths (ਨਵਾਂ)'}
                   </th>
                   <th className="py-2.5 px-2 w-28 text-center bg-orange-50 text-orange-950 font-black">
-                    {isEn ? 'Old Bags' : 'Old Bags (ਪੁਰਾਣਾ)'}
+                    {isEn ? 'Old Juths' : 'Old Juths (ਪੁਰਾਣਾ)'}
                   </th>
                   <th className="py-2.5 px-2 w-28 text-center bg-emerald-50 text-emerald-950 font-black">
                     {isEn ? 'Total Bags' : 'Total Bags (ਕੁੱਲ)'}
@@ -1003,7 +1373,7 @@ export const DailyPurchase: React.FC = () => {
                         )}
                       </td>
 
-                      {/* 6. New Bags Input (wide enough for 1500) */}
+                      {/* 6. New Juths Input (wide enough for 1500) */}
                       <td className="py-2.5 px-2 bg-amber-50/30 text-center">
                         <input
                           type="number"
@@ -1015,7 +1385,7 @@ export const DailyPurchase: React.FC = () => {
                         />
                       </td>
 
-                      {/* 7. Old Bags Input (wide enough for 1500) */}
+                      {/* 7. Old Juths Input (wide enough for 1500) */}
                       <td className="py-2.5 px-2 bg-orange-50/30 text-center">
                         <input
                           type="number"
@@ -1112,227 +1482,838 @@ export const DailyPurchase: React.FC = () => {
       </div>
 
       {/* ==================================================
-          4. DAILY PURCHASE DATE-WISE BOX
-          User Mandate:
-          "Multi Farmer Entry save hon to thalle date-wise summary box show hove.
-          Example: 30/08/2026 -> 15 Farmers.
-          Date te click karan naal us date di complete farmer list open hove.
-          Actions: Edit, View, Delete, PDF Export, Excel Export.
-          All changes must recalculate balances automatically."
+          4. ENHANCED DAILY PURCHASE RECORDS: ALL FARMERS VIEW & DATE-WISE VIEW
+          - All Farmers View: all entries across all farmers with search & agency filter
+          - Date-wise View: with Date Picker / Filter and date chips
+          - Professional PDF Export for currently viewed / filtered / selected entries
+          - Multi-select and Bulk Delete with confirmation & auto stock restoration
+          - Keep existing calculations, data, Parchi Number, Edit, labour & Supabase sync
           ================================================== */}
       <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xs space-y-4">
-        <div className="border-b border-slate-100 pb-2">
-          <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
-            <Calendar className="w-4 h-4 text-indigo-600" />
-            <span>ਮਿਤੀ-ਵਾਰ ਖਰੀਦ ਸੰਖੇਪ (Daily Purchase Date-wise Box)</span>
-          </h3>
-          <p className="text-[11px] text-slate-500">
-            ਕਿਸੇ ਵੀ ਮਿਤੀ 'ਤੇ ਕਲਿੱਕ ਕਰਕੇ ਉਸ ਦਿਨ ਦੀ ਪੂਰੀ ਕਿਸਾਨ ਸੂਚੀ ਵੇਖੋ, ਸੋਧੋ, ਹਟਾਓ ਜਾਂ PDF/Excel ਐਕਸਪੋਰਟ ਕਰੋ
-          </p>
+        {/* Top Header & View Navigation Switcher */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
+          <div>
+            <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
+              <ShoppingBag className="w-4 h-4 text-emerald-600" />
+              <span>{isEn ? 'Daily Purchase Register & Records' : 'ਰੋਜ਼ਾਨਾ ਖਰੀਦ ਰਜਿਸਟਰ ਅਤੇ ਰਿਕਾਰਡ'}</span>
+            </h3>
+            <p className="text-[11px] text-slate-500">
+              {isEn
+                ? 'View all farmers entries, filter by date, professional PDF export, and multi-select bulk delete'
+                : 'ਸਾਰੇ ਕਿਸਾਨਾਂ ਦੀਆਂ ਖਰੀਦ ਐਂਟਰੀਆਂ ਵੇਖੋ, ਮਿਤੀ ਅਨੁਸਾਰ ਫਿਲਟਰ ਕਰੋ, ਪੇਸ਼ੇਵਰ PDF ਐਕਸਪੋਰਟ ਅਤੇ ਬਲਕ ਡਿਲੀਟ ਕਰੋ'}
+            </p>
+          </div>
+
+          {/* View Mode Toggle: All Farmers View vs Date-wise View */}
+          <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200/80 shadow-2xs self-start sm:self-auto">
+            <button
+              type="button"
+              onClick={() => {
+                setViewMode('ALL_FARMERS');
+                clearSelection();
+              }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-black transition flex items-center gap-1.5 ${
+                viewMode === 'ALL_FARMERS'
+                  ? 'bg-white text-emerald-950 shadow-2xs border border-slate-200'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Users className="w-3.5 h-3.5 text-emerald-600" />
+              <span>{isEn ? 'All Farmers View' : 'ਸਾਰੇ ਕਿਸਾਨ (All Farmers View)'}</span>
+              <span className="ml-1 text-[10px] font-mono px-1.5 py-0.5 bg-emerald-100 text-emerald-800 rounded-full font-bold">
+                {dailyPurchaseRecords.length}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setViewMode('DATE_WISE');
+                clearSelection();
+              }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-black transition flex items-center gap-1.5 ${
+                viewMode === 'DATE_WISE'
+                  ? 'bg-white text-indigo-950 shadow-2xs border border-slate-200'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Calendar className="w-3.5 h-3.5 text-indigo-600" />
+              <span>{isEn ? 'Date-wise View' : 'ਮਿਤੀ-ਵਾਰ (Date-wise View)'}</span>
+              <span className="ml-1 text-[10px] font-mono px-1.5 py-0.5 bg-indigo-100 text-indigo-800 rounded-full font-bold">
+                {availableDates.length} {isEn ? 'Dates' : 'ਮਿਤੀਆਂ'}
+              </span>
+            </button>
+          </div>
         </div>
 
-        {dateWisePurchases.length === 0 ? (
-          <div className="p-8 text-center text-slate-400 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
-            <ShoppingBag className="w-8 h-8 mx-auto text-slate-300" />
-            <div className="text-xs font-bold text-slate-600">ਕੋਈ ਖਰੀਦ ਰਿਕਾਰਡ ਨਹੀਂ ਮਿਲਿਆ</div>
-            <div className="text-[11px] text-slate-400">ਉੱਪਰ ਦਿੱਤੇ ਫਾਰਮ ਰਾਹੀਂ ਖਰੀਦ ਐਂਟਰੀ ਦਰਜ ਕਰੋ</div>
+        {/* Multi-Select Floating / Sticky Action Bar (appears when 1 or more entries selected) */}
+        {selectedRecordIds.size > 0 && (
+          <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-3 rounded-xl shadow-md border border-indigo-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in slide-in-from-top-2 duration-200">
+            <div className="flex items-center gap-2.5">
+              <div className="p-1.5 bg-indigo-500/20 rounded-lg text-indigo-300 border border-indigo-400/30">
+                <CheckSquare className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="text-xs font-black flex items-center gap-2">
+                  <span>
+                    {selectedRecordIds.size} {isEn ? 'Entries Selected' : 'ਖਰੀਦ ਐਂਟਰੀਆਂ ਚੁਣੀਆਂ ਗਈਆਂ'}
+                  </span>
+                  {(() => {
+                    const selRecs = dailyPurchaseRecords.filter((r) => selectedRecordIds.has(r.id));
+                    const selBags = selRecs.reduce((sum, r) => sum + (Number(r.bags) || 0), 0);
+                    const selAmt = selRecs.reduce((sum, r) => sum + (Number(r.totalAmount) || 0), 0);
+                    return (
+                      <span className="text-[11px] font-normal text-slate-300">
+                        (ਕੁੱਲ: <strong className="text-emerald-400 font-mono">{selBags}</strong> ਬੋਰੀਆਂ • <strong className="text-amber-300 font-mono">₹{selAmt.toLocaleString('en-IN')}</strong>)
+                      </span>
+                    );
+                  })()}
+                </div>
+                <div className="text-[10px] text-slate-400">
+                  {isEn ? 'Bulk delete or export PDF for selected records' : 'ਚੁਣੀਆਂ ਹੋਈਆਂ ਐਂਟਰੀਆਂ ਨੂੰ ਇੱਕੋ ਵਾਰ ਹਟਾਓ ਜਾਂ PDF ਐਕਸਪੋਰਟ ਕਰੋ'}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={handleExportSelectedPdf}
+                className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black px-3 py-1.5 rounded-lg flex items-center gap-1.5 shadow-2xs transition"
+                title="ਚੁਣੀਆਂ ਹੋਈਆਂ ਐਂਟਰੀਆਂ ਦੀ PDF ਡਾਊਨਲੋਡ ਕਰੋ"
+              >
+                <Download className="w-3.5 h-3.5 text-emerald-200" />
+                <span>PDF ({selectedRecordIds.size})</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleBulkDelete()}
+                className="bg-rose-600 hover:bg-rose-500 text-white text-xs font-black px-3 py-1.5 rounded-lg flex items-center gap-1.5 shadow-2xs transition"
+                title="ਚੁਣੀਆਂ ਹੋਈਆਂ ਐਂਟਰੀਆਂ ਹਟਾਓ (Bulk Delete)"
+              >
+                <Trash2 className="w-3.5 h-3.5 text-rose-200" />
+                <span>{isEn ? `Delete Selected (${selectedRecordIds.size})` : `ਚੁਣੇ ਹੋਏ ਮਿਟਾਓ (${selectedRecordIds.size})`}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={clearSelection}
+                className="bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-bold px-2.5 py-1.5 rounded-lg transition"
+              >
+                {isEn ? 'Deselect All' : 'ਅਣ-ਚੁਣੇ ਕਰੋ'}
+              </button>
+            </div>
           </div>
-        ) : (
-          <div className="space-y-3">
-            {dateWisePurchases.map((dateGroup) => {
-              const isExpanded = !!expandedDates[dateGroup.date];
+        )}
 
-              return (
-                <div
-                  key={dateGroup.date}
-                  className="border border-slate-200 rounded-xl overflow-hidden shadow-2xs transition bg-white"
-                >
-                  {/* Date Header Card / Banner */}
-                  <div
-                    className="p-3 bg-gradient-to-r from-slate-50 to-indigo-50/40 hover:bg-slate-100/70 cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition"
-                    onClick={() => toggleDateExpanded(dateGroup.date)}
+        {/* ==================================================
+            TAB 1: ALL FARMERS VIEW
+            ================================================== */}
+        {viewMode === 'ALL_FARMERS' && (
+          <div className="space-y-4">
+            {/* Filter & Search Bar */}
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex flex-col md:flex-row md:items-center justify-between gap-3">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 flex-1">
+                {/* Search text box */}
+                <div className="relative flex-1 min-w-[220px]">
+                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={allFarmersSearch}
+                    onChange={(e) => setAllFarmersSearch(e.target.value)}
+                    placeholder={
+                      isEn
+                        ? 'Search farmer name, father, village, mobile, agency, date...'
+                        : 'ਕਿਸਾਨ ਦਾ ਨਾਂ, ਪਿਤਾ, ਪਿੰਡ, ਮੋਬਾਈਲ, ਏਜੰਸੀ, ਮਿਤੀ ਰਾਹੀਂ ਖੋਜੋ...'
+                    }
+                    className="w-full pl-8 pr-8 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-emerald-500 font-medium"
+                  />
+                  {allFarmersSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setAllFarmersSearch('')}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Agency filter dropdown */}
+                <div className="w-full sm:w-52">
+                  <select
+                    value={allFarmersAgency}
+                    onChange={(e) => setAllFarmersAgency(e.target.value)}
+                    className="w-full py-1.5 px-2.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-emerald-500 font-medium text-slate-700"
                   >
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 bg-indigo-600 text-white rounded-lg shadow-2xs">
-                        <Calendar className="w-4 h-4" />
-                      </div>
-                      <div>
-                        <div className="text-xs font-black text-slate-900 flex items-center gap-2">
-                          <span className="font-mono text-sm">{dateGroup.date}</span>
-                          <span className="bg-indigo-100 text-indigo-900 px-2 py-0.5 rounded-full text-[10px] font-bold">
-                            {dateGroup.farmerCount} ਕਿਸਾਨ (Farmers)
-                          </span>
-                        </div>
-                        <div className="text-[11px] text-slate-600 mt-0.5">
-                          ਕੁੱਲ {dateGroup.records.length} ਖਰੀਦ ਐਂਟਰੀਆਂ
-                        </div>
-                      </div>
-                    </div>
+                    <option value="ALL">ਸਾਰੀਆਂ ਏਜੰਸੀਆਂ (All Agencies)</option>
+                    {agencies.map((ag) => (
+                      <option key={ag.id} value={ag.nameEn}>
+                        {ag.nameEn} ({ag.namePa || ag.nameEn})
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
-                    {/* Summary Metrics & Actions */}
-                    <div className="flex flex-wrap items-center gap-2">
-                      <div className="bg-white border border-slate-200 px-2.5 py-1 rounded-lg text-xs">
-                        <span className="text-slate-500 font-bold">ਬੋਰੀਆਂ: </span>
-                        <span className="font-mono font-black text-emerald-900">
-                          {dateGroup.totalBags.toLocaleString('en-IN')}
-                        </span>
-                      </div>
-                      <div className="bg-white border border-slate-200 px-2.5 py-1 rounded-lg text-xs">
-                        <span className="text-slate-500 font-bold">ਵਜ਼ਨ: </span>
-                        <span className="font-mono font-black text-indigo-900">{dateGroup.totalQul} Qtl</span>
-                      </div>
-                      <div className="bg-white border border-slate-200 px-2.5 py-1 rounded-lg text-xs">
-                        <span className="text-slate-500 font-bold">ਗ੍ਰਾਸ: </span>
-                        <span className="font-mono font-black text-slate-900">
-                          ₹{dateGroup.totalAmount.toLocaleString('en-IN')}
-                        </span>
-                      </div>
-                      {dateGroup.totalLabour > 0 && (
-                        <div className="bg-rose-50 border border-rose-200 px-2.5 py-1 rounded-lg text-xs">
-                          <span className="text-rose-700 font-bold">ਮਜ਼ਦੂਰੀ: </span>
-                          <span className="font-mono font-black text-rose-900">
-                            -₹{dateGroup.totalLabour.toLocaleString('en-IN')}
-                          </span>
-                        </div>
+                {/* Reset Filters */}
+                {(allFarmersSearch || allFarmersAgency !== 'ALL') && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAllFarmersSearch('');
+                      setAllFarmersAgency('ALL');
+                    }}
+                    className="text-xs text-slate-500 hover:text-slate-800 flex items-center gap-1 font-bold px-2 py-1.5 hover:bg-slate-200/60 rounded-lg transition shrink-0"
+                    title="ਫਿਲਟਰ ਸਾਫ਼ ਕਰੋ"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    <span>ਰੀਸੈੱਟ</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Action Buttons: PDF Export & Excel Export */}
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleExportPdf(
+                      filteredAllFarmersRecords,
+                      allFarmersSearch ? 'Filtered Records' : 'All Dates',
+                      allFarmersAgency
+                    )
+                  }
+                  disabled={filteredAllFarmersRecords.length === 0}
+                  className="bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white font-black px-3.5 py-1.5 rounded-lg text-xs flex items-center gap-1.5 shadow-2xs transition"
+                  title="ਮੌਜੂਦਾ ਫਿਲਟਰ ਕੀਤੇ ਰਿਕਾਰਡਾਂ ਦੀ ਪ੍ਰੋਫੈਸ਼ਨਲ PDF ਰਜਿਸਟਰ ਡਾਊਨਲੋਡ ਕਰੋ"
+                >
+                  <Download className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>{isEn ? 'PDF Export' : 'ਪੇਸ਼ੇਵਰ PDF ਐਕਸਪੋਰਟ'}</span>
+                  <span className="text-[10px] font-mono font-normal bg-slate-700 text-emerald-300 px-1.5 py-0.2 rounded-full">
+                    {filteredAllFarmersRecords.length}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => exportRecordsCsv('All_Farmers_Purchase_Register', filteredAllFarmersRecords)}
+                  disabled={filteredAllFarmersRecords.length === 0}
+                  className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 shadow-2xs transition"
+                  title="Excel / CSV ਡਾਊਨਲੋਡ ਕਰੋ"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5" />
+                  <span>Excel</span>
+                </button>
+              </div>
+            </div>
+
+            {/* All Farmers Summary Metrics Bar */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2 text-xs">
+              <div className="bg-slate-50 border border-slate-200 p-2.5 rounded-xl">
+                <span className="text-slate-500 text-[10px] font-bold block">{isEn ? 'Entries' : 'ਕੁੱਲ ਐਂਟਰੀਆਂ'}</span>
+                <span className="font-mono font-black text-slate-900 text-sm">{allFarmersTotals.count}</span>
+              </div>
+              <div className="bg-slate-50 border border-slate-200 p-2.5 rounded-xl">
+                <span className="text-slate-500 text-[10px] font-bold block">{isEn ? 'Unique Farmers' : 'ਕੁੱਲ ਕਿਸਾਨ'}</span>
+                <span className="font-mono font-black text-indigo-900 text-sm">{allFarmersTotals.farmersCount}</span>
+              </div>
+              <div className="bg-emerald-50 border border-emerald-200 p-2.5 rounded-xl">
+                <span className="text-emerald-800 text-[10px] font-bold block">{isEn ? 'Total Bags' : 'ਕੁੱਲ ਬੋਰੀਆਂ'}</span>
+                <span className="font-mono font-black text-emerald-950 text-sm">
+                  {allFarmersTotals.totalBags.toLocaleString('en-IN')}
+                </span>
+                <span className="text-[10px] text-emerald-700 block mt-0.5">
+                  ਨ: {allFarmersTotals.totalNew} • ਪੁ: {allFarmersTotals.totalOld}
+                </span>
+              </div>
+              <div className="bg-indigo-50 border border-indigo-200 p-2.5 rounded-xl">
+                <span className="text-indigo-800 text-[10px] font-bold block">{isEn ? 'Total Weight' : 'ਕੁੱਲ ਵਜ਼ਨ'}</span>
+                <span className="font-mono font-black text-indigo-950 text-sm">
+                  {allFarmersTotals.totalQul} Qtl {allFarmersTotals.totalRemKg} Kg
+                </span>
+              </div>
+              <div className="bg-blue-50 border border-blue-200 p-2.5 rounded-xl">
+                <span className="text-blue-800 text-[10px] font-bold block">{isEn ? 'Gross Amount' : 'ਗ੍ਰਾਸ ਰਕਮ'}</span>
+                <span className="font-mono font-black text-blue-950 text-sm">
+                  ₹{allFarmersTotals.totalGross.toLocaleString('en-IN')}
+                </span>
+              </div>
+              <div className="bg-rose-50 border border-rose-200 p-2.5 rounded-xl">
+                <span className="text-rose-800 text-[10px] font-bold block">{isEn ? 'Labour Deduction' : 'ਕੁੱਲ ਮਜ਼ਦੂਰੀ'}</span>
+                <span className="font-mono font-black text-rose-950 text-sm">
+                  {allFarmersTotals.totalLabour > 0 ? `-₹${allFarmersTotals.totalLabour.toLocaleString('en-IN')}` : '₹0'}
+                </span>
+              </div>
+              <div className="bg-emerald-100 border border-emerald-300 p-2.5 rounded-xl col-span-2 sm:col-span-1">
+                <span className="text-emerald-900 text-[10px] font-bold block">{isEn ? 'Net Amount' : 'ਸ਼ੁੱਧ ਰਕਮ'}</span>
+                <span className="font-mono font-black text-emerald-950 text-base">
+                  ₹{allFarmersTotals.totalNet.toLocaleString('en-IN')}
+                </span>
+              </div>
+            </div>
+
+            {/* Table: All Farmers Daily Purchase Entries */}
+            {filteredAllFarmersRecords.length === 0 ? (
+              <div className="p-8 text-center text-slate-400 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
+                <ShoppingBag className="w-8 h-8 mx-auto text-slate-300" />
+                <div className="text-xs font-bold text-slate-600">
+                  {dailyPurchaseRecords.length === 0
+                    ? 'ਕੋਈ ਖਰੀਦ ਰਿਕਾਰਡ ਨਹੀਂ ਮਿਲਿਆ'
+                    : 'ਫਿਲਟਰ ਅਨੁਸਾਰ ਕੋਈ ਰਿਕਾਰਡ ਨਹੀਂ ਮਿਲਿਆ'}
+                </div>
+                <div className="text-[11px] text-slate-400">
+                  {dailyPurchaseRecords.length === 0
+                    ? 'ਉੱਪਰ ਦਿੱਤੇ ਫਾਰਮ ਰਾਹੀਂ ਖਰੀਦ ਐਂਟਰੀ ਦਰਜ ਕਰੋ'
+                    : 'ਖੋਜ ਸ਼ਬਦ ਜਾਂ ਏਜੰਸੀ ਫਿਲਟਰ ਬਦਲ ਕੇ ਵੇਖੋ'}
+                </div>
+              </div>
+            ) : (
+              <div className="border border-slate-200 rounded-xl overflow-hidden shadow-2xs bg-white">
+                <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead className="bg-slate-100 text-slate-700 font-black border-b border-slate-200 sticky top-0 z-10 shadow-2xs">
+                      <tr>
+                        {/* Multi-Select Select All Checkbox */}
+                        <th className="py-2.5 px-3 w-10 text-center">
+                          <input
+                            type="checkbox"
+                            checked={
+                              filteredAllFarmersRecords.length > 0 &&
+                              filteredAllFarmersRecords.every((r) => selectedRecordIds.has(r.id))
+                            }
+                            onChange={() => toggleSelectAll(filteredAllFarmersRecords)}
+                            className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                            title="ਸਾਰੇ ਚੁਣੋ / ਅਣ-ਚੁਣੇ ਕਰੋ (Select / Deselect All)"
+                          />
+                        </th>
+                        <th className="py-2.5 px-2 w-10 text-center">#</th>
+                        <th className="py-2.5 px-3">{isEn ? 'Date' : 'ਮਿਤੀ'}</th>
+                        <th className="py-2.5 px-3">{isEn ? 'Farmer Name' : 'ਕਿਸਾਨ ਦਾ ਨਾਂ'}</th>
+                        <th className="py-2.5 px-3">{isEn ? 'Father Name' : 'ਪਿਤਾ ਦਾ ਨਾਂ'}</th>
+                        <th className="py-2.5 px-3">{isEn ? 'Mobile' : 'ਮੋਬਾਈਲ'}</th>
+                        <th className="py-2.5 px-3">{isEn ? 'Village' : 'ਪਿੰਡ'}</th>
+                        <th className="py-2.5 px-3">{isEn ? 'Agency' : 'ਖਰੀਦ ਏਜੰਸੀ'}</th>
+                        <th className="py-2.5 px-3 text-center bg-emerald-50/50">{isEn ? 'Bags' : 'ਬੋਰੀਆਂ'}</th>
+                        <th className="py-2.5 px-3 text-right bg-indigo-50/50">{isEn ? 'Weight' : 'ਵਜ਼ਨ (ਕੁਇੰਟਲ/ਕਿਲੋ)'}</th>
+                        <th className="py-2.5 px-2 text-right">{isEn ? 'Rate' : 'ਭਾਅ (₹)'}</th>
+                        <th className="py-2.5 px-3 text-right">{isEn ? 'Gross (₹)' : 'ਗ੍ਰਾਸ ਰਕਮ (₹)'}</th>
+                        <th className="py-2.5 px-3 text-right bg-rose-50/40">{isEn ? 'Labour' : 'ਮਜ਼ਦੂਰੀ (₹)'}</th>
+                        <th className="py-2.5 px-3 text-right bg-emerald-50/60">{isEn ? 'Net (₹)' : 'ਸ਼ੁੱਧ ਰਕਮ (₹)'}</th>
+                        <th className="py-2.5 px-3 text-center w-28">{isEn ? 'Actions' : 'ਕਾਰਵਾਈ'}</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 font-medium">
+                      {filteredAllFarmersRecords.map((rec, idx) => {
+                        const isSelected = selectedRecordIds.has(rec.id);
+                        const gross = Number(rec.totalAmount) || 0;
+                        const net = rec.netAmount !== undefined ? Number(rec.netAmount) : gross;
+                        const labour =
+                          rec.labourDeductions?.grandTotalDeductions !== undefined
+                            ? Number(rec.labourDeductions.grandTotalDeductions)
+                            : Math.max(0, gross - net);
+
+                        return (
+                          <tr
+                            key={rec.id}
+                            className={`transition hover:bg-slate-50/80 ${
+                              isSelected ? 'bg-emerald-50/70 hover:bg-emerald-50' : idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'
+                            }`}
+                          >
+                            {/* Row Multi-select Checkbox */}
+                            <td className="py-2 px-3 text-center">
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => toggleSelectRecord(rec.id)}
+                                className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                              />
+                            </td>
+                            <td className="py-2 px-2 text-center font-mono text-[11px] text-slate-400">{idx + 1}</td>
+                            <td className="py-2 px-3 font-mono text-xs text-slate-700 whitespace-nowrap">{rec.date}</td>
+                            <td className="py-2 px-3">
+                              <div className="font-bold text-slate-900">{rec.farmerName}</div>
+                              {rec.farmerNamePa && rec.farmerNamePa !== rec.farmerName && (
+                                <div className="text-[10px] text-slate-500">{rec.farmerNamePa}</div>
+                              )}
+                            </td>
+                            <td className="py-2 px-3 text-slate-600">{rec.fatherName || '-'}</td>
+                            <td className="py-2 px-3 font-mono text-slate-600">{rec.mobile || '-'}</td>
+                            <td className="py-2 px-3 text-slate-600">{rec.village || '-'}</td>
+                            <td className="py-2 px-3">
+                              <span className="bg-indigo-50 border border-indigo-200 text-indigo-800 px-2 py-0.5 rounded-full text-[10px] font-bold">
+                                {rec.agency}
+                              </span>
+                            </td>
+                            <td className="py-2 px-3 text-center bg-emerald-50/50">
+                              <span className="font-mono font-black text-emerald-950 text-xs">
+                                {rec.bags}
+                              </span>
+                              {(rec.newBags !== undefined || rec.oldBags !== undefined) && (
+                                <span className="text-[10px] text-emerald-700 block font-normal">
+                                  ({rec.newBags ?? rec.bags} ਨ / {rec.oldBags ?? 0} ਪੁ)
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-2 px-3 text-right font-mono bg-indigo-50/50 text-indigo-950 font-bold whitespace-nowrap">
+                              {rec.qul} Qtl {rec.kg} Kg
+                            </td>
+                            <td className="py-2 px-2 text-right font-mono text-slate-600">₹{rec.rate}</td>
+                            <td className="py-2 px-3 text-right font-mono font-bold text-slate-900">
+                              ₹{gross.toLocaleString('en-IN')}
+                            </td>
+                            <td className="py-2 px-3 text-right font-mono text-rose-700 bg-rose-50/40">
+                              {labour > 0 ? `-₹${labour.toLocaleString('en-IN')}` : '₹0'}
+                            </td>
+                            <td className="py-2 px-3 text-right font-mono font-black text-emerald-950 bg-emerald-50/60">
+                              ₹{net.toLocaleString('en-IN')}
+                            </td>
+                            {/* Actions */}
+                            <td className="py-2 px-3 text-center">
+                              <div className="flex items-center justify-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => setViewRecord(rec)}
+                                  className="p-1 hover:bg-indigo-50 text-indigo-600 hover:text-indigo-800 rounded transition"
+                                  title="ਵੇਖੋ (View Details)"
+                                >
+                                  <Eye className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => exportDailyPurchaseVoucherPDF(rec, settings)}
+                                  className="p-1 hover:bg-emerald-50 text-emerald-600 hover:text-emerald-800 rounded transition"
+                                  title="ਖਰੀਦ ਵਾਊਚਰ PDF"
+                                >
+                                  <Printer className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setEditRecord(rec)}
+                                  className="p-1 hover:bg-amber-50 text-amber-600 hover:text-amber-800 rounded transition"
+                                  title="ਸੋਧੋ (Edit Record)"
+                                >
+                                  <Edit className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteRecord(rec)}
+                                  className="p-1 hover:bg-rose-50 text-rose-600 hover:text-rose-800 rounded transition"
+                                  title="ਮਿਟਾਓ (Delete Record)"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                    {/* Table Grand Totals Footer */}
+                    <tfoot className="bg-slate-100 font-black text-slate-900 border-t-2 border-slate-300 sticky bottom-0 z-10 shadow-md">
+                      <tr>
+                        <td colSpan={8} className="py-2.5 px-3 text-right">
+                          {isEn ? 'Grand Total (Filtered Entries):' : 'ਕੁੱਲ ਜੋੜ (ਕੁੱਲ ਫਿਲਟਰ ਕੀਤੀਆਂ ਐਂਟਰੀਆਂ):'}
+                        </td>
+                        <td className="py-2.5 px-3 text-center font-mono text-emerald-950 bg-emerald-100/60">
+                          {allFarmersTotals.totalBags.toLocaleString('en-IN')} ਬੋਰੀਆਂ
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-mono text-indigo-950 bg-indigo-100/60 whitespace-nowrap">
+                          {allFarmersTotals.totalQul} Qtl {allFarmersTotals.totalRemKg} Kg
+                        </td>
+                        <td></td>
+                        <td className="py-2.5 px-3 text-right font-mono text-slate-950">
+                          ₹{allFarmersTotals.totalGross.toLocaleString('en-IN')}
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-mono text-rose-900 bg-rose-100/60">
+                          {allFarmersTotals.totalLabour > 0
+                            ? `-₹${allFarmersTotals.totalLabour.toLocaleString('en-IN')}`
+                            : '₹0'}
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-mono text-emerald-950 bg-emerald-100/70">
+                          ₹{allFarmersTotals.totalNet.toLocaleString('en-IN')}
+                        </td>
+                        <td></td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ==================================================
+            TAB 2: DATE-WISE VIEW (WITH DATE PICKER / FILTER)
+            ================================================== */}
+        {viewMode === 'DATE_WISE' && (
+          <div className="space-y-4">
+            {/* Date-wise Controls: Date Picker / Filter + Agency Filter + Search */}
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-3">
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                {/* Date Picker Input & Quick Chips */}
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3 flex-1">
+                  <div className="w-full sm:w-64">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+                      {isEn ? 'Select Date Filter' : 'ਮਿਤੀ ਚੁਣੋ (Date Filter)'}
+                    </label>
+                    <div className="flex items-center gap-1.5">
+                      <DateInput
+                        value={selectedFilterDate === 'ALL' ? '' : selectedFilterDate}
+                        onChange={(val) => setSelectedFilterDate(val || 'ALL')}
+                        placeholder="DD/MM/YYYY"
+                        inputClassName="bg-white"
+                      />
+                      {selectedFilterDate !== 'ALL' && (
+                        <button
+                          type="button"
+                          onClick={() => setSelectedFilterDate('ALL')}
+                          className="px-2 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-xs font-bold transition shrink-0"
+                          title="ਸਾਰੀਆਂ ਮਿਤੀਆਂ ਵੇਖੋ (View All Dates)"
+                        >
+                          ਸਾਰੇ
+                        </button>
                       )}
-                      <div className="bg-emerald-50 border border-emerald-300 px-2.5 py-1 rounded-lg text-xs">
-                        <span className="text-emerald-800 font-bold">ਸ਼ੁੱਧ: </span>
-                        <span className="font-mono font-black text-emerald-950">
-                          ₹{dateGroup.totalNetAmount.toLocaleString('en-IN')}
+                    </div>
+                  </div>
+
+                  {/* Agency Filter */}
+                  <div className="w-full sm:w-52">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+                      {isEn ? 'Agency Filter' : 'ਏਜੰਸੀ ਫਿਲਟਰ'}
+                    </label>
+                    <select
+                      value={dateViewAgency}
+                      onChange={(e) => setDateViewAgency(e.target.value)}
+                      className="w-full py-2 px-2.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-indigo-500 font-medium text-slate-700"
+                    >
+                      <option value="ALL">ਸਾਰੀਆਂ ਏਜੰਸੀਆਂ (All Agencies)</option>
+                      {agencies.map((ag) => (
+                        <option key={ag.id} value={ag.nameEn}>
+                          {ag.nameEn} ({ag.namePa || ag.nameEn})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Search query in date view */}
+                  <div className="w-full sm:w-60">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+                      {isEn ? 'Search' : 'ਕਿਸਾਨ ਖੋਜੋ'}
+                    </label>
+                    <div className="relative">
+                      <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      <input
+                        type="text"
+                        value={dateViewSearch}
+                        onChange={(e) => setDateViewSearch(e.target.value)}
+                        placeholder="ਕਿਸਾਨ, ਪਿੰਡ, ਮੋਬਾਈਲ..."
+                        className="w-full pl-8 pr-7 py-2 text-xs bg-white border border-slate-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-indigo-500 font-medium"
+                      />
+                      {dateViewSearch && (
+                        <button
+                          type="button"
+                          onClick={() => setDateViewSearch('')}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* PDF & Excel Export Buttons for currently filtered date-wise records */}
+                <div className="flex items-center gap-2 self-end lg:self-auto shrink-0">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handleExportPdf(
+                        filteredDateRecords,
+                        selectedFilterDate !== 'ALL' ? selectedFilterDate : 'All Dates',
+                        dateViewAgency
+                      )
+                    }
+                    disabled={filteredDateRecords.length === 0}
+                    className="bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white font-black px-3.5 py-2 rounded-lg text-xs flex items-center gap-1.5 shadow-2xs transition"
+                    title="ਇਸ ਮਿਤੀ/ਫਿਲਟਰ ਦੀ ਪੇਸ਼ੇਵਰ PDF ਰਜਿਸਟਰ ਡਾਊਨਲੋਡ ਕਰੋ"
+                  >
+                    <Download className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>
+                      {selectedFilterDate !== 'ALL'
+                        ? `PDF Export (${selectedFilterDate})`
+                        : isEn
+                        ? 'PDF Export (All Dates)'
+                        : 'ਪੇਸ਼ੇਵਰ PDF ਐਕਸਪੋਰਟ'}
+                    </span>
+                    <span className="text-[10px] font-mono font-normal bg-slate-700 text-emerald-300 px-1.5 py-0.2 rounded-full">
+                      {filteredDateRecords.length}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      exportRecordsCsv(
+                        `Purchase_${selectedFilterDate !== 'ALL' ? selectedFilterDate.replace(/\//g, '-') : 'DateWise'}`,
+                        filteredDateRecords
+                      )
+                    }
+                    disabled={filteredDateRecords.length === 0}
+                    className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold px-3 py-2 rounded-lg text-xs flex items-center gap-1.5 shadow-2xs transition"
+                    title="Excel / CSV ਡਾਊਨਲੋਡ ਕਰੋ"
+                  >
+                    <FileSpreadsheet className="w-3.5 h-3.5" />
+                    <span>Excel</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Quick Date Chips Bar */}
+              <div className="flex items-center flex-wrap gap-1.5 pt-2 border-t border-slate-200/70">
+                <span className="text-[11px] font-bold text-slate-500 mr-1 flex items-center gap-1">
+                  <Calendar className="w-3 h-3 text-indigo-600" />
+                  <span>{isEn ? 'Available Dates:' : 'ਉਪਲਬਧ ਮਿਤੀਆਂ:'}</span>
+                </span>
+
+                <button
+                  type="button"
+                  onClick={() => setSelectedFilterDate('ALL')}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition ${
+                    selectedFilterDate === 'ALL'
+                      ? 'bg-indigo-600 text-white shadow-2xs'
+                      : 'bg-white text-slate-700 hover:bg-slate-200/80 border border-slate-200'
+                  }`}
+                >
+                  {isEn ? 'All Dates' : 'ਸਾਰੀਆਂ ਮਿਤੀਆਂ'}
+                  <span className="ml-1 text-[10px] font-mono opacity-80 font-normal">({dailyPurchaseRecords.length})</span>
+                </button>
+
+                {availableDates.map((item) => (
+                  <button
+                    key={item.date}
+                    type="button"
+                    onClick={() => setSelectedFilterDate(item.date)}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition flex items-center gap-1 ${
+                      selectedFilterDate === item.date
+                        ? 'bg-indigo-600 text-white shadow-2xs'
+                        : 'bg-white text-slate-700 hover:bg-slate-200/80 border border-slate-200'
+                    }`}
+                  >
+                    <span>{item.date}</span>
+                    <span
+                      className={`text-[10px] px-1.5 py-0.2 rounded-full font-sans ${
+                        selectedFilterDate === item.date ? 'bg-indigo-800 text-indigo-100' : 'bg-slate-100 text-slate-600'
+                      }`}
+                    >
+                      {item.count}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* SINGLE DATE VIEW (when a specific date is chosen) */}
+            {selectedFilterDate !== 'ALL' && (
+              <div className="space-y-3">
+                {/* Selected Date Summary Card */}
+                <div className="bg-gradient-to-r from-indigo-50/90 via-slate-50 to-emerald-50/60 border border-indigo-200 rounded-xl p-3.5 flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-2xs">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2.5 bg-indigo-600 text-white rounded-xl shadow-2xs">
+                      <Calendar className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="text-sm font-black text-slate-900 flex items-center gap-2">
+                        <span className="font-mono text-base">{selectedFilterDate}</span>
+                        <span className="bg-indigo-100 text-indigo-900 px-2.5 py-0.5 rounded-full text-xs font-bold">
+                          {dateViewTotals.farmersCount} {isEn ? 'Farmers' : 'ਕਿਸਾਨ'}
+                        </span>
+                        <span className="bg-slate-200/80 text-slate-700 px-2 py-0.5 rounded-full text-[11px] font-medium">
+                          {dateViewTotals.count} {isEn ? 'Records' : 'ਐਂਟਰੀਆਂ'}
                         </span>
                       </div>
-
-                      {/* PDF Export Button */}
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          exportDailyPurchaseRegisterPDF(dateGroup.records, settings, 'All Agencies', dateGroup.date, dailyPurchaseRecords);
-                        }}
-                        className="bg-slate-900 hover:bg-slate-800 text-white font-bold px-2.5 py-1 rounded-lg text-[11px] flex items-center gap-1 shadow-2xs transition"
-                        title="PDF ਰਿਪੋਰਟ ਡਾਊਨਲੋਡ ਕਰੋ"
-                      >
-                        <Download className="w-3 h-3 text-emerald-400" />
-                        <span>PDF</span>
-                      </button>
-
-                      {/* Excel Export Button */}
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          exportDateCsv(dateGroup.date, dateGroup.records);
-                        }}
-                        className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-2.5 py-1 rounded-lg text-[11px] flex items-center gap-1 shadow-2xs transition"
-                        title="Excel / CSV ਡਾਊਨਲੋਡ ਕਰੋ"
-                      >
-                        <FileSpreadsheet className="w-3 h-3" />
-                        <span>Excel</span>
-                      </button>
-
-                      {/* Accordion Chevron */}
-                      <div className="p-1 text-slate-400 hover:text-slate-700">
-                        {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                      <div className="text-xs text-slate-600 mt-0.5">
+                        {isEn
+                          ? `Daily Purchase entries recorded on ${selectedFilterDate}`
+                          : `ਮਿਤੀ ${selectedFilterDate} ਨੂੰ ਦਰਜ ਕੀਤੀਆਂ ਗਈਆਂ ਰੋਜ਼ਾਨਾ ਖਰੀਦ ਐਂਟਰੀਆਂ`}
                       </div>
                     </div>
                   </div>
 
-                  {/* Expanded Date Farmer List */}
-                  {isExpanded && (
-                    <div className="border-t border-slate-200 bg-white p-3 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-slate-800">
-                          ਮਿਤੀ {dateGroup.date} ਦੇ ਸਾਰੇ ਕਿਸਾਨਾਂ ਦੀ ਸੂਚੀ (Complete Farmer List):
-                        </span>
-                        <span className="text-[11px] text-slate-500">
-                          ਸੋਧੋ (Edit), ਵੇਖੋ (View) ਜਾਂ ਹਟਾਓ (Delete) ਕਰਨ 'ਤੇ ਸਟਾਕ ਤੁਰੰਤ ਅਪਡੇਟ ਹੋਵੇਗਾ
+                  {/* Summary Metric Chips for Selected Date */}
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                    <div className="bg-white border border-slate-200 px-2.5 py-1 rounded-lg">
+                      <span className="text-slate-500 font-bold block text-[10px]">ਬੋਰੀਆਂ</span>
+                      <span className="font-mono font-black text-emerald-950">
+                        {dateViewTotals.totalBags.toLocaleString('en-IN')}
+                      </span>
+                    </div>
+                    <div className="bg-white border border-slate-200 px-2.5 py-1 rounded-lg">
+                      <span className="text-slate-500 font-bold block text-[10px]">ਵਜ਼ਨ</span>
+                      <span className="font-mono font-black text-indigo-950">
+                        {dateViewTotals.totalQul} Qtl {dateViewTotals.totalRemKg} Kg
+                      </span>
+                    </div>
+                    <div className="bg-white border border-slate-200 px-2.5 py-1 rounded-lg">
+                      <span className="text-slate-500 font-bold block text-[10px]">ਗ੍ਰਾਸ ਰਕਮ</span>
+                      <span className="font-mono font-black text-slate-900">
+                        ₹{dateViewTotals.totalGross.toLocaleString('en-IN')}
+                      </span>
+                    </div>
+                    {dateViewTotals.totalLabour > 0 && (
+                      <div className="bg-rose-50 border border-rose-200 px-2.5 py-1 rounded-lg">
+                        <span className="text-rose-700 font-bold block text-[10px]">ਮਜ਼ਦੂਰੀ</span>
+                        <span className="font-mono font-black text-rose-900">
+                          -₹{dateViewTotals.totalLabour.toLocaleString('en-IN')}
                         </span>
                       </div>
+                    )}
+                    <div className="bg-emerald-50 border border-emerald-300 px-2.5 py-1 rounded-lg">
+                      <span className="text-emerald-800 font-bold block text-[10px]">ਸ਼ੁੱਧ ਰਕਮ</span>
+                      <span className="font-mono font-black text-emerald-950">
+                        ₹{dateViewTotals.totalNet.toLocaleString('en-IN')}
+                      </span>
+                    </div>
+                  </div>
+                </div>
 
-                      <div className="overflow-x-auto border border-slate-200 rounded-lg">
-                        <table className="w-full text-left text-xs">
-                          <thead className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
-                            <tr>
-                              <th className="py-2 px-3 w-10 text-center">#</th>
-                              <th className="py-2 px-3 min-w-[180px]">ਕਿਸਾਨ ਦਾ ਨਾਂ (Farmer Name)</th>
-                              <th className="py-2 px-3 min-w-[130px]">ਪਿਤਾ ਦਾ ਨਾਂ (Father Name)</th>
-                              <th className="py-2 px-3 min-w-[100px]">ਮੋਬਾਈਲ (Mobile)</th>
-                              <th className="py-2 px-3 min-w-[110px]">ਪਿੰਡ (Village)</th>
-                              <th className="py-2 px-3 min-w-[100px]">ਏਜੰਸੀ (Agency)</th>
-                              <th className="py-2 px-3 text-center bg-emerald-50 text-emerald-950 font-black">
-                                ਬੋਰੀਆਂ (Bags)
-                              </th>
-                              <th className="py-2 px-3 text-right bg-indigo-50 text-indigo-950 font-black">
-                                ਕੁਇੰਟਲ ਤੇ ਕਿਲੋ
-                              </th>
-                              <th className="py-2 px-3 text-right font-mono">ਭਾਅ (₹)</th>
-                              <th className="py-2 px-3 text-right font-black text-slate-900">ਕੁੱਲ ਰਕਮ (₹)</th>
-                              <th className="py-2 px-3 text-center w-28">ਕਾਰਵਾਈਆਂ (Actions)</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-100 font-medium">
-                            {dateGroup.records.map((rec, idx) => (
-                              <tr key={rec.id} className="hover:bg-slate-50/70">
-                                <td className="py-2 px-3 text-center font-mono text-slate-500">{idx + 1}</td>
+                {/* Table for Selected Date */}
+                {filteredDateRecords.length === 0 ? (
+                  <div className="p-8 text-center text-slate-400 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                    <ShoppingBag className="w-8 h-8 mx-auto text-slate-300" />
+                    <div className="text-xs font-bold text-slate-600">
+                      ਮਿਤੀ {selectedFilterDate} ਲਈ ਕੋਈ ਖਰੀਦ ਰਿਕਾਰਡ ਨਹੀਂ ਮਿਲਿਆ
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedFilterDate('ALL')}
+                      className="text-xs text-indigo-600 hover:text-indigo-800 font-bold underline"
+                    >
+                      ਸਾਰੀਆਂ ਮਿਤੀਆਂ ਵੇਖੋ (View All Dates)
+                    </button>
+                  </div>
+                ) : (
+                  <div className="border border-slate-200 rounded-xl overflow-hidden shadow-2xs bg-white">
+                    <div className="overflow-x-auto max-h-[550px] overflow-y-auto">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead className="bg-slate-100 text-slate-700 font-black border-b border-slate-200 sticky top-0 z-10 shadow-2xs">
+                          <tr>
+                            <th className="py-2.5 px-3 w-10 text-center">
+                              <input
+                                type="checkbox"
+                                checked={
+                                  filteredDateRecords.length > 0 &&
+                                  filteredDateRecords.every((r) => selectedRecordIds.has(r.id))
+                                }
+                                onChange={() => toggleSelectAll(filteredDateRecords)}
+                                className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                                title="ਸਾਰੇ ਚੁਣੋ / ਅਣ-ਚੁਣੇ ਕਰੋ"
+                              />
+                            </th>
+                            <th className="py-2.5 px-2 w-10 text-center">#</th>
+                            <th className="py-2.5 px-3">{isEn ? 'Farmer Name' : 'ਕਿਸਾਨ ਦਾ ਨਾਂ'}</th>
+                            <th className="py-2.5 px-3">{isEn ? 'Father Name' : 'ਪਿਤਾ ਦਾ ਨਾਂ'}</th>
+                            <th className="py-2.5 px-3">{isEn ? 'Mobile' : 'ਮੋਬਾਈਲ'}</th>
+                            <th className="py-2.5 px-3">{isEn ? 'Village' : 'ਪਿੰਡ'}</th>
+                            <th className="py-2.5 px-3">{isEn ? 'Agency' : 'ਖਰੀਦ ਏਜੰਸੀ'}</th>
+                            <th className="py-2.5 px-3 text-center bg-emerald-50/50">{isEn ? 'Bags' : 'ਬੋਰੀਆਂ'}</th>
+                            <th className="py-2.5 px-3 text-right bg-indigo-50/50">{isEn ? 'Weight' : 'ਵਜ਼ਨ'}</th>
+                            <th className="py-2.5 px-2 text-right">{isEn ? 'Rate' : 'ਭਾਅ'}</th>
+                            <th className="py-2.5 px-3 text-right">{isEn ? 'Gross' : 'ਗ੍ਰਾਸ ਰਕਮ'}</th>
+                            <th className="py-2.5 px-3 text-right bg-rose-50/40">{isEn ? 'Labour' : 'ਮਜ਼ਦੂਰੀ'}</th>
+                            <th className="py-2.5 px-3 text-right bg-emerald-50/60">{isEn ? 'Net' : 'ਸ਼ੁੱਧ ਰਕਮ'}</th>
+                            <th className="py-2.5 px-3 text-center w-28">{isEn ? 'Actions' : 'ਕਾਰਵਾਈ'}</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 font-medium">
+                          {filteredDateRecords.map((rec, idx) => {
+                            const isSelected = selectedRecordIds.has(rec.id);
+                            const gross = Number(rec.totalAmount) || 0;
+                            const net = rec.netAmount !== undefined ? Number(rec.netAmount) : gross;
+                            const labour =
+                              rec.labourDeductions?.grandTotalDeductions !== undefined
+                                ? Number(rec.labourDeductions.grandTotalDeductions)
+                                : Math.max(0, gross - net);
+
+                            return (
+                              <tr
+                                key={rec.id}
+                                className={`transition hover:bg-slate-50/80 ${
+                                  isSelected ? 'bg-emerald-50/70 hover:bg-emerald-50' : idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'
+                                }`}
+                              >
+                                <td className="py-2 px-3 text-center">
+                                  <input
+                                    type="checkbox"
+                                    checked={isSelected}
+                                    onChange={() => toggleSelectRecord(rec.id)}
+                                    className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                                  />
+                                </td>
+                                <td className="py-2 px-2 text-center font-mono text-[11px] text-slate-400">{idx + 1}</td>
                                 <td className="py-2 px-3">
                                   <div className="font-bold text-slate-900">{rec.farmerName}</div>
-                                  {rec.farmerNamePa && (
-                                    <div className="text-[10px] text-emerald-800 font-semibold">{rec.farmerNamePa}</div>
+                                  {rec.farmerNamePa && rec.farmerNamePa !== rec.farmerName && (
+                                    <div className="text-[10px] text-slate-500">{rec.farmerNamePa}</div>
                                   )}
                                 </td>
-                                <td className="py-2 px-3 text-slate-700">{rec.fatherName || '—'}</td>
-                                <td className="py-2 px-3 font-mono text-slate-700">{rec.mobile || '—'}</td>
-                                <td className="py-2 px-3 text-slate-800">{rec.village}</td>
+                                <td className="py-2 px-3 text-slate-600">{rec.fatherName || '-'}</td>
+                                <td className="py-2 px-3 font-mono text-slate-600">{rec.mobile || '-'}</td>
+                                <td className="py-2 px-3 text-slate-600">{rec.village || '-'}</td>
                                 <td className="py-2 px-3">
-                                  <span className="font-bold text-slate-900 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                                  <span className="bg-indigo-50 border border-indigo-200 text-indigo-800 px-2 py-0.5 rounded-full text-[10px] font-bold">
                                     {rec.agency}
                                   </span>
                                 </td>
-                                <td className="py-2 px-3 text-center font-mono font-black text-emerald-950 bg-emerald-50/30">
-                                  {rec.bags}
+                                <td className="py-2 px-3 text-center bg-emerald-50/50">
+                                  <span className="font-mono font-black text-emerald-950 text-xs">
+                                    {rec.bags}
+                                  </span>
+                                  {(rec.newBags !== undefined || rec.oldBags !== undefined) && (
+                                    <span className="text-[10px] text-emerald-700 block font-normal">
+                                      ({rec.newBags ?? rec.bags} ਨ / {rec.oldBags ?? 0} ਪੁ)
+                                    </span>
+                                  )}
                                 </td>
-                                <td className="py-2 px-3 text-right font-mono font-bold text-indigo-950 bg-indigo-50/30">
-                                  {rec.qul} Qtl {rec.kg > 0 ? `${rec.kg} Kg` : ''}
+                                <td className="py-2 px-3 text-right font-mono bg-indigo-50/50 text-indigo-950 font-bold whitespace-nowrap">
+                                  {rec.qul} Qtl {rec.kg} Kg
                                 </td>
-                                <td className="py-2 px-3 text-right font-mono text-slate-600">₹{rec.rate}</td>
-                                <td className="py-2 px-3 text-right font-mono font-black text-slate-900">
-                                  ₹{rec.totalAmount.toLocaleString('en-IN')}
+                                <td className="py-2 px-2 text-right font-mono text-slate-600">₹{rec.rate}</td>
+                                <td className="py-2 px-3 text-right font-mono font-bold text-slate-900">
+                                  ₹{gross.toLocaleString('en-IN')}
                                 </td>
-
-                                {/* Row Actions: View, Edit, PDF, Delete */}
+                                <td className="py-2 px-3 text-right font-mono text-rose-700 bg-rose-50/40">
+                                  {labour > 0 ? `-₹${labour.toLocaleString('en-IN')}` : '₹0'}
+                                </td>
+                                <td className="py-2 px-3 text-right font-mono font-black text-emerald-950 bg-emerald-50/60">
+                                  ₹{net.toLocaleString('en-IN')}
+                                </td>
                                 <td className="py-2 px-3 text-center">
                                   <div className="flex items-center justify-center gap-1">
-                                    {/* View Button */}
                                     <button
                                       type="button"
                                       onClick={() => setViewRecord(rec)}
-                                      className="p-1 hover:bg-slate-100 text-slate-600 hover:text-slate-900 rounded transition"
+                                      className="p-1 hover:bg-indigo-50 text-indigo-600 hover:text-indigo-800 rounded transition"
                                       title="ਵੇਖੋ (View Details)"
                                     >
                                       <Eye className="w-3.5 h-3.5" />
                                     </button>
-
-                                    {/* PDF Voucher Button */}
                                     <button
                                       type="button"
                                       onClick={() => exportDailyPurchaseVoucherPDF(rec, settings)}
                                       className="p-1 hover:bg-emerald-50 text-emerald-600 hover:text-emerald-800 rounded transition"
-                                      title="ਪੀਡੀਐਫ ਵਾਊਚਰ (PDF Voucher)"
+                                      title="ਖਰੀਦ ਵਾਊਚਰ PDF"
                                     >
                                       <Printer className="w-3.5 h-3.5" />
                                     </button>
-
-                                    {/* Edit Button */}
                                     <button
                                       type="button"
                                       onClick={() => setEditRecord(rec)}
-                                      className="p-1 hover:bg-indigo-50 text-indigo-600 hover:text-indigo-800 rounded transition"
+                                      className="p-1 hover:bg-amber-50 text-amber-600 hover:text-amber-800 rounded transition"
                                       title="ਸੋਧੋ (Edit Record)"
                                     >
                                       <Edit className="w-3.5 h-3.5" />
                                     </button>
-
-                                    {/* Delete Button */}
                                     <button
                                       type="button"
                                       onClick={() => handleDeleteRecord(rec)}
@@ -1344,34 +2325,341 @@ export const DailyPurchase: React.FC = () => {
                                   </div>
                                 </td>
                               </tr>
-                            ))}
-                          </tbody>
-                          {/* Date Grand Totals Footer */}
-                          <tfoot className="bg-slate-100/80 font-black text-slate-900 border-t border-slate-200">
-                            <tr>
-                              <td colSpan={6} className="py-2.5 px-3 text-right">
-                                ਮਿਤੀ {dateGroup.date} ਕੁੱਲ ਜੋੜ (Date Grand Total):
-                              </td>
-                              <td className="py-2.5 px-3 text-center font-mono text-emerald-950 bg-emerald-100/50">
-                                {dateGroup.totalBags.toLocaleString('en-IN')} ਬੋਰੀਆਂ
-                              </td>
-                              <td className="py-2.5 px-3 text-right font-mono text-indigo-950 bg-indigo-100/50">
-                                {dateGroup.totalQul} ਕੁਇੰਟਲ
-                              </td>
-                              <td className="py-2.5 px-3 text-right"></td>
-                              <td className="py-2.5 px-3 text-right font-mono text-slate-950">
-                                ₹{dateGroup.totalAmount.toLocaleString('en-IN')}
-                              </td>
-                              <td></td>
-                            </tr>
-                          </tfoot>
-                        </table>
-                      </div>
+                            );
+                          })}
+                        </tbody>
+                        <tfoot className="bg-slate-100 font-black text-slate-900 border-t-2 border-slate-300 sticky bottom-0 z-10 shadow-md">
+                          <tr>
+                            <td colSpan={7} className="py-2.5 px-3 text-right">
+                              ਮਿਤੀ {selectedFilterDate} ਕੁੱਲ ਜੋੜ (Date Grand Total):
+                            </td>
+                            <td className="py-2.5 px-3 text-center font-mono text-emerald-950 bg-emerald-100/60">
+                              {dateViewTotals.totalBags.toLocaleString('en-IN')} ਬੋਰੀਆਂ
+                            </td>
+                            <td className="py-2.5 px-3 text-right font-mono text-indigo-950 bg-indigo-100/60 whitespace-nowrap">
+                              {dateViewTotals.totalQul} Qtl {dateViewTotals.totalRemKg} Kg
+                            </td>
+                            <td></td>
+                            <td className="py-2.5 px-3 text-right font-mono text-slate-950">
+                              ₹{dateViewTotals.totalGross.toLocaleString('en-IN')}
+                            </td>
+                            <td className="py-2.5 px-3 text-right font-mono text-rose-900 bg-rose-100/60">
+                              {dateViewTotals.totalLabour > 0
+                                ? `-₹${dateViewTotals.totalLabour.toLocaleString('en-IN')}`
+                                : '₹0'}
+                            </td>
+                            <td className="py-2.5 px-3 text-right font-mono text-emerald-950 bg-emerald-100/70">
+                              ₹{dateViewTotals.totalNet.toLocaleString('en-IN')}
+                            </td>
+                            <td></td>
+                          </tr>
+                        </tfoot>
+                      </table>
                     </div>
-                  )}
-                </div>
-              );
-            })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ALL DATES ACCORDION VIEW (when selectedFilterDate === 'ALL') */}
+            {selectedFilterDate === 'ALL' && (
+              <div className="space-y-3">
+                {dateWisePurchases.length === 0 ? (
+                  <div className="p-8 text-center text-slate-400 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
+                    <ShoppingBag className="w-8 h-8 mx-auto text-slate-300" />
+                    <div className="text-xs font-bold text-slate-600">ਕੋਈ ਖਰੀਦ ਰਿਕਾਰਡ ਨਹੀਂ ਮਿਲਿਆ</div>
+                    <div className="text-[11px] text-slate-400">ਉੱਪਰ ਦਿੱਤੇ ਫਾਰਮ ਰਾਹੀਂ ਖਰੀਦ ਐਂਟਰੀ ਦਰਜ ਕਰੋ</div>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {dateWisePurchases.map((dateGroup) => {
+                      const isExpanded = !!expandedDates[dateGroup.date];
+
+                      return (
+                        <div
+                          key={dateGroup.date}
+                          className="border border-slate-200 rounded-xl overflow-hidden shadow-2xs transition bg-white"
+                        >
+                          {/* Date Header Card / Banner */}
+                          <div
+                            className="p-3 bg-gradient-to-r from-slate-50 to-indigo-50/40 hover:bg-slate-100/70 cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition"
+                            onClick={() => toggleDateExpanded(dateGroup.date)}
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className="p-2 bg-indigo-600 text-white rounded-lg shadow-2xs">
+                                <Calendar className="w-4 h-4" />
+                              </div>
+                              <div>
+                                <div className="text-xs font-black text-slate-900 flex items-center gap-2">
+                                  <span className="font-mono text-sm">{dateGroup.date}</span>
+                                  <span className="bg-indigo-100 text-indigo-900 px-2 py-0.5 rounded-full text-[10px] font-bold">
+                                    {dateGroup.farmerCount} ਕਿਸਾਨ (Farmers)
+                                  </span>
+                                </div>
+                                <div className="text-[11px] text-slate-600 mt-0.5">
+                                  ਕੁੱਲ {dateGroup.records.length} ਖਰੀਦ ਐਂਟਰੀਆਂ
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Summary Metrics & Actions */}
+                            <div className="flex flex-wrap items-center gap-2">
+                              <div className="bg-white border border-slate-200 px-2.5 py-1 rounded-lg text-xs">
+                                <span className="text-slate-500 font-bold">ਬੋਰੀਆਂ: </span>
+                                <span className="font-mono font-black text-emerald-900">
+                                  {dateGroup.totalBags.toLocaleString('en-IN')}
+                                </span>
+                              </div>
+                              <div className="bg-white border border-slate-200 px-2.5 py-1 rounded-lg text-xs">
+                                <span className="text-slate-500 font-bold">ਵਜ਼ਨ: </span>
+                                <span className="font-mono font-black text-indigo-900">{dateGroup.totalQul} Qtl</span>
+                              </div>
+                              <div className="bg-white border border-slate-200 px-2.5 py-1 rounded-lg text-xs">
+                                <span className="text-slate-500 font-bold">ਗ੍ਰਾਸ: </span>
+                                <span className="font-mono font-black text-slate-900">
+                                  ₹{dateGroup.totalAmount.toLocaleString('en-IN')}
+                                </span>
+                              </div>
+                              {dateGroup.totalLabour > 0 && (
+                                <div className="bg-rose-50 border border-rose-200 px-2.5 py-1 rounded-lg text-xs">
+                                  <span className="text-rose-700 font-bold">ਮਜ਼ਦੂਰੀ: </span>
+                                  <span className="font-mono font-black text-rose-900">
+                                    -₹{dateGroup.totalLabour.toLocaleString('en-IN')}
+                                  </span>
+                                </div>
+                              )}
+                              <div className="bg-emerald-50 border border-emerald-300 px-2.5 py-1 rounded-lg text-xs">
+                                <span className="text-emerald-800 font-bold">ਸ਼ੁੱਧ: </span>
+                                <span className="font-mono font-black text-emerald-950">
+                                  ₹{dateGroup.totalNetAmount.toLocaleString('en-IN')}
+                                </span>
+                              </div>
+
+                              {/* PDF Export Button for Date */}
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  exportDailyPurchaseRegisterPDF(
+                                    dateGroup.records,
+                                    settings,
+                                    dateViewAgency !== 'ALL' ? dateViewAgency : 'All Agencies',
+                                    dateGroup.date,
+                                    dailyPurchaseRecords
+                                  );
+                                }}
+                                className="bg-slate-900 hover:bg-slate-800 text-white font-bold px-2.5 py-1 rounded-lg text-[11px] flex items-center gap-1 shadow-2xs transition"
+                                title="ਇਸ ਮਿਤੀ ਦੀ PDF ਰਿਪੋਰਟ ਡਾਊਨਲੋਡ ਕਰੋ"
+                              >
+                                <Download className="w-3 h-3 text-emerald-400" />
+                                <span>PDF</span>
+                              </button>
+
+                              {/* Excel Export Button for Date */}
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  exportDateCsv(dateGroup.date, dateGroup.records);
+                                }}
+                                className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-2.5 py-1 rounded-lg text-[11px] flex items-center gap-1 shadow-2xs transition"
+                                title="Excel / CSV ਡਾਊਨਲੋਡ ਕਰੋ"
+                              >
+                                <FileSpreadsheet className="w-3 h-3" />
+                                <span>Excel</span>
+                              </button>
+
+                              {/* Filter by this Date Button */}
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedFilterDate(dateGroup.date);
+                                }}
+                                className="bg-indigo-100 hover:bg-indigo-200 text-indigo-900 font-bold px-2 py-1 rounded-lg text-[11px] transition"
+                                title="ਸਿਰਫ਼ ਇਸ ਮਿਤੀ ਦੀਆਂ ਐਂਟਰੀਆਂ ਵੇਖੋ"
+                              >
+                                {isEn ? 'Filter Date' : 'ਮਿਤੀ ਚੁਣੋ'}
+                              </button>
+
+                              {/* Accordion Chevron */}
+                              <div className="p-1 text-slate-400 hover:text-slate-700">
+                                {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Expanded Date Farmer List */}
+                          {isExpanded && (
+                            <div className="border-t border-slate-200 bg-white p-3 space-y-3">
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs font-bold text-slate-800">
+                                  ਮਿਤੀ {dateGroup.date} ਦੇ ਸਾਰੇ ਕਿਸਾਨਾਂ ਦੀ ਸੂਚੀ (Complete Farmer List):
+                                </span>
+                                <span className="text-[11px] text-slate-500">
+                                  ਸੋਧੋ (Edit), ਵੇਖੋ (View) ਜਾਂ ਹਟਾਓ (Delete) ਕਰਨ 'ਤੇ ਸਟਾਕ ਤੁਰੰਤ ਅਪਡੇਟ ਹੋਵੇਗਾ
+                                </span>
+                              </div>
+
+                              <div className="overflow-x-auto border border-slate-200 rounded-lg">
+                                <table className="w-full text-left text-xs">
+                                  <thead className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
+                                    <tr>
+                                      <th className="py-2 px-3 w-10 text-center">
+                                        <input
+                                          type="checkbox"
+                                          checked={
+                                            dateGroup.records.length > 0 &&
+                                            dateGroup.records.every((r) => selectedRecordIds.has(r.id))
+                                          }
+                                          onChange={() => toggleSelectAll(dateGroup.records)}
+                                          className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                                        />
+                                      </th>
+                                      <th className="py-2 px-3 w-10 text-center">#</th>
+                                      <th className="py-2 px-3 min-w-[180px]">ਕਿਸਾਨ ਦਾ ਨਾਂ (Farmer Name)</th>
+                                      <th className="py-2 px-3 min-w-[130px]">ਪਿਤਾ ਦਾ ਨਾਂ (Father Name)</th>
+                                      <th className="py-2 px-3 min-w-[100px]">ਮੋਬਾਈਲ (Mobile)</th>
+                                      <th className="py-2 px-3 min-w-[110px]">ਪਿੰਡ (Village)</th>
+                                      <th className="py-2 px-3 min-w-[100px]">ਏਜੰਸੀ (Agency)</th>
+                                      <th className="py-2 px-3 text-center bg-emerald-50 text-emerald-950 font-black">
+                                        ਬੋਰੀਆਂ (Bags)
+                                      </th>
+                                      <th className="py-2 px-3 text-right bg-indigo-50 text-indigo-950 font-black">
+                                        ਕੁਇੰਟਲ ਤੇ ਕਿਲੋ
+                                      </th>
+                                      <th className="py-2 px-3 text-right font-mono">ਭਾਅ (₹)</th>
+                                      <th className="py-2 px-3 text-right font-black text-slate-900">ਕੁੱਲ ਰਕਮ (₹)</th>
+                                      <th className="py-2 px-3 text-center w-28">ਕਾਰਵਾਈਆਂ (Actions)</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-slate-100 font-medium">
+                                    {dateGroup.records.map((rec, idx) => {
+                                      const isRowSelected = selectedRecordIds.has(rec.id);
+                                      return (
+                                        <tr
+                                          key={rec.id}
+                                          className={`hover:bg-slate-50/70 ${
+                                            isRowSelected ? 'bg-emerald-50/70 hover:bg-emerald-50' : ''
+                                          }`}
+                                        >
+                                          <td className="py-2 px-3 text-center">
+                                            <input
+                                              type="checkbox"
+                                              checked={isRowSelected}
+                                              onChange={() => toggleSelectRecord(rec.id)}
+                                              className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                                            />
+                                          </td>
+                                          <td className="py-2 px-3 text-center font-mono text-slate-500">{idx + 1}</td>
+                                          <td className="py-2 px-3">
+                                            <div className="font-bold text-slate-900">{rec.farmerName}</div>
+                                            {rec.farmerNamePa && (
+                                              <div className="text-[10px] text-emerald-800 font-semibold">{rec.farmerNamePa}</div>
+                                            )}
+                                          </td>
+                                          <td className="py-2 px-3 text-slate-700">{rec.fatherName || '—'}</td>
+                                          <td className="py-2 px-3 font-mono text-slate-700">{rec.mobile || '—'}</td>
+                                          <td className="py-2 px-3 text-slate-800">{rec.village}</td>
+                                          <td className="py-2 px-3">
+                                            <span className="font-bold text-slate-900 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                                              {rec.agency}
+                                            </span>
+                                          </td>
+                                          <td className="py-2 px-3 text-center font-mono font-black text-emerald-950 bg-emerald-50/30">
+                                            {rec.bags}
+                                            {(rec.newBags !== undefined || rec.oldBags !== undefined) && (
+                                              <span className="text-[10px] text-emerald-700 block font-normal">
+                                                ({rec.newBags ?? rec.bags} ਨ / {rec.oldBags ?? 0} ਪੁ)
+                                              </span>
+                                            )}
+                                          </td>
+                                          <td className="py-2 px-3 text-right font-mono font-bold text-indigo-950 bg-indigo-50/30">
+                                            {rec.qul} Qtl {rec.kg > 0 ? `${rec.kg} Kg` : ''}
+                                          </td>
+                                          <td className="py-2 px-3 text-right font-mono text-slate-600">₹{rec.rate}</td>
+                                          <td className="py-2 px-3 text-right font-mono font-black text-slate-900">
+                                            ₹{rec.totalAmount.toLocaleString('en-IN')}
+                                          </td>
+
+                                          {/* Row Actions: View, Edit, PDF, Delete */}
+                                          <td className="py-2 px-3 text-center">
+                                            <div className="flex items-center justify-center gap-1">
+                                              {/* View Button */}
+                                              <button
+                                                type="button"
+                                                onClick={() => setViewRecord(rec)}
+                                                className="p-1 hover:bg-slate-100 text-slate-600 hover:text-slate-900 rounded transition"
+                                                title="ਵੇਖੋ (View Details)"
+                                              >
+                                                <Eye className="w-3.5 h-3.5" />
+                                              </button>
+
+                                              {/* PDF Voucher Button */}
+                                              <button
+                                                type="button"
+                                                onClick={() => exportDailyPurchaseVoucherPDF(rec, settings)}
+                                                className="p-1 hover:bg-emerald-50 text-emerald-600 hover:text-emerald-800 rounded transition"
+                                                title="ਪੀਡੀਐਫ ਵਾਊਚਰ (PDF Voucher)"
+                                              >
+                                                <Printer className="w-3.5 h-3.5" />
+                                              </button>
+
+                                              {/* Edit Button */}
+                                              <button
+                                                type="button"
+                                                onClick={() => setEditRecord(rec)}
+                                                className="p-1 hover:bg-indigo-50 text-indigo-600 hover:text-indigo-800 rounded transition"
+                                                title="ਸੋਧੋ (Edit Record)"
+                                              >
+                                                <Edit className="w-3.5 h-3.5" />
+                                              </button>
+
+                                              {/* Delete Button */}
+                                              <button
+                                                type="button"
+                                                onClick={() => handleDeleteRecord(rec)}
+                                                className="p-1 hover:bg-rose-50 text-rose-600 hover:text-rose-800 rounded transition"
+                                                title="ਮਿਟਾਓ (Delete Record)"
+                                              >
+                                                <Trash2 className="w-3.5 h-3.5" />
+                                              </button>
+                                            </div>
+                                          </td>
+                                        </tr>
+                                      );
+                                    })}
+                                  </tbody>
+                                  {/* Date Grand Totals Footer */}
+                                  <tfoot className="bg-slate-100/80 font-black text-slate-900 border-t border-slate-200">
+                                    <tr>
+                                      <td colSpan={7} className="py-2.5 px-3 text-right">
+                                        ਮਿਤੀ {dateGroup.date} ਕੁੱਲ ਜੋੜ (Date Grand Total):
+                                      </td>
+                                      <td className="py-2.5 px-3 text-center font-mono text-emerald-950 bg-emerald-100/50">
+                                        {dateGroup.totalBags.toLocaleString('en-IN')} ਬੋਰੀਆਂ
+                                      </td>
+                                      <td className="py-2.5 px-3 text-right font-mono text-indigo-950 bg-indigo-100/50">
+                                        {dateGroup.totalQul} ਕੁਇੰਟਲ
+                                      </td>
+                                      <td className="py-2.5 px-3 text-right"></td>
+                                      <td className="py-2.5 px-3 text-right font-mono text-slate-950">
+                                        ₹{dateGroup.totalAmount.toLocaleString('en-IN')}
+                                      </td>
+                                      <td></td>
+                                    </tr>
+                                  </tfoot>
+                                </table>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>

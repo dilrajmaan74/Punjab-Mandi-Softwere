@@ -53,6 +53,8 @@ export const FarmerAccount: React.FC = () => {
     selectedFarmerForAccount,
     setSelectedFarmerForAccount,
     setSelectedFarmerForBags,
+    setActiveReceipt,
+    setActiveBagsEntryToEdit,
     setActiveSection,
     getCompleteFarmerAccount,
     deleteFarmer,
@@ -1247,32 +1249,48 @@ export const FarmerAccount: React.FC = () => {
                             {formatCurrencyINR(slip.totalAmount)}
                           </td>
                           <td className="p-3 text-center print:hidden">
-                            <button
-                              onClick={() => {
-                                confirmDelete({
-                                  recordNameEn: `Slip ${slip.entryNumber}`,
-                                  recordNamePa: `ਰਸੀਦ ${slip.entryNumber}`,
-                                  recordId: slip.entryNumber,
-                                  itemDetails: [
-                                    { labelEn: 'Farmer', labelPa: 'ਕਿਸਾਨ', value: `${slip.farmerNamePa} (${slip.farmerId})` },
-                                    { labelEn: 'Bags', labelPa: 'ਬੋਰੀਆਂ', value: `${slip.bags} Bags` },
-                                    { labelEn: 'Weight', labelPa: 'ਵਜ਼ਨ', value: slip.grandTotalDisplay }
-                                  ],
-                                  onConfirm: () => {
-                                    deleteBagsEntry(slip.id);
-                                    notifyDeleteSuccess({
-                                      titlePa: 'ਤੁਲਾਈ ਰਸੀਦ ਸਫਲਤਾਪੂਰਵਕ ਹਟਾ ਦਿੱਤੀ ਗਈ ਹੈ।',
-                                      titleEn: 'Slip Deleted Successfully',
-                                      messagePa: `ਰਸੀਦ ${slip.entryNumber} ਹਟਾ ਦਿੱਤੀ ਗਈ ਹੈ ਅਤੇ ਬਾਕੀ ਸਟਾਕ ਅਪਡੇਟ ਹੋ ਗਿਆ ਹੈ।`
-                                    });
-                                  }
-                                });
-                              }}
-                              className="p-1 text-slate-400 hover:text-rose-600 rounded transition-colors"
-                              title="Delete weighment slip"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                            <div className="flex items-center justify-center gap-1">
+                              <button
+                                onClick={() => setActiveBagsEntryToEdit(slip)}
+                                className="p-1 text-slate-500 hover:text-indigo-600 rounded transition-colors cursor-pointer"
+                                title={isEn ? 'Edit weighment slip' : 'ਪਰਚੀ ਸੋਧੋ (Edit Slip)'}
+                              >
+                                <Edit className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => setActiveReceipt(slip)}
+                                className="p-1 text-slate-500 hover:text-emerald-600 rounded transition-colors cursor-pointer"
+                                title={isEn ? 'Print slip' : 'ਰਸੀਦ ਪ੍ਰਿੰਟ ਕਰੋ (Print)'}
+                              >
+                                <Printer className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => {
+                                  confirmDelete({
+                                    recordNameEn: `Slip ${slip.entryNumber}`,
+                                    recordNamePa: `ਰਸੀਦ ${slip.entryNumber}`,
+                                    recordId: slip.entryNumber,
+                                    itemDetails: [
+                                      { labelEn: 'Farmer', labelPa: 'ਕਿਸਾਨ', value: `${slip.farmerNamePa} (${slip.farmerId})` },
+                                      { labelEn: 'Bags', labelPa: 'ਬੋਰੀਆਂ', value: `${slip.bags} Bags` },
+                                      { labelEn: 'Weight', labelPa: 'ਵਜ਼ਨ', value: slip.grandTotalDisplay }
+                                    ],
+                                    onConfirm: () => {
+                                      deleteBagsEntry(slip.id);
+                                      notifyDeleteSuccess({
+                                        titlePa: 'ਤੁਲਾਈ ਰਸੀਦ ਸਫਲਤਾਪੂਰਵਕ ਹਟਾ ਦਿੱਤੀ ਗਈ ਹੈ।',
+                                        titleEn: 'Slip Deleted Successfully',
+                                        messagePa: `ਰਸੀਦ ${slip.entryNumber} ਹਟਾ ਦਿੱਤੀ ਗਈ ਹੈ ਅਤੇ ਬਾਕੀ ਸਟਾਕ ਅਪਡੇਟ ਹੋ ਗਿਆ ਹੈ।`
+                                      });
+                                    }
+                                  });
+                                }}
+                                className="p-1 text-slate-400 hover:text-rose-600 rounded transition-colors cursor-pointer"
+                                title="Delete weighment slip"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}

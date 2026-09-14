@@ -19,8 +19,10 @@ import { BalanceChart } from './components/chart/BalanceChart';
 import { RecycleBin } from './components/recycleBin/RecycleBin';
 import { FarmerAccount } from './components/farmer/FarmerAccount';
 import { MandiReports } from './components/reports/MandiReports';
+import { FarmerBagBalanceReport } from './components/reports/FarmerBagBalanceReport';
 import { SettingsManager } from './components/settings/SettingsManager';
 import { ReceiptModal } from './components/common/ReceiptModal';
+import { BagsEntryEditModal } from './components/bags/BagsEntryEditModal';
 import {
   LayoutDashboard,
   ShoppingBag,
@@ -67,6 +69,7 @@ const MainAppContent: React.FC = () => {
           {activeSection === 'same-date-multi-entry' && <SameDateMultiFarmerEntry />}
           {activeSection === 'search-farmer' && <FarmerSearch />}
           {activeSection === 'reports' && <MandiReports />}
+          {activeSection === 'farmer-bag-balance-labour' && <FarmerBagBalanceReport />}
           {activeSection === 'settings' && <SettingsManager />}
         </main>
       </div>
@@ -126,6 +129,9 @@ const MainAppContent: React.FC = () => {
 
       {/* Official Weighment Slip / Receipt Print Modal */}
       <ReceiptModal />
+
+      {/* Farmer Bags Entry Edit Modal */}
+      <BagsEntryEditModal />
     </div>
   );
 };

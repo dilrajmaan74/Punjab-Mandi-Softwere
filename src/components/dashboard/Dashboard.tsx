@@ -15,6 +15,7 @@ import {
   DollarSign,
   Package,
   Printer,
+  Edit,
   ChevronRight,
   Sparkles,
   Wheat,
@@ -39,6 +40,7 @@ export const Dashboard: React.FC = () => {
     recycleBinItems,
     setActiveSection,
     setActiveReceipt,
+    setActiveBagsEntryToEdit,
     setSelectedFarmerForBags
   } = useMandi();
 
@@ -513,13 +515,22 @@ export const Dashboard: React.FC = () => {
                       {formatCurrency(entry.totalAmount)}
                     </td>
                     <td className="py-2 px-3 text-right">
-                      <button
-                        onClick={() => setActiveReceipt(entry)}
-                        className="bg-slate-900 hover:bg-slate-800 text-white font-bold p-1 rounded-md transition shadow-2xs"
-                        title="ਪ੍ਰਿੰਟ ਰਸੀਦ (Print Slip)"
-                      >
-                        <Printer className="w-3.5 h-3.5 text-emerald-400" />
-                      </button>
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          onClick={() => setActiveBagsEntryToEdit(entry)}
+                          className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold p-1 rounded-md transition shadow-2xs cursor-pointer"
+                          title="ਸੋਧੋ (Edit Entry)"
+                        >
+                          <Edit className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => setActiveReceipt(entry)}
+                          className="bg-slate-900 hover:bg-slate-800 text-white font-bold p-1 rounded-md transition shadow-2xs cursor-pointer"
+                          title="ਪ੍ਰਿੰਟ ਰਸੀਦ (Print Slip)"
+                        >
+                          <Printer className="w-3.5 h-3.5 text-emerald-400" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}

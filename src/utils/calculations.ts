@@ -1,4 +1,4 @@
-import { LabourAndDeductions, CustomDeductionLine, MandiSettings } from '../types/mandi';
+import { LabourAndDeductions, CustomDeductionLine, MandiSettings, BagConditionBreakdown } from '../types/mandi';
 
 /**
  * Punjab Mandi Calculation Utilities
@@ -425,6 +425,136 @@ export function computeLabourAndDeductions(
     grandTotalDeductions,
     grossAmount: safeGross,
     netPayableAmount
+  };
+}
+
+export interface LabourRateOverrides {
+  pakkiRate?: number;
+  doubleRate?: number;
+  sukkiRate?: number;
+}
+
+/**
+ * Automatically calculate Labour Deduction from entered New, Old, Double, Sukki bags and applicable labour rates.
+ * Adheres strictly to Mandi standard:
+ * - Total Bags = New Bags + Old Bags
+ * - Double Bags @ Double Rate (user-editable, default ₹14/bag)
+ * - Sukki Bags @ Sukki Rate (user-editable, default ₹5/bag)
+ * - Remaining / Pakki Bags = Total Bags - (Double Bags + Sukki Bags) @ Pakki Rate (user-editable, default ₹7/bag)
+ * - Total Labour = (Pakki Bags * Pakki Rate) + (Double Bags * Double Rate) + (Sukki Bags * Sukki Rate)
+ * - Gross Amount = (Total Weight Kg / 100) * MSP Rate (₹2,461)
+ * - Net Amount = Gross Amount - Total Labour
+ */
+export function calculateAutomaticLabour(
+  newBags: number,
+  oldBags: number,
+  doubleBags: number,
+  sukkiBags: number,
+  grossAmount: number,
+  settings?: Partial<MandiSettings>,
+  customRates?: LabourRateOverrides
+) {
+  const safeNew = Math.max(0, newBags || 0);
+  const safeOld = Math.max(0, oldBags || 0);
+  const totalBags = safeNew + safeOld;
+
+  const safeDouble = Math.max(0, Math.min(totalBags, doubleBags || 0));
+  const safeSukki = Math.max(0, Math.min(Math.max(0, totalBags - safeDouble), sukkiBags || 0));
+  const safePakki = Math.max(0, totalBags - (safeDouble + safeSukki));
+
+  const defaultPakki = settings?.defaultPakkiLabourRate ?? DEFAULT_PAKKI_LABOUR_RATE;
+  const defaultDouble = settings?.defaultPakkaDoubleLabourRate ?? DEFAULT_PAKKA_DOUBLE_LABOUR_RATE;
+  const defaultSukki = settings?.defaultSukhiLabourRate ?? DEFAULT_SUKHI_LABOUR_RATE;
+
+  const pakkiRate =
+    customRates?.pakkiRate !== undefined && !isNaN(customRates.pakkiRate) && customRates.pakkiRate >= 0
+      ? customRates.pakkiRate
+      : defaultPakki;
+
+  const doubleRate =
+    customRates?.doubleRate !== undefined && !isNaN(customRates.doubleRate) && customRates.doubleRate >= 0
+      ? customRates.doubleRate
+      : defaultDouble;
+
+  const sukkiRate =
+    customRates?.sukkiRate !== undefined && !isNaN(customRates.sukkiRate) && customRates.sukkiRate >= 0
+      ? customRates.sukkiRate
+      : defaultSukki;
+
+  const pakkiAmount = totalBags > 0 ? Math.round(safePakki * pakkiRate * 100) / 100 : 0;
+  const doubleAmount = totalBags > 0 ? Math.round(safeDouble * doubleRate * 100) / 100 : 0;
+  const sukkiAmount = totalBags > 0 ? Math.round(safeSukki * sukkiRate * 100) / 100 : 0;
+
+  const totalLabour = Math.round((pakkiAmount + doubleAmount + sukkiAmount) * 100) / 100;
+  const safeGross = Math.max(0, Number(grossAmount) || 0);
+  const netAmount = Math.max(0, Math.round((safeGross - totalLabour) * 100) / 100);
+
+  const partsSummary: string[] = [];
+  if (safeDouble > 0) partsSummary.push(`${safeDouble} ਡਬਲ`);
+  if (safeSukki > 0) partsSummary.push(`${safeSukki} ਸੁੱਕੀ`);
+  if (safePakki > 0) partsSummary.push(`${safePakki} ਪੱਕੀ`);
+
+  const conditionBreakdown: BagConditionBreakdown = {
+    enabled: totalBags > 0,
+    totalBags,
+    doubleBags: safeDouble,
+    doubleRate,
+    doubleAmount,
+    sukkiBags: safeSukki,
+    sukkiRate,
+    sukkiAmount,
+    pakkiBags: safePakki,
+    pakkiRate,
+    pakkiAmount,
+    balanceBags: safePakki,
+    summaryText: partsSummary.length > 0 ? `${totalBags} ਕੁੱਲ = ${partsSummary.join(' + ')}` : `${totalBags} ਬੋਰੀਆਂ`
+  };
+
+  const labourDeductions: LabourAndDeductions = {
+    pakkiLabourEnabled: safePakki > 0,
+    pakkiLabourRate: pakkiRate,
+    pakkiLabourAmount: pakkiAmount,
+    pakkiBagsCount: safePakki,
+
+    pakkaDoubleLabourEnabled: safeDouble > 0,
+    pakkaDoubleLabourRate: doubleRate,
+    pakkaDoubleLabourAmount: doubleAmount,
+    doubleBagsCount: safeDouble,
+
+    sukhiLabourEnabled: safeSukki > 0,
+    sukhiLabourRate: sukkiRate,
+    sukhiLabourAmount: sukkiAmount,
+    sukkiBagsCount: safeSukki,
+
+    balanceBagsCount: safePakki,
+    conditionBreakdown,
+
+    otherDeductionsEnabled: false,
+    customDeductions: [],
+
+    totalLabourDeduction: totalLabour,
+    totalOtherDeduction: 0,
+    grandTotalDeductions: totalLabour,
+    grossAmount: safeGross,
+    netPayableAmount: netAmount
+  };
+
+  return {
+    totalBags,
+    pakkiBags: safePakki,
+    doubleBags: safeDouble,
+    sukkiBags: safeSukki,
+    pakkiRate,
+    doubleRate,
+    sukkiRate,
+    pakkiAmount,
+    doubleAmount,
+    sukkiAmount,
+    totalLabour,
+    grossAmount: safeGross,
+    netAmount,
+    labourDeductions,
+    conditionBreakdown
   };
 }
 

@@ -16,7 +16,8 @@ import {
   CalendarCheck2,
   Search,
   FileSpreadsheet,
-  Settings
+  Settings,
+  Scale
 } from 'lucide-react';
 
 interface NavItem {
@@ -82,6 +83,13 @@ const NAV_ITEMS: NavItem[] = [
     titlePa: 'ਕਿਸਾਨ ਖਾਤਾ',
     icon: User,
     badgeColor: 'bg-amber-500'
+  },
+  {
+    id: 'farmer-bag-balance-labour',
+    titleEn: 'Bag Balance & Labour',
+    titlePa: 'ਬੋਰੀ ਬੈਲੇਂਸ ਅਤੇ ਲੇਬਰ',
+    icon: Scale,
+    badgeColor: 'bg-emerald-700'
   },
   {
     id: 'lefting',

@@ -141,7 +141,7 @@ export const BardanaViewModal: React.FC<BardanaViewModalProps> = ({
                       : 'bg-amber-100 text-amber-800'
                   }`}
                 >
-                  {record.bardanaType === 'NEW' ? 'New Bag / ਨਵਾਂ ਬੋਰਾ' : 'Old Bag / ਪੁਰਾਣਾ ਬੋਰਾ'}
+                  {record.bardanaType === 'NEW' ? 'New Juth / ਨਵਾਂ ਬੋਰਾ' : 'Old Juth / ਪੁਰਾਣਾ ਬੋਰਾ'}
                 </span>
                 <p className="text-[10px] text-slate-500 mt-1">
                   {record.bardanaType === 'NEW' ? '1 Box = 500 Bags' : '1 Box = 50 Bags'}
@@ -176,7 +176,7 @@ export const BardanaViewModal: React.FC<BardanaViewModalProps> = ({
               <CheckCircle2 className="w-4 h-4 text-amber-600 shrink-0" />
               <span>
                 ਫਾਰਮੂਲਾ (Calculation): <strong>{record.boxes} ਬਕਸੇ</strong> × <strong>{record.capacityPerBox} ਬੋਰੇ/ਬਕਸਾ</strong> ={' '}
-                <strong>{record.bags.toLocaleString('en-IN')} ਬੋਰੇ</strong> ({record.bardanaType === 'NEW' ? 'New Bag Stock' : 'Old Bag Stock'})
+                <strong>{record.bags.toLocaleString('en-IN')} ਬੋਰੇ</strong> ({record.bardanaType === 'NEW' ? 'New Juth Stock' : 'Old Juth Stock'})
               </span>
             </div>
           </div>

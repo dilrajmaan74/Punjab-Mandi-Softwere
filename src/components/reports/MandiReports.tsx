@@ -3,6 +3,7 @@ import { useMandi } from '../../context/MandiContext';
 import {
   FileSpreadsheet,
   Printer,
+  Edit,
   Download,
   Filter,
   Users,
@@ -34,6 +35,7 @@ export const MandiReports: React.FC = () => {
     dailyPurchaseRecords,
     agencies,
     setActiveReceipt,
+    setActiveBagsEntryToEdit,
     settings,
     getAllFarmersPurchaseSummaries,
     getFarmerPurchaseSummary,
@@ -1060,13 +1062,22 @@ export const MandiReports: React.FC = () => {
                         {formatCurrency(entry.totalAmount)}
                       </td>
                       <td className="py-2 px-3 text-right print:hidden">
-                        <button
-                          onClick={() => setActiveReceipt(entry)}
-                          className="bg-slate-900 hover:bg-slate-800 text-white font-bold p-1 rounded-md"
-                          title="ਪ੍ਰਿੰਟ ਰਸੀਦ"
-                        >
-                          <Printer className="w-3.5 h-3.5 text-emerald-400" />
-                        </button>
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={() => setActiveBagsEntryToEdit(entry)}
+                            className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold p-1 rounded-md transition cursor-pointer shadow-2xs"
+                            title="ਸੋਧੋ (Edit Entry)"
+                          >
+                            <Edit className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => setActiveReceipt(entry)}
+                            className="bg-slate-900 hover:bg-slate-800 text-white font-bold p-1 rounded-md transition cursor-pointer"
+                            title="ਪ੍ਰਿੰਟ ਰਸੀਦ"
+                          >
+                            <Printer className="w-3.5 h-3.5 text-emerald-400" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -1189,7 +1200,7 @@ export const MandiReports: React.FC = () => {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="bg-white border border-emerald-300 rounded-xl p-4 shadow-2xs space-y-3">
             <h3 className="font-black text-emerald-900 text-xs sm:text-sm flex items-center justify-between">
-              <span>ਨਵਾਂ ਬਾਰਦਾਨਾ (New Bag Summary)</span>
+              <span>ਨਵਾਂ ਬਾਰਦਾਨਾ (New Juth Summary)</span>
               <span className="text-[10px] bg-emerald-100 text-emerald-900 px-2 py-0.5 rounded font-bold">
                 NEW
               </span>
@@ -1228,7 +1239,7 @@ export const MandiReports: React.FC = () => {
 
           <div className="bg-white border border-amber-300 rounded-xl p-4 shadow-2xs space-y-3">
             <h3 className="font-black text-amber-900 text-xs sm:text-sm flex items-center justify-between">
-              <span>ਪੁਰਾਣਾ ਬਾਰਦਾਨਾ (Old Bag Summary)</span>
+              <span>ਪੁਰਾਣਾ ਬਾਰਦਾਨਾ (Old Juth Summary)</span>
               <span className="text-[10px] bg-amber-100 text-amber-900 px-2 py-0.5 rounded font-bold">
                 OLD
               </span>

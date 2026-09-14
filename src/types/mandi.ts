@@ -692,4 +692,5 @@ export type NavigationSection =
   | 'same-date-multi-entry'
   | 'search-farmer'
   | 'reports'
+  | 'farmer-bag-balance-labour'
   | 'settings';

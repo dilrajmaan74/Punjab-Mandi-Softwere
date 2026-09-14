@@ -50,7 +50,7 @@ export async function exportLeftingVoucherPDF(
   doc.text(cleanText(record.dispatchDate), margin + 46, currentY + 7);
 
   doc.setFont('helvetica', 'bold');
-  doc.text('PROCUREMENT AGENCY:', margin + 6, currentY + 14);
+  doc.text('PURCHASE AGENCY:', margin + 6, currentY + 14);
   doc.setFont('helvetica', 'normal');
   doc.text(cleanText(record.sellerOrAgency), margin + 46, currentY + 14);
 

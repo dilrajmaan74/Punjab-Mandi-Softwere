@@ -164,8 +164,8 @@ export const BardanaManagement: React.FC = () => {
 
   const filterBardanaTypeOptions: SearchableSelectOption[] = useMemo(() => [
     { value: 'ALL', label: isEn ? 'All Types' : 'ਸਾਰਾ ਬਾਰਦਾਨਾ (All Types)' },
-    { value: 'NEW', label: isEn ? 'New Bag (500)' : 'ਨਵਾਂ ਬੋਰਾ (New Bag - 500)' },
-    { value: 'OLD', label: isEn ? 'Old Bag (50)' : 'ਪੁਰਾਣਾ ਬੋਰਾ (Old Bag - 50)' }
+    { value: 'NEW', label: isEn ? 'New Juth (500)' : 'ਨਵਾਂ ਬੋਰਾ (New Juth - 500)' },
+    { value: 'OLD', label: isEn ? 'Old Juth (50)' : 'ਪੁਰਾਣਾ ਬੋਰਾ (Old Juth - 50)' }
   ], [isEn]);
 
   // Form Submit Handler
@@ -222,7 +222,7 @@ export const BardanaManagement: React.FC = () => {
         titlePa: 'ਬਾਰਦਾਨਾ ਐਂਟਰੀ ਸਫਲਤਾਪੂਰਵਕ ਸੇਵ ਹੋ ਗਈ ਹੈ।',
         titleEn: 'Bardana Entry Saved Successfully',
         messagePa: `ਏਜੰਸੀ: ${effectiveAgency} | ਸਰੋਤ: ${effectiveSourceName} | ਕਾਰਵਾਈ: ${actionLabel} | ${bags} ਬੋਰੇ।`,
-        details: `${newRec.id} • ${bardanaType === 'NEW' ? 'New Bag (ਨਵਾਂ)' : 'Old Bag (ਪੁਰਾਣਾ)'} • ${boxes} ਬਕਸੇ (${bags} ਬੋਰੇ)`
+        details: `${newRec.id} • ${bardanaType === 'NEW' ? 'New Juth (ਨਵਾਂ)' : 'Old Juth (ਪੁਰਾਣਾ)'} • ${boxes} ਬਕਸੇ (${bags} ਬੋਰੇ)`
       });
 
       // Reset specific fields but keep agency
@@ -527,13 +527,13 @@ export const BardanaManagement: React.FC = () => {
 
       {/* Real-time Inventory KPI Ribbon */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
-        {/* Card 1: New Bag Stock */}
+        {/* Card 1: New Juth Stock */}
         <div className="bg-white border border-emerald-200 rounded-xl p-3.5 shadow-2xs space-y-2">
           <div className="flex items-center justify-between border-b border-emerald-100 pb-1.5">
             <div className="flex items-center gap-1.5">
               <div className="w-2 h-2 rounded-full bg-emerald-500" />
               <span className="text-xs font-black text-emerald-950">
-                ਨਵਾਂ ਬਾਰਦਾਨਾ (New Bag Stock)
+                ਨਵਾਂ ਬਾਰਦਾਨਾ (New Juth Stock)
               </span>
             </div>
             <span className="text-[10px] bg-emerald-50 text-emerald-800 font-bold px-2 py-0.5 rounded border border-emerald-200">
@@ -571,13 +571,13 @@ export const BardanaManagement: React.FC = () => {
           </div>
         </div>
 
-        {/* Card 2: Old Bag Stock */}
+        {/* Card 2: Old Juth Stock */}
         <div className="bg-white border border-amber-200 rounded-xl p-3.5 shadow-2xs space-y-2">
           <div className="flex items-center justify-between border-b border-amber-100 pb-1.5">
             <div className="flex items-center gap-1.5">
               <div className="w-2 h-2 rounded-full bg-amber-500" />
               <span className="text-xs font-black text-amber-950">
-                ਪੁਰਾਣਾ ਬਾਰਦਾਨਾ (Old Bag Stock)
+                ਪੁਰਾਣਾ ਬਾਰਦਾਨਾ (Old Juth Stock)
               </span>
             </div>
             <span className="text-[10px] bg-amber-50 text-amber-800 font-bold px-2 py-0.5 rounded border border-amber-200">
@@ -953,7 +953,7 @@ export const BardanaManagement: React.FC = () => {
                 </label>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {/* Type 1: New Bag */}
+                  {/* Type 1: New Juth */}
                   <button
                     type="button"
                     onClick={() => handleTypeChange('NEW')}
@@ -964,7 +964,7 @@ export const BardanaManagement: React.FC = () => {
                     }`}
                   >
                     <div className="flex items-center justify-between">
-                      <span className="font-black text-xs">New Bag (ਨਵਾਂ ਬੋਰਾ)</span>
+                      <span className="font-black text-xs">New Juth (ਨਵਾਂ ਬੋਰਾ)</span>
                       <span
                         className={`text-[10px] px-1.5 py-0.2 rounded font-bold ${
                           bardanaType === 'NEW'
@@ -980,7 +980,7 @@ export const BardanaManagement: React.FC = () => {
                     </p>
                   </button>
 
-                  {/* Type 2: Old Bag */}
+                  {/* Type 2: Old Juth */}
                   <button
                     type="button"
                     onClick={() => handleTypeChange('OLD')}
@@ -991,7 +991,7 @@ export const BardanaManagement: React.FC = () => {
                     }`}
                   >
                     <div className="flex items-center justify-between">
-                      <span className="font-black text-xs">Old Bag (ਪੁਰਾਣਾ ਬੋਰਾ)</span>
+                      <span className="font-black text-xs">Old Juth (ਪੁਰਾਣਾ ਬੋਰਾ)</span>
                       <span
                         className={`text-[10px] px-1.5 py-0.2 rounded font-bold ${
                           bardanaType === 'OLD'
@@ -1037,7 +1037,7 @@ export const BardanaManagement: React.FC = () => {
                       className="w-full bg-white border border-emerald-400 rounded-lg px-3 py-2 text-xs font-mono font-black text-emerald-950 focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
                     />
                     <span className="text-[10px] text-slate-500 mt-1 block">
-                      ਹਿਸਾਬ: {boxes} ਬਕਸੇ × {bardanaType === 'NEW' ? 500 : 50} = {boxes * (bardanaType === 'NEW' ? 500 : 50)} ਬੋਰੇ ({bardanaType === 'NEW' ? 'New Bag' : 'Old Bag'} Stock)
+                      ਹਿਸਾਬ: {boxes} ਬਕਸੇ × {bardanaType === 'NEW' ? 500 : 50} = {boxes * (bardanaType === 'NEW' ? 500 : 50)} ਬੋਰੇ ({bardanaType === 'NEW' ? 'New Juth' : 'Old Juth'} Stock)
                     </span>
                   </div>
                 </div>
@@ -1225,7 +1225,7 @@ export const BardanaManagement: React.FC = () => {
                                 : 'bg-amber-100 text-amber-800'
                             }`}
                           >
-                            {rec.bardanaType === 'NEW' ? 'New Bag (500)' : 'Old Bag (50)'}
+                            {rec.bardanaType === 'NEW' ? 'New Juth (500)' : 'Old Juth (50)'}
                           </span>
                         </td>
                         <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-700 whitespace-nowrap">
@@ -1434,7 +1434,7 @@ export const BardanaManagement: React.FC = () => {
                               : 'bg-amber-100 text-amber-800'
                           }`}
                         >
-                          {item.bardanaType === 'NEW' ? 'New Bag' : 'Old Bag'}
+                          {item.bardanaType === 'NEW' ? 'New Juth' : 'Old Juth'}
                         </span>
                       </td>
                       <td className="py-2.5 px-3 text-right font-mono font-black whitespace-nowrap">
@@ -1473,11 +1473,11 @@ export const BardanaManagement: React.FC = () => {
             </h3>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* New Bag Card */}
+              {/* New Juth Card */}
               <div className="bg-emerald-50/50 border border-emerald-300 rounded-xl p-4 space-y-3">
                 <div className="flex items-center justify-between border-b border-emerald-200 pb-2">
                   <span className="font-black text-emerald-950 text-sm">
-                    ਨਵਾਂ ਬਾਰਦਾਨਾ (New Bags - 500 Bags/Box)
+                    ਨਵਾਂ ਬਾਰਦਾਨਾ (New Juths - 500 Bags/Box)
                   </span>
                   <span className="bg-emerald-600 text-white font-mono font-black text-xs px-2 py-0.5 rounded">
                     NEW
@@ -1515,11 +1515,11 @@ export const BardanaManagement: React.FC = () => {
                 </div>
               </div>
 
-              {/* Old Bag Card */}
+              {/* Old Juth Card */}
               <div className="bg-amber-50/50 border border-amber-300 rounded-xl p-4 space-y-3">
                 <div className="flex items-center justify-between border-b border-amber-200 pb-2">
                   <span className="font-black text-amber-950 text-sm">
-                    ਪੁਰਾਣਾ ਬਾਰਦਾਨਾ (Old Bags - 50 Bags/Box)
+                    ਪੁਰਾਣਾ ਬਾਰਦਾਨਾ (Old Juths - 50 Bags/Box)
                   </span>
                   <span className="bg-amber-600 text-white font-mono font-black text-xs px-2 py-0.5 rounded">
                     OLD

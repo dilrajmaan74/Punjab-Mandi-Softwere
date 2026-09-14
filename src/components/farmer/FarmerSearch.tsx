@@ -34,6 +34,7 @@ export const FarmerSearch: React.FC = () => {
     setSelectedFarmerForBags,
     setSelectedFarmerForAccount,
     setActiveReceipt,
+    setActiveBagsEntryToEdit,
     setActiveSection,
     settings
   } = useMandi();
@@ -434,6 +435,13 @@ export const FarmerSearch: React.FC = () => {
                               </td>
                               <td className="py-2 px-3 text-right">
                                 <div className="flex items-center justify-end gap-1">
+                                  <button
+                                    onClick={() => setActiveBagsEntryToEdit(entry)}
+                                    className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold p-1 rounded-md cursor-pointer transition shadow-2xs"
+                                    title="ਐਂਟਰੀ ਸੋਧੋ (Edit Bags Entry)"
+                                  >
+                                    <Edit className="w-3.5 h-3.5 text-white" />
+                                  </button>
                                   <button
                                     onClick={() => setActiveReceipt(entry)}
                                     className="bg-slate-900 hover:bg-slate-800 text-white font-bold p-1 rounded-md cursor-pointer"

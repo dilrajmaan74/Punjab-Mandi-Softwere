@@ -68,7 +68,7 @@ export async function exportFarmerAccountPDF(
   // TOP STANDARDIZED FIRM HEADER
   // ==========================================
   const uniqueAgencies = Array.from(new Set(account.purchaseRecords.map(p => cleanText(p.agency)).filter(Boolean)));
-  const primaryAgency = uniqueAgencies.length === 1 ? uniqueAgencies[0] : (uniqueAgencies.length > 1 ? 'Multiple Procurement Agencies' : undefined);
+  const primaryAgency = uniqueAgencies.length === 1 ? uniqueAgencies[0] : undefined;
 
   y = renderStandardPdfHeader({
     doc,

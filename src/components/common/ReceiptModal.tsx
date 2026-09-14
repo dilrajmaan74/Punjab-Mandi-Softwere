@@ -170,8 +170,8 @@ export const ReceiptModal: React.FC = () => {
                 </td>
                 <td className="border border-slate-300 py-1.5 px-2 text-center font-bold">
                   {isEn
-                    ? (activeReceipt.bardana === 'OLD' ? 'Old Bag' : 'New Bag')
-                    : (activeReceipt.bardana === 'OLD' ? 'Old Bag (ਪੁਰਾਣਾ ਬਾਰਦਾਨਾ)' : 'New Bag (ਨਵਾਂ ਬਾਰਦਾਨਾ)')}
+                    ? (activeReceipt.bardana === 'OLD' ? 'Old Juth' : 'New Juth')
+                    : (activeReceipt.bardana === 'OLD' ? 'Old Juth (ਪੁਰਾਣਾ ਬਾਰਦਾਨਾ)' : 'New Juth (ਨਵਾਂ ਬਾਰਦਾਨਾ)')}
                 </td>
                 <td className="border border-slate-300 py-1.5 px-2 text-right font-bold text-slate-800">
                   {isEn

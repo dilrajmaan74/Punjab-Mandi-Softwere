@@ -36,24 +36,6 @@ export async function exportBardanaReceivedVoucherPDF(
     startY: 8
   });
 
-  // Fixed Agency Section Box
-  doc.setFillColor(236, 253, 245); // Emerald-50
-  doc.roundedRect(margin, currentY, contentWidth, 20, 2, 2, 'F');
-  doc.setDrawColor(52, 211, 153);
-  doc.roundedRect(margin, currentY, contentWidth, 20, 2, 2, 'S');
-
-  doc.setTextColor(6, 78, 59);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8.5);
-  doc.text('AGENCY ALLOCATION:', margin + 6, currentY + 7);
-
-  doc.setTextColor(15, 23, 42);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(11.5);
-  doc.text(cleanText(record.agency) || 'Punjab Mandi Board Agency', margin + 6, currentY + 14);
-
-  currentY += 26;
-
   // Receiving Details Card
   doc.setFillColor(248, 250, 252);
   doc.roundedRect(margin, currentY, contentWidth, 80, 2, 2, 'F');
@@ -106,8 +88,8 @@ export async function exportBardanaReceivedVoucherPDF(
   drawRow(
     'Bardana Type:',
     record.bardanaType === 'NEW'
-      ? 'New Bag (1 Box = 500 Bags)'
-      : 'Old Bag (1 Box = 50 Bags)',
+      ? 'New Juth (1 Box = 500 Bags)'
+      : 'Old Juth (1 Box = 50 Bags)',
     rowY
   );
   rowY += 9;
@@ -115,7 +97,7 @@ export async function exportBardanaReceivedVoucherPDF(
   rowY += 9;
   drawRow(
     'Total Bags Received:',
-    `${totalBagsCount.toLocaleString('en-IN')} Bags (${record.bardanaType === 'NEW' ? 'New' : 'Old'})`,
+    `${totalBagsCount.toLocaleString('en-IN')} Bags (${record.bardanaType === 'NEW' ? 'New Juth' : 'Old Juth'})`,
     rowY,
     true
   );
@@ -198,13 +180,25 @@ export async function exportBardanaRegisterPDF(
   const margin = 12;
   const contentWidth = pageWidth - margin * 2;
 
+  // Determine actual selected purchase agency from filter or records
+  let selectedAgency: string | undefined = undefined;
+  const fLower = filterTitle.toLowerCase();
+  if (fLower.includes('pungrain') || fLower.includes('markfed') || fLower.includes('pswc') || fLower.includes('fci') || fLower.includes('paic')) {
+    selectedAgency = filterTitle.replace(/^agency:\s*/i, '').trim();
+  } else {
+    const recordAgencies = Array.from(new Set(records.map(r => r.agency?.trim()).filter(Boolean)));
+    if (recordAgencies.length === 1) {
+      selectedAgency = recordAgencies[0];
+    }
+  }
+
   // Standardized Firm Header (Landscape)
   let currentY = renderStandardPdfHeader({
     doc,
     settings,
     title: 'BARDANA RECEIVING REGISTER & STOCK REPORT',
     subtitle: `Filter: ${cleanText(filterTitle)} | Total Entries: ${records.length}`,
-    agencyName: filterTitle.toLowerCase().includes('agency') || filterTitle.toLowerCase().includes('pungrain') || filterTitle.toLowerCase().includes('markfed') || filterTitle.toLowerCase().includes('pswc') || filterTitle.toLowerCase().includes('fci') ? filterTitle : 'ALL PROCUREMENT AGENCIES',
+    agencyName: selectedAgency,
     startY: 6
   });
 
@@ -219,15 +213,15 @@ export async function exportBardanaRegisterPDF(
   doc.setTextColor(15, 23, 42);
 
   const colW = contentWidth / 3;
-  // Box 1: New Bag
+  // Box 1: New Juth
   doc.text(
-    `NEW BAG: Recv: ${summary.newBagsReceived.toLocaleString()} | Issued: ${summary.newBagsIssued.toLocaleString()} | Balance: ${summary.newBagsRemaining.toLocaleString()}`,
+    `NEW JUTH: Recv: ${summary.newBagsReceived.toLocaleString()} | Issued: ${summary.newBagsIssued.toLocaleString()} | Balance: ${summary.newBagsRemaining.toLocaleString()}`,
     margin + 4,
     currentY + 9
   );
-  // Box 2: Old Bag
+  // Box 2: Old Juth
   doc.text(
-    `OLD BAG: Recv: ${summary.oldBagsReceived.toLocaleString()} | Issued: ${summary.oldBagsIssued.toLocaleString()} | Balance: ${summary.oldBagsRemaining.toLocaleString()}`,
+    `OLD JUTH: Recv: ${summary.oldBagsReceived.toLocaleString()} | Issued: ${summary.oldBagsIssued.toLocaleString()} | Balance: ${summary.oldBagsRemaining.toLocaleString()}`,
     margin + colW + 4,
     currentY + 9
   );

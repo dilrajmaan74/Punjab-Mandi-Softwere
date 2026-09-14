@@ -685,10 +685,10 @@ export const SameDateMultiFarmerEntry: React.FC = () => {
                       {isEn ? 'Farmer (Name, Village, Address)' : 'ਕਿਸਾਨ ਦੀ ਚੋਣ (Farmer: Name, Father, Village, Address)'}
                     </th>
                     <th className="py-2.5 px-2 w-24 text-center bg-emerald-50 text-emerald-950">
-                      {isEn ? 'New Bags' : 'ਨਵਾਂ ਬਾਰਦਾਨਾ'}
+                      {isEn ? 'New Juths' : 'ਨਵਾਂ ਬਾਰਦਾਨਾ'}
                     </th>
                     <th className="py-2.5 px-2 w-24 text-center bg-amber-50 text-amber-950">
-                      {isEn ? 'Old Bags' : 'ਪੁਰਾਣਾ ਬਾਰਦਾਨਾ'}
+                      {isEn ? 'Old Juths' : 'ਪੁਰਾਣਾ ਬਾਰਦਾਨਾ'}
                     </th>
                     <th className="py-2.5 px-2 w-20 text-center font-black">
                       {isEn ? 'Total Bags' : 'ਕੁੱਲ ਬੋਰੀਆਂ'}
@@ -769,7 +769,7 @@ export const SameDateMultiFarmerEntry: React.FC = () => {
                             </div>
                           )}
                         </td>
-                        {/* 1. New Bags Input (Larger) */}
+                        {/* 1. New Juths Input (Larger) */}
                         <td className="py-2.5 px-2 bg-emerald-50/30">
                           <input
                             type="number"
@@ -780,7 +780,7 @@ export const SameDateMultiFarmerEntry: React.FC = () => {
                             className="w-full text-center bg-white border-2 border-emerald-300 rounded-lg py-2 px-1 text-base font-mono font-black text-emerald-950 focus:outline-none focus:border-emerald-500"
                           />
                         </td>
-                        {/* 2. Old Bags Input (Larger) */}
+                        {/* 2. Old Juths Input (Larger) */}
                         <td className="py-2.5 px-2 bg-amber-50/30">
                           <input
                             type="number"
@@ -910,12 +910,12 @@ export const SameDateMultiFarmerEntry: React.FC = () => {
               {/* Batch Totals */}
               <div className="flex flex-wrap items-center gap-3 sm:gap-4 text-xs font-mono">
                 <div className="bg-emerald-50 border border-emerald-200 px-2 py-1 rounded">
-                  <span className="text-emerald-800 font-sans text-[10px] block font-bold">{isEn ? 'Total New:' : 'ਕੁੱਲ ਨਵਾਂ:'}</span>
-                  <strong className="text-emerald-950 font-black text-xs">{totalNewBagsInBatch} Bags</strong>
+                  <span className="text-emerald-800 font-sans text-[10px] block font-bold">{isEn ? 'Total New Juths:' : 'ਕੁੱਲ ਨਵਾਂ:'}</span>
+                  <strong className="text-emerald-950 font-black text-xs">{totalNewBagsInBatch} Juths</strong>
                 </div>
                 <div className="bg-amber-50 border border-amber-200 px-2 py-1 rounded">
-                  <span className="text-amber-800 font-sans text-[10px] block font-bold">{isEn ? 'Total Old:' : 'ਕੁੱਲ ਪੁਰਾਣਾ:'}</span>
-                  <strong className="text-amber-950 font-black text-xs">{totalOldBagsInBatch} Bags</strong>
+                  <span className="text-amber-800 font-sans text-[10px] block font-bold">{isEn ? 'Total Old Juths:' : 'ਕੁੱਲ ਪੁਰਾਣਾ:'}</span>
+                  <strong className="text-amber-950 font-black text-xs">{totalOldBagsInBatch} Juths</strong>
                 </div>
                 <div>
                   <span className="text-slate-500 font-sans text-[11px] block">{isEn ? 'Total Bags:' : 'ਕੁੱਲ ਬੋਰੀਆਂ:'}</span>

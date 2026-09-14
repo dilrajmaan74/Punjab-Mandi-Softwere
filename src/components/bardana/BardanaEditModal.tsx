@@ -137,7 +137,7 @@ export const BardanaEditModal: React.FC<BardanaEditModalProps> = ({
         titlePa: 'ਬਾਰਦਾਨਾ ਐਂਟਰੀ ਸਫਲਤਾਪੂਰਵਕ ਅੱਪਡੇਟ ਹੋ ਗਈ ਹੈ।',
         titleEn: 'Bardana Entry Updated Successfully',
         messagePa: `ਵਾਊਚਰ ${record.id} (${finalAgency} - ${sourceName}, ${bags} ਬੋਰੇ) ਦੀਆਂ ਤਬਦੀਲੀਆਂ ਸੇਵ ਹੋ ਗਈਆਂ।`,
-        details: `${record.id} • ${bardanaType === 'NEW' ? 'New Bag' : 'Old Bag'}: ${bags} Bags`
+        details: `${record.id} • ${bardanaType === 'NEW' ? 'New Juth' : 'Old Juth'}: ${bags} Bags`
       });
       onClose();
     } else {
@@ -305,7 +305,7 @@ export const BardanaEditModal: React.FC<BardanaEditModalProps> = ({
                     : 'bg-white text-slate-800 border-slate-200 hover:border-slate-300'
                 }`}
               >
-                <div className="font-black text-xs">ਨਵਾਂ ਬੋਰਾ (New Bag)</div>
+                <div className="font-black text-xs">ਨਵਾਂ ਬੋਰਾ (New Juth)</div>
                 <div className={`text-[10px] mt-0.5 ${bardanaType === 'NEW' ? 'text-emerald-100' : 'text-slate-500'}`}>
                   1 Box = 500 Bags
                 </div>
@@ -320,7 +320,7 @@ export const BardanaEditModal: React.FC<BardanaEditModalProps> = ({
                     : 'bg-white text-slate-800 border-slate-200 hover:border-slate-300'
                 }`}
               >
-                <div className="font-black text-xs">ਪੁਰਾਣਾ ਬੋਰਾ (Old Bag)</div>
+                <div className="font-black text-xs">ਪੁਰਾਣਾ ਬੋਰਾ (Old Juth)</div>
                 <div className={`text-[10px] mt-0.5 ${bardanaType === 'OLD' ? 'text-amber-100' : 'text-slate-500'}`}>
                   1 Box = 50 Bags
                 </div>

@@ -252,11 +252,11 @@ export const UI_STRINGS = {
     pa: '₹੨,੪੬੧ / ਕੁਇੰਟਲ'
   },
   oldBag: {
-    en: 'Old Bag',
+    en: 'Old Juth',
     pa: 'ਪੁਰਾਣਾ ਬਾਰਦਾਨਾ'
   },
   newBag: {
-    en: 'New Bag',
+    en: 'New Juth',
     pa: 'ਨਵਾਂ ਬਾਰਦਾਨਾ'
   },
   alreadyRegistered: {
@@ -315,8 +315,8 @@ export const GURMUKHI_TO_ENGLISH: Record<string, string> = {
   'ਮਿਤੀ': 'Date',
   'ਬੋਰੀਆਂ': 'Bags',
   'ਬੋਰੀ': 'Bag',
-  'ਨਵਾਂ ਬਾਰਦਾਨਾ': 'New Bags',
-  'ਪੁਰਾਣਾ ਬਾਰਦਾਨਾ': 'Old Bags',
+  'ਨਵਾਂ ਬਾਰਦਾਨਾ': 'New Juths',
+  'ਪੁਰਾਣਾ ਬਾਰਦਾਨਾ': 'Old Juths',
   'ਕੁੱਲ ਬੋਰੀਆਂ': 'Total Bags',
   'ਨਵਾਂ': 'New',
   'ਪੁਰਾਣਾ': 'Old',

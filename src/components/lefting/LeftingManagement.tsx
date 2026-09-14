@@ -163,8 +163,8 @@ export const LeftingManagement: React.FC = () => {
   }, [trucks, isEn]);
 
   const bardanaTypeOptions: SearchableSelectOption[] = useMemo(() => [
-    { value: 'NEW', label: isEn ? 'New Bags' : 'ਨਵਾਂ ਬਾਰਦਾਨਾ (New Bags)' },
-    { value: 'OLD', label: isEn ? 'Old Bags' : 'ਪੁਰਾਣਾ ਬਾਰਦਾਨਾ (Old Bags)' },
+    { value: 'NEW', label: isEn ? 'New Juths' : 'ਨਵਾਂ ਬਾਰਦਾਨਾ (New Juths)' },
+    { value: 'OLD', label: isEn ? 'Old Juths' : 'ਪੁਰਾਣਾ ਬਾਰਦਾਨਾ (Old Juths)' },
     { value: 'BOTH', label: isEn ? 'Both (New + Old Mixed)' : 'ਦੋਵੇਂ (New + Old Mixed)' }
   ], [isEn]);
 
