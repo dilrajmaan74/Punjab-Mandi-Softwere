@@ -5,10 +5,6 @@ import { Farmer, FarmerAccountSummary, FarmerAdvanceRecord } from '../../types/m
 import { SearchableSelect, SearchableSelectOption } from '../common/SearchableSelect';
 import {
   User,
-  Search,
-  Building,
-  Phone,
-  CreditCard,
   Printer,
   FileDown,
   Edit,
@@ -18,9 +14,6 @@ import {
   Scale,
   Calendar,
   IndianRupee,
-  CheckCircle2,
-  AlertTriangle,
-  ArrowRight,
   Plus,
   Eye,
   EyeOff,
@@ -28,24 +21,28 @@ import {
   Check,
   Clock,
   Layers,
-  ArrowUpRight,
-  ShieldCheck,
-  RefreshCw,
-  Wallet,
   Calculator,
-  Percent,
   Coins,
-  ArrowDownLeft,
   Users,
   Link as LinkIcon,
-  CheckCheck,
   Info,
-  X
+  X,
+  ChevronDown,
+  ChevronUp,
+  CheckCircle2,
+  FileText,
+  ArrowRightLeft
 } from 'lucide-react';
 import { formatCurrencyINR, maskAadhaarNumber, calculateAdvanceInterest } from '../../utils/calculations';
-import { exportFarmerAccountPDF } from '../../utils/farmerAccountPdfExport';
+import { exportFarmerAccountPDF, exportSimpleFarmerAccountPDF } from '../../utils/farmerAccountPdfExport';
 import { FarmerProfileViewModal } from './FarmerProfileViewModal';
 import { FarmerEditModal } from './FarmerEditModal';
+import { FarmerAccountStatementA4 } from './FarmerAccountStatementA4';
+import {
+  savePaymentTransfer,
+  saveSameFarmerAdjustment,
+  saveBagTransfer
+} from '../../utils/farmerAdjustmentsStorage';
 
 export const FarmerAccount: React.FC = () => {
   const {
@@ -70,11 +67,9 @@ export const FarmerAccount: React.FC = () => {
   } = useMandi();
 
   const isEn = language === 'en';
-
   const { confirmDelete, notifyDeleteSuccess, notifySaveSuccess, notifyError } = useNotification();
 
   // Search & Selection State
-  const [searchQuery, setSearchQuery] = useState('');
   const [selectedFarmerId, setSelectedFarmerId] = useState<string>(() => {
     if (selectedFarmerForAccount) return selectedFarmerForAccount.id;
     return farmers[0]?.id || '';
@@ -89,20 +84,22 @@ export const FarmerAccount: React.FC = () => {
     }
   }, [selectedFarmerForAccount, farmers]);
 
-  // UI Modals State
+  // UI Modals & Display State
   const [isViewProfileOpen, setIsViewProfileOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [isAdvanceModalOpen, setIsAdvanceModalOpen] = useState(false);
+  const [showPdfOptionsModal, setShowPdfOptionsModal] = useState(false);
+  const [showAdditionalRecords, setShowAdditionalRecords] = useState(false);
   const [editingAdvance, setEditingAdvance] = useState<FarmerAdvanceRecord | null>(null);
   const [viewingAdvance, setViewingAdvance] = useState<FarmerAdvanceRecord | null>(null);
-  const [showBreakupDetails, setShowBreakupDetails] = useState(true);
   const [showMaskedAadhaar, setShowMaskedAadhaar] = useState(true);
   const [copiedId, setCopiedId] = useState(false);
   const [isExportingPDF, setIsExportingPDF] = useState(false);
-  const [activeTab, setActiveTab] = useState<
-    'all' | 'arrival' | 'purchases' | 'linked' | 'advances' | 'boli' | 'payments' | 'statement'
-  >('all');
+  const [activeTab, setActiveTab] = useState<'statement' | 'records'>('statement');
+
+  // Print view mode ('simple' or 'full')
+  const [printMode, setPrintMode] = useState<'simple' | 'full'>('simple');
 
   // Advance Form State
   const [advanceForm, setAdvanceForm] = useState({
@@ -125,54 +122,89 @@ export const FarmerAccount: React.FC = () => {
     remarks: ''
   });
 
-  // Fetch complete farmer account
+  // Adjustments & Bag Transfer Modal State
+  const [isAdjustmentModalOpen, setIsAdjustmentModalOpen] = useState(false);
+  const [adjustmentTab, setAdjustmentTab] = useState<'payment_transfer' | 'same_adjustment' | 'bag_transfer'>('payment_transfer');
+  const [adjustmentRefreshKey, setAdjustmentRefreshKey] = useState(0);
+
+  // Form: Payment Transfer (A)
+  const [paymentTransferForm, setPaymentTransferForm] = useState({
+    toFarmerId: '',
+    amount: '',
+    date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+    reason: ''
+  });
+
+  // Form: Same Farmer Adjustment (B)
+  const [sameAdjustmentForm, setSameAdjustmentForm] = useState({
+    type: 'ADVANCE_TO_PURCHASE' as 'ADVANCE_TO_PURCHASE' | 'PURCHASE_TO_ADVANCE' | 'LABOUR_ADJUSTMENT' | 'OTHER',
+    amount: '',
+    date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+    reason: ''
+  });
+
+  // Form: Bag Transfer
+  const [bagTransferForm, setBagTransferForm] = useState({
+    toFarmerId: '',
+    bags: '',
+    date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+    reason: ''
+  });
+
+  // Fetch current farmer and complete account
   const currentFarmer = farmers.find((f) => f.id === selectedFarmerId);
   const accountSummary: FarmerAccountSummary | null = selectedFarmerId
     ? getCompleteFarmerAccount(selectedFarmerId)
     : null;
 
-  // Filtered farmers list for search dropdown
-  const filteredFarmers = farmers.filter((f) => {
-    const q = searchQuery.toLowerCase().trim();
-    if (!q) return true;
-    const cleanAadhaar = f.aadhaar.replace(/\s+/g, '');
-    return (
-      f.farmerName.toLowerCase().includes(q) ||
-      f.farmerNamePa.toLowerCase().includes(q) ||
-      f.id.toLowerCase().includes(q) ||
-      f.village.toLowerCase().includes(q) ||
-      f.villagePa.toLowerCase().includes(q) ||
-      (f.fatherName && f.fatherName.toLowerCase().includes(q)) ||
-      (f.mobile && f.mobile.includes(q)) ||
-      cleanAadhaar.includes(q.replace(/\s+/g, ''))
-    );
-  });
-
+  // Search dropdown options
   const farmerSelectOptions: SearchableSelectOption[] = useMemo(() => {
     return farmers.map((f) => ({
       value: f.id,
-      label: isEn ? f.farmerName : `${f.farmerNamePa} (${f.farmerName})`,
-      subLabel: `${isEn ? 'Village' : 'ਪਿੰਡ'}: ${isEn ? f.village : f.villagePa} | ${isEn ? 'S/o' : 'ਪਿਤਾ'}: ${f.fatherName || '-'}`,
-      badge: f.linkedMainFarmerId ? (isEn ? 'Linked' : 'ਸੰਬੰਧਿਤ') : f.id,
+      label: `${f.farmerNamePa} (${f.farmerName})`,
+      subLabel: `A/C: ${f.id} | ਪਿੰਡ (Village): ${f.villagePa || f.village} | ਪਿਤਾ: ${f.fatherName || '-'}`,
+      badge: f.linkedMainFarmerId ? 'ਲਿੰਕ (Linked)' : f.id,
       badgeColor: f.linkedMainFarmerId ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-700',
       keywords: [f.farmerName, f.farmerNamePa, f.village, f.villagePa, f.id, f.mobile || '', f.aadhaar || '']
     }));
-  }, [farmers, isEn]);
-
-  const advancePaymentModeOptions: SearchableSelectOption[] = useMemo(() => [
-    { value: 'CASH', label: isEn ? 'Cash' : 'Cash (ਨਕਦ)' },
-    { value: 'BANK_TRANSFER', label: isEn ? 'Bank Transfer' : 'Bank Transfer (ਬੈਂਕ)' },
-    { value: 'CHEQUE', label: isEn ? 'Cheque' : 'Cheque (ਚੈੱਕ)' },
-    { value: 'OTHER', label: isEn ? 'Other' : 'Other (ਹੋਰ)' }
-  ], [isEn]);
+  }, [farmers]);
 
   const paymentModeOptions: SearchableSelectOption[] = useMemo(() => [
-    { value: 'BANK_TRANSFER', label: isEn ? 'Bank Transfer' : 'Bank Transfer (ਬੈਂਕ)' },
+    { value: 'BANK_TRANSFER', label: 'Bank Transfer (ਬੈਂਕ)' },
     { value: 'RTGS', label: 'RTGS' },
     { value: 'NEFT', label: 'NEFT' },
-    { value: 'CHEQUE', label: isEn ? 'Cheque' : 'Cheque (ਚੈੱਕ)' },
-    { value: 'CASH', label: isEn ? 'Cash' : 'Cash (ਨਕਦ)' }
-  ], [isEn]);
+    { value: 'CHEQUE', label: 'Cheque (ਚੈੱਕ)' },
+    { value: 'CASH', label: 'Cash (ਨਕਦ)' }
+  ], []);
+
+  // --------------------------------------------------------------------------
+  // CALCULATIONS FOR 7 KEY METRICS (Identical formula & parameters)
+  // --------------------------------------------------------------------------
+  const bagRate = 925; // 1 Bag = 37.5 Kg @ ₹2,461/Qtl = ₹922.88 -> standard rounded ₹925
+  const totalBagsBrought = accountSummary ? accountSummary.mandiArrivalBags : 0;
+  const ownPurchaseBags = accountSummary ? accountSummary.directPurchasedBags : 0;
+  const linkedPurchaseBags = accountSummary ? accountSummary.linkedPurchasedBags : 0;
+  const totalPurchaseBags = ownPurchaseBags + linkedPurchaseBags;
+  const balanceBeforeLabour = totalBagsBrought - totalPurchaseBags;
+
+  const labourExpense = accountSummary
+    ? (accountSummary.totalLabourDeductions > 0
+        ? accountSummary.totalLabourDeductions
+        : totalBagsBrought * (settings.defaultPakkiLabourRate ?? 7))
+    : 0;
+
+  const labourBags = labourExpense > 0 ? Math.ceil(labourExpense / bagRate) : 0;
+  const finalBalanceBags = balanceBeforeLabour - labourBags;
+
+  // Total amount for own purchases
+  const totalOwnPurchaseAmount = accountSummary
+    ? accountSummary.purchaseRecords.reduce((sum, p) => sum + (p.totalAmount || 0), 0)
+    : 0;
+
+  // Total amount for linked purchases
+  const totalLinkedPurchaseAmount = accountSummary
+    ? accountSummary.linkedPurchasesList.reduce((sum, p) => sum + (p.totalAmount || 0), 0)
+    : 0;
 
   // Copy Farmer ID
   const handleCopyFarmerId = () => {
@@ -182,36 +214,62 @@ export const FarmerAccount: React.FC = () => {
     setTimeout(() => setCopiedId(false), 2000);
   };
 
-  // PDF Export
-  const handleExportPDF = async () => {
+  // --------------------------------------------------------------------------
+  // PRINT HANDLERS
+  // --------------------------------------------------------------------------
+  const handleTriggerPrint = (mode: 'simple' | 'full') => {
+    setPrintMode(mode);
+    setTimeout(() => {
+      window.print();
+    }, 150);
+  };
+
+  // PDF Export Handlers
+  const handleExportPDF = async (type: 'simple' | 'full') => {
     if (!accountSummary) return;
     try {
       setIsExportingPDF(true);
-      await exportFarmerAccountPDF(accountSummary, settings);
-      notifySaveSuccess({
-        titleEn: 'Farmer Account PDF Exported',
-        titlePa: 'ਕਿਸਾਨ ਖਾਤਾ ਪੀ.ਡੀ.ਐਫ ਤਿਆਰ ਹੋ ਗਿਆ',
-        messageEn: `Account PDF for ${accountSummary.farmer.farmerName} exported successfully.`,
-        messagePa: `ਕਿਸਾਨ ${accountSummary.farmer.farmerNamePa} ਦਾ ਖਾਤਾ ਪੀ.ਡੀ.ਐਫ ਸਫਲਤਾਪੂਰਵਕ ਡਾਊਨਲੋਡ ਹੋ ਗਿਆ ਹੈ।`
-      });
+      setShowPdfOptionsModal(false);
+      if (type === 'simple') {
+        await exportSimpleFarmerAccountPDF(accountSummary, settings, {
+          labourExpense,
+          ratePerBag: bagRate,
+          labourBagsAdjustment: labourBags,
+          finalBalanceBags
+        });
+        notifySaveSuccess({
+          titleEn: 'Simple PDF Exported',
+          titlePa: 'ਸਧਾਰਨ ਖਾਤਾ PDF ਡਾਊਨਲੋਡ ਹੋ ਗਿਆ',
+          messageEn: `Simple summary PDF for ${accountSummary.farmer.farmerName} generated.`,
+          messagePa: `ਕਿਸਾਨ ${accountSummary.farmer.farmerNamePa} ਦਾ ਸਧਾਰਨ PDF ਡਾਊਨਲੋਡ ਹੋ ਗਿਆ ਹੈ।`
+        });
+      } else {
+        await exportFarmerAccountPDF(accountSummary, settings, {
+          labourExpense,
+          ratePerBag: bagRate,
+          labourBagsAdjustment: labourBags,
+          finalBalanceBags
+        });
+        notifySaveSuccess({
+          titleEn: 'Full Details PDF Exported',
+          titlePa: 'ਪੂਰੀ ਜਾਣਕਾਰੀ PDF ਡਾਊਨਲੋਡ ਹੋ ਗਿਆ',
+          messageEn: `Full account PDF for ${accountSummary.farmer.farmerName} generated.`,
+          messagePa: `ਕਿਸਾਨ ${accountSummary.farmer.farmerNamePa} ਦਾ ਪੂਰੀ ਜਾਣਕਾਰੀ PDF ਡਾਊਨਲੋਡ ਹੋ ਗਿਆ ਹੈ।`
+        });
+      }
     } catch (err) {
       notifyError({
         titleEn: 'PDF Export Failed',
-        titlePa: 'ਪੀ.ਡੀ.ਐਫ ਡਾਊਨਲੋਡ ਅਸਫਲ',
+        titlePa: 'PDF ਡਾਊਨਲੋਡ ਅਸਫਲ',
         messageEn: 'Could not generate Farmer Account PDF.',
-        messagePa: 'ਕਿਸਾਨ ਖਾਤਾ ਪੀ.ਡੀ.ਐਫ ਬਣਾਉਣ ਵਿੱਚ ਸਮੱਸਿਆ ਆਈ।'
+        messagePa: 'ਕਿਸਾਨ ਖਾਤਾ PDF ਬਣਾਉਣ ਵਿੱਚ ਸਮੱਸਿਆ ਆਈ।'
       });
     } finally {
       setIsExportingPDF(false);
     }
   };
 
-  // Print Farmer Account Statement
-  const handlePrint = () => {
-    window.print();
-  };
-
-  // Delete Farmer Handler with strong warning check
+  // Delete Farmer Handler
   const handleDeleteFarmer = () => {
     if (!currentFarmer || !accountSummary) return;
     const hasTransactions = accountSummary.transactions.length > 0;
@@ -221,15 +279,14 @@ export const FarmerAccount: React.FC = () => {
       recordNamePa: `ਕਿਸਾਨ ${currentFarmer.farmerNamePa}`,
       recordId: currentFarmer.id,
       itemDetails: [
-        { labelEn: 'Farmer ID', labelPa: 'ਕਿਸਾਨ ਆਈ.ਡੀ', value: currentFarmer.id },
+        { labelEn: 'Farmer Account No.', labelPa: 'ਖਾਤਾ ਨੰਬਰ', value: currentFarmer.id },
         { labelEn: 'Village', labelPa: 'ਪਿੰਡ', value: `${currentFarmer.villagePa} (${currentFarmer.village})` },
-        { labelEn: 'Mandi Arrival Bags', labelPa: 'ਮੰਡੀ ਆਮਦ ਬੋਰੀਆਂ', value: `${accountSummary.mandiArrivalBags} Bags` },
-        { labelEn: 'Purchased Bags', labelPa: 'ਖਰੀਦੇ ਗਏ ਬੋਰੇ', value: `${accountSummary.purchasedBags} Bags` },
+        { labelEn: 'Total Bags Brought', labelPa: 'ਕੁੱਲ ਬੋਰੀਆਂ', value: `${accountSummary.mandiArrivalBags} Bags` },
         {
           labelEn: 'Warning',
           labelPa: 'ਚੇਤਾਵਨੀ',
           value: hasTransactions
-            ? 'This farmer has existing mandi transactions. Deleting this farmer will remove all linked records. / ਇਸ ਕਿਸਾਨ ਦੇ ਰਿਕਾਰਡ ਮੌਜੂਦ ਹਨ। ਡਿਲੀਟ ਕਰਨ ਨਾਲ ਸਾਰੇ ਲਿੰਕਡ ਰਿਕਾਰਡ ਹਟ ਜਾਣਗੇ।'
+            ? 'This farmer has existing mandi records. Deleting will remove all linked records. / ਇਸ ਕਿਸਾਨ ਦੇ ਰਿਕਾਰਡ ਮੌਜੂਦ ਹਨ।'
             : 'No transactions found. Safe to delete.'
         }
       ],
@@ -238,16 +295,12 @@ export const FarmerAccount: React.FC = () => {
         const namePa = currentFarmer.farmerNamePa;
         deleteFarmer(currentFarmer.id);
         const remaining = farmers.filter((f) => f.id !== currentFarmer.id);
-        if (remaining.length > 0) {
-          setSelectedFarmerId(remaining[0].id);
-        } else {
-          setSelectedFarmerId('');
-        }
+        setSelectedFarmerId(remaining[0]?.id || '');
         notifyDeleteSuccess({
-          titlePa: 'ਕਿਸਾਨ ਦਾ ਖਾਤਾ ਸਫਲਤਾਪੂਰਵਕ ਡਿਲੀਟ ਹੋ ਗਿਆ ਹੈ।',
+          titlePa: 'ਕਿਸਾਨ ਦਾ ਖਾਤਾ ਹਟਾ ਦਿੱਤਾ ਗਿਆ ਹੈ।',
           titleEn: 'Farmer Account Deleted Successfully',
-          messagePa: `ਕਿਸਾਨ ${namePa} ਦਾ ਖਾਤਾ ਅਤੇ ਸਾਰੇ ਰਿਕਾਰਡ ਹਟਾ ਦਿੱਤੇ ਗਏ ਹਨ।`,
-          messageEn: `Farmer ${nameEn} account and all linked records have been removed.`
+          messagePa: `ਕਿਸਾਨ ${namePa} ਦਾ ਖਾਤਾ ਹਟਾ ਦਿੱਤਾ ਗਿਆ ਹੈ।`,
+          messageEn: `Farmer ${nameEn} account removed.`
         });
       }
     });
@@ -300,7 +353,7 @@ export const FarmerAccount: React.FC = () => {
         titleEn: 'Invalid Amount',
         titlePa: 'ਗਲਤ ਰਕਮ',
         messageEn: 'Please enter a valid advance amount greater than 0.',
-        messagePa: 'ਕਿਰਪਾ ਕਰਕੇ 0 ਤੋਂ ਵੱਧ ਸਹੀ ਪੇਸ਼ਗੀ ਰਕਮ ਦਰਜ ਕਰੋ।'
+        messagePa: 'ਕਿਰਪਾ ਕਰਕੇ ਸਹੀ ਪੇਸ਼ਗੀ ਰਕਮ ਦਰਜ ਕਰੋ।'
       });
       return;
     }
@@ -322,7 +375,7 @@ export const FarmerAccount: React.FC = () => {
         titleEn: 'Advance Updated',
         titlePa: 'ਪੇਸ਼ਗੀ ਰਿਕਾਰਡ ਅਪਡੇਟ ਹੋ ਗਿਆ',
         messageEn: `Advance record of ₹${amt} updated successfully.`,
-        messagePa: `ਕਿਸਾਨ ਲਈ ₹${amt} ਦੀ ਪੇਸ਼ਗੀ ਅਪਡੇਟ ਕਰ ਦਿੱਤੀ ਗਈ ਹੈ।`
+        messagePa: `ਕਿਸਾਨ ਲਈ ₹${amt} ਦੀ ਪੇਸ਼ਗੀ ਅਪਡੇਟ ਹੋ ਗਈ ਹੈ।`
       });
     } else {
       addFarmerAdvance({
@@ -344,39 +397,15 @@ export const FarmerAccount: React.FC = () => {
       notifySaveSuccess({
         titleEn: 'Advance Recorded',
         titlePa: 'ਨਵੀਂ ਪੇਸ਼ਗੀ ਦਰਜ ਹੋ ਗਈ',
-        messageEn: `Advance of ₹${amt} with ${rate}% interest recorded successfully.`,
-        messagePa: `ਕਿਸਾਨ ਲਈ ₹${amt} (${rate}% ਪ੍ਰਤੀ ਮਹੀਨਾ ਵਿਆਜ) ਪੇਸ਼ਗੀ ਦਰਜ ਹੋ ਗਈ ਹੈ।`
+        messageEn: `Advance of ₹${amt} recorded successfully.`,
+        messagePa: `ਕਿਸਾਨ ਲਈ ₹${amt} ਪੇਸ਼ਗੀ ਦਰਜ ਹੋ ਗਈ ਹੈ।`
       });
     }
 
     setIsAdvanceModalOpen(false);
   };
 
-  // Delete Advance Record
-  const handleDeleteAdvance = (adv: FarmerAdvanceRecord) => {
-    confirmDelete({
-      recordNameEn: `Advance Entry ${adv.id}`,
-      recordNamePa: `ਪੇਸ਼ਗੀ ਰਿਕਾਰਡ ${adv.id}`,
-      recordId: adv.id,
-      itemDetails: [
-        { labelEn: 'Farmer', labelPa: 'ਕਿਸਾਨ', value: `${adv.farmerNamePa} (${adv.farmerId})` },
-        { labelEn: 'Principal Amount', labelPa: 'ਮੂਲ ਰਕਮ', value: formatCurrencyINR(adv.amount) },
-        { labelEn: 'Date', labelPa: 'ਮਿਤੀ', value: adv.date },
-        { labelEn: 'Interest Accrued', labelPa: 'ਜੁੜਿਆ ਵਿਆਜ', value: formatCurrencyINR(adv.interestAmount || 0) }
-      ],
-      onConfirm: () => {
-        deleteFarmerAdvance(adv.id);
-        notifyDeleteSuccess({
-          titleEn: 'Advance Deleted',
-          titlePa: 'ਪੇਸ਼ਗੀ ਰਿਕਾਰਡ ਹਟਾ ਦਿੱਤਾ ਗਿਆ',
-          messageEn: `Advance of ${formatCurrencyINR(adv.amount)} removed.`,
-          messagePa: `ਪੇਸ਼ਗੀ ਰਕਮ ${formatCurrencyINR(adv.amount)} ਹਟਾ ਦਿੱਤੀ ਗਈ ਹੈ।`
-        });
-      }
-    });
-  };
-
-  // Save New Payment
+  // Save Payment
   const handleSavePayment = (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentFarmer) return;
@@ -416,8 +445,8 @@ export const FarmerAccount: React.FC = () => {
     notifySaveSuccess({
       titleEn: 'Payment Recorded',
       titlePa: 'ਭੁਗਤਾਨ ਸਫਲਤਾਪੂਰਵਕ ਦਰਜ ਹੋ ਗਿਆ',
-      messageEn: `Payment of ${formatCurrencyINR(amt)} recorded for ${currentFarmer.farmerName}.`,
-      messagePa: `ਕਿਸਾਨ ${currentFarmer.farmerNamePa} ਲਈ ${formatCurrencyINR(amt)} ਦਾ ਭੁਗਤਾਨ ਦਰਜ ਹੋ ਗਿਆ ਹੈ।`
+      messageEn: `Payment of ${formatCurrencyINR(amt)} recorded.`,
+      messagePa: `ਕਿਸਾਨ ਲਈ ${formatCurrencyINR(amt)} ਦਾ ਭੁਗਤਾਨ ਦਰਜ ਹੋ ਗਿਆ ਹੈ।`
     });
   };
 
@@ -446,1486 +475,1047 @@ export const FarmerAccount: React.FC = () => {
   })();
 
   return (
-    <div className="space-y-5 animate-in fade-in duration-200">
-      {/* 1. TOP HEADER & FARMER SEARCH SELECTOR */}
-      <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4 print:hidden">
-        <div className="flex items-center gap-3">
-          <div className="p-3 bg-emerald-800 text-white rounded-2xl shadow-sm">
-            <Calculator className="w-6 h-6" />
-          </div>
+    <>
+      {/* ==================================================================== */}
+      {/* SCREEN UI (Hidden when printing) */}
+      {/* ==================================================================== */}
+      <div className="space-y-6 print:hidden">
+        {/* 1. TOP BAR: TITLE & FARMER SELECTOR */}
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <h1 className="text-xl font-black text-slate-900 flex items-center gap-2">
-              <span>{isEn ? 'Farmer Account & Statement' : 'ਕਿਸਾਨ ਖਾਤਾ / FARMER ACCOUNT & STATEMENT'}</span>
+            <h1 className="text-2xl font-black text-slate-900 flex items-center gap-2.5">
+              <span>Farmer Account / ਕਿਸਾਨ ਖਾਤਾ</span>
             </h1>
-            <p className="text-xs text-slate-500 font-medium">
-              {isEn ? 'Arrivals, purchase, bardana, labour deductions, advances, interest and final settlement' : 'ਮੰਡੀ ਆਮਦ, ਖਰੀਦ, ਬਾਰਦਾਨਾ, ਲੇਬਰ ਕਟੌਤੀਆਂ, ਪੇਸ਼ਗੀ (ਐਡਵਾਂਸ), ਵਿਆਜ ਅਤੇ ਅੰਤਿਮ ਹਿਸਾਬ-ਕਿਤਾਬ'}
+            <p className="text-xs text-slate-500 font-medium mt-0.5">
+              ਮੰਡੀ ਆਮਦ, ਖਰੀਦ, ਲੇਬਰ ਅਤੇ ਬਾਕੀ ਬੋਰੀਆਂ ਦਾ ਸਰਲ ਹਿਸਾਬ-ਕਿਤਾਬ / Simple & Clear Farmer Bag Balance
             </p>
           </div>
+
+          {/* Search & Select Farmer */}
+          <div className="w-full md:w-96">
+            <SearchableSelect
+              id="farmer-account-search-select"
+              value={selectedFarmerId || ''}
+              onChange={(val) => {
+                setSelectedFarmerId(val);
+                const found = farmers.find((f) => f.id === val);
+                if (found) setSelectedFarmerForAccount(found);
+              }}
+              options={farmerSelectOptions}
+              placeholder="ਕਿਸਾਨ ਚੁਣੋ (Select Farmer)..."
+              searchPlaceholder="ਨਾਮ, ਪਿੰਡ, ਖਾਤਾ ਨੰਬਰ ਲਿਖੋ..."
+              emptyMessage="ਕੋਈ ਕਿਸਾਨ ਨਹੀਂ ਮਿਲਿਆ (No farmer found)"
+            />
+          </div>
         </div>
 
-        {/* Searchable Farmer Dropdown */}
-        <div className="w-full sm:w-80">
-          <SearchableSelect
-            id="farmer-account-select"
-            value={selectedFarmerId || ''}
-            onChange={(val) => {
-              setSelectedFarmerId(val);
-              const found = farmers.find((f) => f.id === val);
-              if (found) setSelectedFarmerForAccount(found);
-            }}
-            options={farmerSelectOptions}
-            placeholder={isEn ? "Search and select farmer..." : "ਕਿਸਾਨ ਖੋਜੋ ਤੇ ਚੁਣੋ..."}
-            searchPlaceholder={isEn ? "Type name, village, ID..." : "ਨਾਮ, ਪਿੰਡ, ਆਈ.ਡੀ ਲਿਖੋ..."}
-            emptyMessage={isEn ? "No farmer found" : "ਕੋਈ ਕਿਸਾਨ ਨਹੀਂ ਮਿਲਿਆ"}
-          />
-        </div>
-      </div>
-
-      {!currentFarmer || !accountSummary ? (
-        <div className="bg-white p-12 text-center rounded-2xl border border-slate-200 shadow-sm space-y-3">
-          <User className="w-12 h-12 text-slate-300 mx-auto" />
-          <h3 className="text-base font-bold text-slate-700">ਕਿਸਾਨ ਦੀ ਚੋਣ ਕਰੋ / Select a Farmer</h3>
-          <p className="text-xs text-slate-500 max-w-md mx-auto">
-            ਕਿਸਾਨ ਦਾ ਸਮੁੱਚਾ ਖਾਤਾ, ਮੰਡੀ ਆਮਦ, ਖਰੀਦ, ਪੇਸ਼ਗੀ ਵਿਆਜ ਅਤੇ ਲੇਬਰ ਕਟੌਤੀਆਂ ਦੇਖਣ ਲਈ ਉੱਪਰ ਦਿੱਤੀ ਸੂਚੀ ਵਿੱਚੋਂ ਕਿਸਾਨ ਚੁਣੋ।
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-5">
-          {/* ============================================================== */}
-          {/* 2. FARMER LINKING STATUS BANNER */}
-          {/* ============================================================== */}
-          {accountSummary.isMainFarmer && (
-            <div className="p-4 bg-gradient-to-r from-amber-500/10 via-amber-50 to-emerald-50 rounded-2xl border border-amber-300 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 bg-amber-600 text-white rounded-xl shadow-xs">
-                  <Users className="w-5 h-5" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="px-2 py-0.5 bg-amber-600 text-white text-[11px] font-black rounded-md">
-                      ਮੁੱਖ ਕਿਸਾਨ ਖਾਤਾ (MAIN FARMER POOL)
-                    </span>
-                    <span className="text-xs font-bold text-slate-800">
-                      ਲਿੰਕਡ ਸਬ-ਕਿਸਾਨ: {accountSummary.linkedFarmersList?.length || 0}
-                    </span>
+        {!currentFarmer || !accountSummary ? (
+          <div className="bg-white p-16 text-center rounded-2xl border border-slate-200 shadow-sm space-y-3">
+            <User className="w-12 h-12 text-slate-300 mx-auto" />
+            <h3 className="text-base font-bold text-slate-700">ਕਿਸਾਨ ਦੀ ਚੋਣ ਕਰੋ / Select a Farmer</h3>
+            <p className="text-xs text-slate-500 max-w-md mx-auto">
+              ਕਿਸਾਨ ਦਾ ਸਮੁੱਚਾ ਖਾਤਾ ਅਤੇ ਬੋਰੀਆਂ ਦਾ ਹਿਸਾਬ ਦੇਖਣ ਲਈ ਉੱਪਰ ਦਿੱਤੀ ਸੂਚੀ ਵਿੱਚੋਂ ਕਿਸਾਨ ਚੁਣੋ।
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {/* ============================================================== */}
+            {/* 2. FARMER PROFILE CARD (Bold, Clear, with prominent Account No.) */}
+            {/* ============================================================== */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden p-5">
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
+                {/* Left: Avatar & Personal Info */}
+                <div className="flex items-start sm:items-center gap-4">
+                  <div className="w-16 h-16 rounded-2xl bg-emerald-50 border border-emerald-200 overflow-hidden shrink-0 flex items-center justify-center">
+                    {currentFarmer.photoUrl ? (
+                      <img
+                        src={currentFarmer.photoUrl}
+                        alt={currentFarmer.farmerName}
+                        className="w-full h-full object-cover"
+                        referrerPolicy="no-referrer"
+                      />
+                    ) : (
+                      <User className="w-8 h-8 text-emerald-800" />
+                    )}
                   </div>
-                  <p className="text-xs text-slate-600 mt-0.5">
-                    ਇਸ ਮੁੱਖ ਕਿਸਾਨ ਦੇ ਆਮਦ ਸਟਾਕ (<strong>{accountSummary.mandiArrivalBags} ਬੋਰੇ</strong>) ਵਿੱਚੋਂ ਸਬ-ਕਿਸਾਨਾਂ ਦੁਆਰਾ{' '}
-                    <strong>{accountSummary.linkedPurchasedBags} ਬੋਰੇ</strong> ਖਰੀਦੇ ਗਏ ਹਨ। ਬਾਕੀ ਅਣਵਿਕਿਆ ਸਟਾਕ:{' '}
-                    <strong className="text-rose-700">{accountSummary.remainingBags} ਬੋਰੇ</strong>
-                  </p>
+
+                  <div className="space-y-1">
+                    {/* Farmer Name */}
+                    <div className="flex items-center gap-2.5 flex-wrap">
+                      <h2 className="text-xl font-black text-slate-900">
+                        {currentFarmer.farmerNamePa} ({currentFarmer.farmerName})
+                      </h2>
+                      {/* Prominent Account Number Badge */}
+                      <span className="inline-flex items-center gap-1 px-3 py-1 bg-slate-900 text-amber-300 font-mono font-black text-xs rounded-xl shadow-xs">
+                        <span>Account No / ਖਾਤਾ ਨੰਬਰ: {currentFarmer.id}</span>
+                        <button
+                          onClick={handleCopyFarmerId}
+                          className="hover:text-white transition-colors"
+                          title="Copy Account Number"
+                        >
+                          {copiedId ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                        </button>
+                      </span>
+                    </div>
+
+                    {/* Farmer Details */}
+                    <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-xs text-slate-600 font-medium">
+                      <div>
+                        <span className="text-slate-400">Farmer Name / ਕਿਸਾਨ ਦਾ ਨਾਮ: </span>
+                        <strong className="text-slate-800 text-sm">{currentFarmer.farmerNamePa} ({currentFarmer.farmerName})</strong>
+                      </div>
+                      <div>
+                        <span className="text-slate-400">Father Name / ਪਿਤਾ ਦਾ ਨਾਮ: </span>
+                        <strong className="text-slate-800 text-sm">{currentFarmer.fatherNamePa || currentFarmer.fatherName || '—'}</strong>
+                      </div>
+                      <div>
+                        <span className="text-slate-400">Village / ਪਿੰਡ: </span>
+                        <strong className="text-slate-800 text-sm">{currentFarmer.villagePa || currentFarmer.village} ({currentFarmer.village})</strong>
+                      </div>
+                      <div>
+                        <span className="text-slate-400">Mobile / ਮੋਬਾਈਲ: </span>
+                        <strong className="text-slate-800 text-sm font-mono">{currentFarmer.mobile || '—'}</strong>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right: Print & Action Toolbar */}
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
+                  {/* Print Button A: Simple Print */}
+                  <button
+                    onClick={() => handleTriggerPrint('simple')}
+                    className="px-3.5 py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+                    title="Print Simple Summary"
+                  >
+                    <Printer className="w-4 h-4 text-amber-400" />
+                    <span>Simple Print / ਸਧਾਰਨ ਪ੍ਰਿੰਟ</span>
+                  </button>
+
+                  {/* Print Button B: Full Details Print */}
+                  <button
+                    onClick={() => handleTriggerPrint('full')}
+                    className="px-3.5 py-2.5 bg-indigo-700 hover:bg-indigo-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+                    title="Print Full Details Statement"
+                  >
+                    <Printer className="w-4 h-4" />
+                    <span>Full Details Print / ਪੂਰੀ ਜਾਣਕਾਰੀ ਪ੍ਰਿੰਟ</span>
+                  </button>
+
+                  {/* Print Button C: PDF Export */}
+                  <button
+                    onClick={() => setShowPdfOptionsModal(true)}
+                    disabled={isExportingPDF}
+                    className="px-3.5 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all cursor-pointer disabled:opacity-50"
+                    title="Export as Clean A4 PDF"
+                  >
+                    <FileDown className="w-4 h-4" />
+                    <span>{isExportingPDF ? 'ਬਣ ਰਿਹਾ ਹੈ...' : 'PDF Export'}</span>
+                  </button>
+
+                  {/* Adjustment & Bag Transfer Button */}
+                  <button
+                    onClick={() => setIsAdjustmentModalOpen(true)}
+                    className="px-3.5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-all cursor-pointer border border-slate-300"
+                    title="Record Payment Adjustment, Inter-Farmer Transfer, or Bag Transfer"
+                  >
+                    <ArrowRightLeft className="w-4 h-4 text-indigo-600" />
+                    <span>ਐਡਜਸਟਮੈਂਟ / ਟ੍ਰਾਂਸਫਰ</span>
+                  </button>
+
+                  {/* Edit Profile */}
+                  <button
+                    onClick={() => setIsEditModalOpen(true)}
+                    className="px-3 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold flex items-center gap-1 transition-colors"
+                  >
+                    <Edit className="w-3.5 h-3.5" />
+                    <span>ਸੋਧੋ (Edit)</span>
+                  </button>
+
+                  {/* Delete Farmer */}
+                  <button
+                    onClick={handleDeleteFarmer}
+                    className="p-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl text-xs font-semibold transition-colors"
+                    title="Delete Farmer Account"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
                 </div>
               </div>
 
-              {accountSummary.linkedFarmersList && accountSummary.linkedFarmersList.length > 0 && (
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  {accountSummary.linkedFarmersList.map((lf) => (
-                    <button
-                      key={lf.id}
-                      onClick={() => {
-                        setSelectedFarmerId(lf.id);
-                        const f = farmers.find((farm) => farm.id === lf.id);
+              {/* Linked Farmer Banner if applicable */}
+              {accountSummary.isMainFarmer && accountSummary.linkedFarmersList && accountSummary.linkedFarmersList.length > 0 && (
+                <div className="mt-4 pt-4 border-t border-slate-100 flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="px-2.5 py-1 bg-amber-600 text-white font-black rounded-lg">
+                      ਮੁੱਖ ਕਿਸਾਨ / Main Farmer
+                    </span>
+                    <span className="text-slate-700 font-medium">
+                      ਇਸ ਖਾਤੇ ਨਾਲ {accountSummary.linkedFarmersList.length} ਲਿੰਕ ਕਿਸਾਨ (Linked Farmers) ਜੁੜੇ ਹੋਏ ਹਨ:
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {accountSummary.linkedFarmersList.map((lf) => (
+                      <button
+                        key={lf.id}
+                        onClick={() => {
+                          setSelectedFarmerId(lf.id);
+                          const f = farmers.find((farm) => farm.id === lf.id);
+                          if (f) setSelectedFarmerForAccount(f);
+                        }}
+                        className="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-lg text-xs font-bold flex items-center gap-1 transition-all"
+                      >
+                        <LinkIcon className="w-3 h-3 text-amber-700" />
+                        <span>{lf.farmerNamePa}</span>
+                        <span className="text-[10px] text-amber-700 font-mono">[{lf.id}]</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {accountSummary.isLinkedFarmer && accountSummary.linkedToMainFarmer && (
+                <div className="mt-4 pt-4 border-t border-slate-100 flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="px-2.5 py-1 bg-blue-600 text-white font-black rounded-lg">
+                      ਲਿੰਕ ਕਿਸਾਨ / Linked Farmer
+                    </span>
+                    <span className="text-slate-700 font-medium">
+                      ਇਹ ਕਿਸਾਨ ਮੁੱਖ ਕਿਸਾਨ ਨਾਲ ਲਿੰਕ ਹੈ:{' '}
+                      <strong className="text-blue-900">
+                        {accountSummary.linkedToMainFarmer.farmerNamePa} ({accountSummary.linkedToMainFarmer.farmerName}) [
+                        {accountSummary.linkedToMainFarmer.id}]
+                      </strong>
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => {
+                      if (accountSummary.linkedToMainFarmer) {
+                        setSelectedFarmerId(accountSummary.linkedToMainFarmer.id);
+                        const f = farmers.find((farm) => farm.id === accountSummary.linkedToMainFarmer?.id);
                         if (f) setSelectedFarmerForAccount(f);
-                      }}
-                      className="px-2.5 py-1 bg-white hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1 transition-all"
-                      title="View Linked Farmer Account"
-                    >
-                      <LinkIcon className="w-3 h-3 text-amber-700" />
-                      <span>{lf.farmerNamePa}</span>
-                      <span className="text-[10px] text-amber-700 font-mono">[{lf.id}]</span>
-                    </button>
-                  ))}
+                      }
+                    }}
+                    className="px-3 py-1 bg-blue-700 hover:bg-blue-800 text-white rounded-lg text-xs font-bold transition-all"
+                  >
+                    ਮੁੱਖ ਕਿਸਾਨ ਖਾਤਾ ਦੇਖੋ →
+                  </button>
                 </div>
               )}
             </div>
-          )}
 
-          {accountSummary.isLinkedFarmer && accountSummary.linkedToMainFarmer && (
-            <div className="p-4 bg-gradient-to-r from-blue-500/10 via-blue-50 to-indigo-50 rounded-2xl border border-blue-300 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 bg-blue-600 text-white rounded-xl shadow-xs">
-                  <LinkIcon className="w-5 h-5" />
+            {/* 2.5 VIEW SWITCHER: EXACT REFERENCE A4 STATEMENT vs DETAILED RECORDS */}
+            <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3 rounded-2xl border border-slate-200 shadow-xs">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('statement')}
+                  className={`px-4 py-2.5 rounded-xl text-xs font-black flex items-center gap-2 transition-all cursor-pointer ${
+                    activeTab === 'statement'
+                      ? 'bg-[#0b2b48] text-amber-300 shadow-md ring-2 ring-amber-400/30'
+                      : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                  }`}
+                >
+                  <FileText className="w-4 h-4" />
+                  <span>Exact Reference A4 Statement / ਹੂ-ਬ-ਹੂ A4 ਸਟੇਟਮੈਂਟ</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('records')}
+                  className={`px-4 py-2.5 rounded-xl text-xs font-black flex items-center gap-2 transition-all cursor-pointer ${
+                    activeTab === 'records'
+                      ? 'bg-slate-900 text-white shadow-md'
+                      : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                  }`}
+                >
+                  <Layers className="w-4 h-4" />
+                  <span>Detailed Data Records / ਵਿਸਥਾਰਤ ਰਿਕਾਰਡ ਤੇ ਐਂਟਰੀਆਂ</span>
+                </button>
+              </div>
+
+              {activeTab === 'statement' && (
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleTriggerPrint('full')}
+                    className="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-all cursor-pointer"
+                  >
+                    <Printer className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Print A4 Statement / ਪ੍ਰਿੰਟ ਕਰੋ</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleExportPDF('full')}
+                    disabled={isExportingPDF}
+                    className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    <FileDown className="w-3.5 h-3.5" />
+                    <span>{isExportingPDF ? 'ਤਿਆਰ ਹੋ ਰਿਹਾ ਹੈ...' : 'Download A4 PDF'}</span>
+                  </button>
                 </div>
+              )}
+            </div>
+
+            {/* EXACT REFERENCE A4 STATEMENT DISPLAY */}
+            {activeTab === 'statement' ? (
+              <div className="bg-slate-100/90 p-3 sm:p-6 rounded-3xl overflow-x-auto flex flex-col items-center border border-slate-300/80 shadow-inner">
+                <div className="mb-3 text-xs text-slate-500 font-medium flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block animate-pulse"></span>
+                  <span>Exact A4 Reference Layout (Bilingual Punjabi Gurmukhi + English)</span>
+                </div>
+                <div className="shadow-2xl rounded-2xl overflow-hidden bg-white max-w-full">
+                  <FarmerAccountStatementA4
+                    key={`preview-${adjustmentRefreshKey}`}
+                    id="farmer-account-reference-a4-preview"
+                    account={accountSummary}
+                    settings={settings}
+                    printDate={new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                    isPrintOnly={false}
+                    mode={printMode}
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {/* 3. SAB TON PEHLA: 7 KEY METRICS SUMMARY (Large, Bold, Bilingual) */}
                 <div>
-                  <div className="flex items-center gap-2">
-                    <span className="px-2 py-0.5 bg-blue-600 text-white text-[11px] font-black rounded-md">
-                      ਲਿੰਕਡ ਸਬ-ਕਿਸਾਨ (LINKED SUB-FARMER)
-                    </span>
-                    <span className="text-xs font-bold text-slate-800">
-                      ਮੁੱਖ ਕਿਸਾਨ:{' '}
-                      <strong className="text-blue-900">
-                        {accountSummary.linkedToMainFarmer.farmerNamePa} ({accountSummary.linkedToMainFarmer.farmerName})
-                      </strong>
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                      <Calculator className="w-4 h-4 text-emerald-700" />
+                      <span>Account Summary / ਖਾਤਾ ਸਾਰ</span>
+                    </h3>
+                    <span className="text-xs text-slate-500 font-medium">
+                      ਹਿਸਾਬ ਸਾਰ: ਬੋਰੀਆਂ ਅਤੇ ਮਜ਼ਦੂਰੀ ਖਰਚ ਅਨੁਸਾਰ
                     </span>
                   </div>
-                  <p className="text-xs text-slate-600 mt-0.5">
-                    ਇਸ ਕਿਸਾਨ ਦੀਆਂ ਖਰੀਦਾਂ ਮੁੱਖ ਕਿਸਾਨ ਦੇ ਮੰਡੀ ਆਮਦ ਸਟਾਕ ਪੂਲ ਵਿੱਚੋਂ ਆਟੋਮੈਟਿਕ ਘਟਾਈਆਂ ਜਾਂਦੀਆਂ ਹਨ। ਕੋਈ ਡਬਲ ਕਾਊਂਟਿੰਗ
-                    ਨਹੀਂ ਹੁੰਦੀ।
-                  </p>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
+                {/* 1. Total Bags Brought to Mandi */}
+                <div className="p-4 bg-white rounded-2xl border-2 border-indigo-200 shadow-xs flex flex-col justify-between">
+                  <div className="text-slate-600 font-bold text-xs leading-tight">
+                    Total Bags Brought to Mandi<br />
+                    <span className="text-indigo-900 font-black">ਮੰਡੀ ਵਿੱਚ ਲਿਆਂਦੀਆਂ ਕੁੱਲ ਬੋਰੀਆਂ</span>
+                  </div>
+                  <div className="mt-3">
+                    <div className="text-2xl lg:text-3xl font-black text-indigo-950 font-mono">
+                      {totalBagsBrought}
+                    </div>
+                    <div className="text-[11px] text-slate-500 font-semibold mt-0.5">Quantity / Bags (ਮਾਤਰਾ / ਬੋਰੀਆਂ)</div>
+                  </div>
+                </div>
+
+                {/* 2. Own Farmer Purchase */}
+                <div className="p-4 bg-white rounded-2xl border-2 border-emerald-200 shadow-xs flex flex-col justify-between">
+                  <div className="text-slate-600 font-bold text-xs leading-tight">
+                    Own Farmer Purchase<br />
+                    <span className="text-emerald-800 font-black">ਆਪਣੀ ਖਰੀਦ</span>
+                  </div>
+                  <div className="mt-3">
+                    <div className="text-2xl lg:text-3xl font-black text-emerald-900 font-mono">
+                      {ownPurchaseBags}
+                    </div>
+                    <div className="text-[11px] text-slate-500 font-semibold mt-0.5">Quantity / Bags (ਮਾਤਰਾ / ਬੋਰੀਆਂ)</div>
+                  </div>
+                </div>
+
+                {/* 3. Linked Farmers Purchase */}
+                <div className="p-4 bg-white rounded-2xl border-2 border-amber-200 shadow-xs flex flex-col justify-between">
+                  <div className="text-slate-600 font-bold text-xs leading-tight">
+                    Linked Farmers Purchase<br />
+                    <span className="text-amber-800 font-black">ਲਿੰਕ ਕਿਸਾਨਾਂ ਦੀ ਖਰੀਦ</span>
+                  </div>
+                  <div className="mt-3">
+                    <div className="text-2xl lg:text-3xl font-black text-amber-900 font-mono">
+                      {linkedPurchaseBags}
+                    </div>
+                    <div className="text-[11px] text-slate-500 font-semibold mt-0.5">Quantity / Bags (ਮਾਤਰਾ / ਬੋਰੀਆਂ)</div>
+                  </div>
+                </div>
+
+                {/* 4. Total Purchase */}
+                <div className="p-4 bg-slate-900 rounded-2xl border-2 border-slate-950 shadow-xs text-white flex flex-col justify-between">
+                  <div className="text-slate-300 font-bold text-xs leading-tight">
+                    Total Purchase<br />
+                    <span className="text-amber-300 font-black">ਕੁੱਲ ਖਰੀਦ</span>
+                  </div>
+                  <div className="mt-3">
+                    <div className="text-2xl lg:text-3xl font-black text-amber-300 font-mono">
+                      {totalPurchaseBags}
+                    </div>
+                    <div className="text-[11px] text-slate-300 font-semibold mt-0.5">Own + Linked Farmers</div>
+                  </div>
+                </div>
+
+                {/* 5. Labour Expense */}
+                <div className="p-4 bg-white rounded-2xl border-2 border-rose-200 shadow-xs flex flex-col justify-between">
+                  <div className="text-slate-600 font-bold text-xs leading-tight">
+                    Labour Expense<br />
+                    <span className="text-rose-800 font-black">ਮਜ਼ਦੂਰੀ ਖਰਚ</span>
+                  </div>
+                  <div className="mt-3">
+                    <div className="text-xl lg:text-2xl font-black text-rose-900 font-mono">
+                      ₹{labourExpense.toLocaleString('en-IN')}
+                    </div>
+                    <div className="text-[11px] text-slate-500 font-semibold mt-0.5">@ ₹{bagRate}/Bag</div>
+                  </div>
+                </div>
+
+                {/* 6. Labour Bags */}
+                <div className="p-4 bg-white rounded-2xl border-2 border-rose-300 shadow-xs flex flex-col justify-between">
+                  <div className="text-slate-600 font-bold text-xs leading-tight">
+                    Labour Bags<br />
+                    <span className="text-rose-800 font-black">ਮਜ਼ਦੂਰੀ ਦੀਆਂ ਬੋਰੀਆਂ</span>
+                  </div>
+                  <div className="mt-3">
+                    <div className="text-2xl lg:text-3xl font-black text-rose-950 font-mono">
+                      {labourBags}
+                    </div>
+                    <div className="text-[11px] text-slate-500 font-semibold mt-0.5">ਮਜ਼ਦੂਰੀ ਦੀਆਂ ਬੋਰੀਆਂ</div>
+                  </div>
+                </div>
+
+                {/* 7. Final Balance */}
+                <div className={`p-4 rounded-2xl border-2 shadow-md flex flex-col justify-between ${
+                  finalBalanceBags >= 0 ? 'bg-emerald-50 border-emerald-500 text-emerald-950' : 'bg-rose-50 border-rose-500 text-rose-950'
+                }`}>
+                  <div className="font-bold text-xs leading-tight">
+                    Final Balance<br />
+                    <span className="font-black text-sm">ਆਖਰੀ ਬਕਾਇਆ</span>
+                  </div>
+                  <div className="mt-3">
+                    <div className="text-2xl lg:text-3xl font-black font-mono">
+                      {finalBalanceBags}
+                    </div>
+                    <div className="text-[11px] font-bold mt-0.5">
+                      {finalBalanceBags >= 0 ? 'ਆਖਰੀ ਬਕਾਇਆ (Remaining Bags)' : 'ਵਾਧੂ ਕਟੌਤੀ (Over Bags)'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* ============================================================== */}
+            {/* 4. PURCHASE DETAILS: 4 SIMPLE SECTIONS */}
+            {/* ============================================================== */}
+            <div className="space-y-6">
+              {/* SECTION 1: PURCHASE DETAILS: OWN FARMER PURCHASE / ਖਰੀਦ ਵੇਰਵਾ: ਆਪਣੀ ਖਰੀਦ */}
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <ShoppingCart className="w-5 h-5 text-emerald-700" />
+                    <div>
+                      <h4 className="font-black text-base text-slate-900">
+                        Purchase Details: Own Farmer Purchase / ਖਰੀਦ ਵੇਰਵਾ: ਆਪਣੀ ਖਰੀਦ
+                      </h4>
+                      <p className="text-xs text-slate-500">
+                        ਕਿਸਾਨ ਦੇ ਆਪਣੇ ਨਾਮ 'ਤੇ ਕੀਤੀ ਗਈ ਖਰੀਦ
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <span className="px-3 py-1 bg-emerald-100 text-emerald-900 font-black rounded-lg text-xs">
+                      ਕੁੱਲ: {ownPurchaseBags} ਬੋਰੀਆਂ (Bags)
+                    </span>
+                  </div>
+                </div>
+
+                {accountSummary.purchaseRecords.length === 0 ? (
+                  <div className="p-8 text-center text-slate-400 text-xs">
+                    ਇਸ ਕਿਸਾਨ ਦੀ ਅਜੇ ਕੋਈ ਸਿੱਧੀ ਖਰੀਦ ਦਰਜ ਨਹੀਂ ਹੋਈ / No direct purchases recorded
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
+                          <th className="p-3">Date / ਮਿਤੀ</th>
+                          <th className="p-3">Agency / ਏਜੰਸੀ</th>
+                          <th className="p-3">Voucher / ਰੈਫਰੈਂਸ</th>
+                          <th className="p-3">Quantity / Bags / ਮਾਤਰਾ / ਬੋਰੀਆਂ</th>
+                          <th className="p-3">Weight / ਵਜ਼ਨ</th>
+                          <th className="p-3">Rate / ਰੇਟ</th>
+                          <th className="p-3 text-right">Amount / ਰਕਮ</th>
+                          <th className="p-3 text-center">ਕਾਰਵਾਈ (Action)</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {accountSummary.purchaseRecords.map((pur) => (
+                          <tr key={pur.id} className="hover:bg-slate-50 transition-colors">
+                            <td className="p-3 font-semibold text-slate-900">{pur.date}</td>
+                            <td className="p-3 font-bold text-emerald-800">{pur.agency}</td>
+                            <td className="p-3 font-mono text-slate-600">{pur.id}</td>
+                            <td className="p-3 font-bold text-slate-900">{pur.bags} Bags</td>
+                            <td className="p-3 font-medium text-slate-700">
+                              {pur.totalWeightDisplay || `${pur.qul} Qul ${pur.kg} Kg`}
+                            </td>
+                            <td className="p-3 text-slate-600 font-mono">₹{pur.rate}/Q</td>
+                            <td className="p-3 text-right font-black text-slate-900 font-mono">
+                              {formatCurrencyINR(pur.totalAmount)}
+                            </td>
+                            <td className="p-3 text-center">
+                              <button
+                                onClick={() => {
+                                  confirmDelete({
+                                    recordNameEn: `Purchase ${pur.id}`,
+                                    recordNamePa: `ਖਰੀਦ ਵਾਊਚਰ ${pur.id}`,
+                                    recordId: pur.id,
+                                    itemDetails: [
+                                      { labelEn: 'Farmer', labelPa: 'ਕਿਸਾਨ ਦਾ ਨਾਮ', value: `${pur.farmerNamePa}` },
+                                      { labelEn: 'Quantity / Bags', labelPa: 'ਮਾਤਰਾ / ਬੋਰੀਆਂ', value: `${pur.bags} Bags` },
+                                      { labelEn: 'Agency', labelPa: 'ਏਜੰਸੀ', value: pur.agency }
+                                    ],
+                                    onConfirm: () => {
+                                      deleteDailyPurchase(pur.id);
+                                      notifyDeleteSuccess({
+                                        titlePa: 'ਖਰੀਦ ਵਾਊਚਰ ਹਟਾ ਦਿੱਤਾ ਗਿਆ ਹੈ।',
+                                        titleEn: 'Purchase Removed',
+                                        messagePa: `ਖਰੀਦ ${pur.id} ਹਟਾ ਦਿੱਤੀ ਗਈ ਹੈ ਅਤੇ ${pur.bags} ਬੋਰੀਆਂ ਵਾਪਸ ਬਾਕੀ ਸਟਾਕ ਵਿੱਚ ਜਮ੍ਹਾ ਹੋ ਗਈਆਂ ਹਨ।`
+                                      });
+                                    }
+                                  });
+                                }}
+                                className="p-1 text-slate-400 hover:text-rose-600 rounded transition-colors"
+                                title="Delete purchase"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr className="bg-slate-50 font-black text-slate-900 border-t border-slate-200">
+                          <td colSpan={3} className="p-3 text-right">ਕੁੱਲ ਆਪਣੀ ਖਰੀਦ ਜੋੜ (Total Own Farmer Purchase):</td>
+                          <td className="p-3 text-emerald-800">{ownPurchaseBags} Bags</td>
+                          <td colSpan={2} className="p-3"></td>
+                          <td className="p-3 text-right font-mono text-emerald-900">
+                            {formatCurrencyINR(totalOwnPurchaseAmount)}
+                          </td>
+                          <td></td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              {/* SECTION 2: PURCHASE DETAILS: LINKED FARMERS PURCHASE / ਖਰੀਦ ਵੇਰਵਾ: ਲਿੰਕ ਕਿਸਾਨਾਂ ਦੀ ਖਰੀਦ */}
+              <div className="bg-white rounded-2xl border-2 border-amber-300 shadow-sm overflow-hidden">
+                <div className="p-4 bg-amber-50/80 border-b border-amber-200 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Users className="w-5 h-5 text-amber-700" />
+                    <div>
+                      <h4 className="font-black text-base text-amber-950">
+                        Purchase Details: Linked Farmers Purchase / ਖਰੀਦ ਵੇਰਵਾ: ਲਿੰਕ ਕਿਸਾਨਾਂ ਦੀ ਖਰੀਦ
+                      </h4>
+                      <p className="text-xs text-amber-800">
+                        ਲਿੰਕ ਕਿਸਾਨਾਂ ਦੁਆਰਾ ਕੀਤੀ ਗਈ ਖਰੀਦ
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <span className="px-3 py-1 bg-amber-200 text-amber-950 font-black rounded-lg text-xs">
+                      ਕੁੱਲ ਲਿੰਕ ਕਿਸਾਨਾਂ ਦੀ ਖਰੀਦ: {linkedPurchaseBags} ਬੋਰੀਆਂ (Bags)
+                    </span>
+                  </div>
+                </div>
+
+                {accountSummary.linkedPurchasesList.length === 0 ? (
+                  <div className="p-8 text-center text-slate-400 text-xs">
+                    ਲਿੰਕ ਕਿਸਾਨਾਂ ਦੁਆਰਾ ਅਜੇ ਕੋਈ ਖਰੀਦ ਨਹੀਂ ਹੋਈ / No linked farmer purchases recorded
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="bg-amber-100/60 text-amber-950 font-bold border-b border-amber-200">
+                          <th className="p-3">Linked Farmer / ਲਿੰਕ ਕਿਸਾਨ</th>
+                          <th className="p-3">Date / ਮਿਤੀ</th>
+                          <th className="p-3">Agency / ਏਜੰਸੀ</th>
+                          <th className="p-3">Quantity / Bags / ਮਾਤਰਾ / ਬੋਰੀਆਂ</th>
+                          <th className="p-3">Weight / ਵਜ਼ਨ</th>
+                          <th className="p-3">Rate / ਰੇਟ</th>
+                          <th className="p-3 text-right">Amount / ਰਕਮ</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-amber-100">
+                        {accountSummary.linkedPurchasesList.map((lp) => (
+                          <tr key={lp.id} className="hover:bg-amber-50/40 transition-colors">
+                            <td className="p-3 font-bold text-amber-950">
+                              {lp.linkedFarmerNamePa || lp.linkedFarmerName}
+                              <span className="font-mono text-[11px] text-amber-700 ml-1">[{lp.linkedFarmerId}]</span>
+                            </td>
+                            <td className="p-3 font-medium text-slate-900">{lp.date}</td>
+                            <td className="p-3 font-semibold text-slate-800">{lp.agency}</td>
+                            <td className="p-3 font-black text-slate-900">{lp.bags} Bags</td>
+                            <td className="p-3 text-slate-700">{lp.qul} Qul {lp.kg} Kg</td>
+                            <td className="p-3 text-slate-600 font-mono">₹{lp.rate}/Q</td>
+                            <td className="p-3 text-right font-black text-amber-950 font-mono">
+                              {formatCurrencyINR(lp.totalAmount)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr className="bg-amber-100/80 font-black text-amber-950 border-t border-amber-200">
+                          <td colSpan={3} className="p-3 text-right">ਕੁੱਲ ਲਿੰਕ ਕਿਸਾਨਾਂ ਦੀ ਖਰੀਦ (Total Linked Farmers Purchase):</td>
+                          <td className="p-3 text-amber-950">{linkedPurchaseBags} Bags</td>
+                          <td colSpan={2} className="p-3"></td>
+                          <td className="p-3 text-right font-mono text-amber-950">
+                            {formatCurrencyINR(totalLinkedPurchaseAmount)}
+                          </td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              {/* SECTION 3: LABOUR EXPENSE / ਮਜ਼ਦੂਰੀ ਖਰਚ */}
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden p-5">
+                <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-100">
+                  <div className="flex items-center gap-2">
+                    <Scale className="w-5 h-5 text-rose-700" />
+                    <div>
+                      <h4 className="font-black text-base text-slate-900">
+                        Labour Expense / ਮਜ਼ਦੂਰੀ ਖਰਚ
+                      </h4>
+                      <p className="text-xs text-slate-500">
+                        ਮਜ਼ਦੂਰੀ ਖਰਚ ਅਤੇ ਮਜ਼ਦੂਰੀ ਦੀਆਂ ਬੋਰੀਆਂ ਕਟੌਤੀ (Labour Expense & Labour Bags)
+                      </p>
+                    </div>
+                  </div>
+                  <span className="px-3 py-1 bg-rose-100 text-rose-900 font-black rounded-lg text-xs">
+                    ਮਜ਼ਦੂਰੀ ਦੀਆਂ ਬੋਰੀਆਂ: {labourBags} Bags
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* Expense Box */}
+                  <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                    <div className="text-xs text-slate-500 font-bold uppercase">
+                      Labour Expense / ਮਜ਼ਦੂਰੀ ਖਰਚ
+                    </div>
+                    <div className="text-2xl font-black text-rose-900 font-mono mt-1">
+                      ₹{labourExpense.toLocaleString('en-IN')}
+                    </div>
+                    <div className="text-[11px] text-slate-500 mt-1">
+                      ਤੁਲਾਈ, ਭਰਾਈ ਅਤੇ ਮੰਡੀ ਮਜ਼ਦੂਰੀ ਖਰਚ
+                    </div>
+                  </div>
+
+                  {/* Rate Box */}
+                  <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                    <div className="text-xs text-slate-500 font-bold uppercase">
+                      Bag Rate / ਪ੍ਰਤੀ ਬੋਰੀ ਰੇਟ
+                    </div>
+                    <div className="text-2xl font-black text-slate-900 font-mono mt-1">
+                      ₹{bagRate}
+                    </div>
+                    <div className="text-[11px] text-slate-500 mt-1">
+                      1 Bag = 37.5 Kg @ ₹2,461/Qtl
+                    </div>
+                  </div>
+
+                  {/* Formula / Result Box */}
+                  <div className="p-4 bg-rose-50/70 rounded-xl border border-rose-200">
+                    <div className="text-xs text-rose-800 font-bold uppercase">
+                      Labour Bags / ਮਜ਼ਦੂਰੀ ਦੀਆਂ ਬੋਰੀਆਂ
+                    </div>
+                    <div className="text-2xl font-black text-rose-950 font-mono mt-1">
+                      {labourBags} Bags (ਬੋਰੀਆਂ)
+                    </div>
+                    <div className="text-[11px] text-rose-800 font-medium mt-1">
+                      ₹{labourExpense.toLocaleString('en-IN')} ÷ ₹{bagRate} = {labourBags} ਬੋਰੀਆਂ (ਅਗਲੀ ਪੂਰੀ ਬੋਰੀ 'ਤੇ ਰਾਊਂਡ)
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              <button
-                onClick={() => {
-                  if (accountSummary.linkedToMainFarmer) {
-                    setSelectedFarmerId(accountSummary.linkedToMainFarmer.id);
-                    const f = farmers.find((farm) => farm.id === accountSummary.linkedToMainFarmer?.id);
-                    if (f) setSelectedFarmerForAccount(f);
-                  }
-                }}
-                className="px-3 py-1.5 bg-blue-700 hover:bg-blue-800 text-white rounded-xl text-xs font-bold shadow-xs flex items-center gap-1.5 shrink-0 transition-all"
-              >
-                <span>ਮੁੱਖ ਕਿਸਾਨ ਖਾਤਾ ਦੇਖੋ (Go to Main Farmer)</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          )}
-
-          {/* ============================================================== */}
-          {/* 3. FARMER PROFILE & PRIMARY ACTION TOOLBAR */}
-          {/* ============================================================== */}
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-100">
-              <div className="flex items-start gap-4">
-                {/* Photo / Avatar */}
-                <div className="w-16 h-16 rounded-2xl bg-slate-100 border border-slate-200 overflow-hidden shrink-0 flex items-center justify-center shadow-2xs">
-                  {currentFarmer.photoUrl ? (
-                    <img
-                      src={currentFarmer.photoUrl}
-                      alt={currentFarmer.farmerName}
-                      className="w-full h-full object-cover"
-                      referrerPolicy="no-referrer"
-                    />
-                  ) : (
-                    <User className="w-8 h-8 text-slate-400" />
-                  )}
+              {/* SECTION 4: CALCULATION SUMMARY / ਹਿਸਾਬ ਸਾਰ */}
+              <div className="bg-white rounded-2xl border-2 border-emerald-600 shadow-md overflow-hidden">
+                <div className="p-4 bg-emerald-900 text-white flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Calculator className="w-5 h-5 text-amber-300" />
+                    <div>
+                      <h4 className="font-black text-base">
+                        Calculation Summary / ਹਿਸਾਬ ਸਾਰ
+                      </h4>
+                      <p className="text-xs text-emerald-200">
+                        ਕਦਮ-ਦਰ-ਕਦਮ ਹਿਸਾਬ ਅਤੇ ਆਖਰੀ ਬਕਾਇਆ ਬੋਰੀਆਂ (Step-by-Step Calculation)
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-xs text-emerald-200">Final Balance / ਆਖਰੀ ਬਕਾਇਆ</div>
+                    <div className="text-xl font-black text-amber-300 font-mono">
+                      {finalBalanceBags} Bags
+                    </div>
+                  </div>
                 </div>
 
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h2 className="text-lg font-black text-slate-900">
-                      {currentFarmer.farmerNamePa} ({currentFarmer.farmerName})
-                    </h2>
-                    <span className="px-2.5 py-0.5 bg-slate-100 text-slate-700 font-mono font-bold rounded-lg text-xs border border-slate-200">
-                      {currentFarmer.id}
-                    </span>
-                    <button
-                      onClick={handleCopyFarmerId}
-                      className="text-slate-400 hover:text-slate-700 transition-colors"
-                      title="Copy Farmer ID"
-                    >
-                      {copiedId ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                    </button>
+                <div className="p-5 space-y-3 bg-slate-50/50">
+                  {/* Step 1 */}
+                  <div className="flex items-center justify-between p-3 bg-white rounded-xl border border-slate-200 text-sm">
+                    <div className="font-semibold text-slate-800">
+                      1. Total Bags Brought to Mandi / ਮੰਡੀ ਵਿੱਚ ਲਿਆਂਦੀਆਂ ਕੁੱਲ ਬੋਰੀਆਂ:
+                    </div>
+                    <div className="font-black text-slate-900 font-mono text-base">
+                      {totalBagsBrought} Bags
+                    </div>
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-600">
+                  {/* Step 2 */}
+                  <div className="flex items-center justify-between p-3 bg-white rounded-xl border border-slate-200 text-sm">
+                    <div className="font-semibold text-slate-800">
+                      2. Less: Total Purchase / ਕੁੱਲ ਖਰੀਦ (ਆਪਣੀ {ownPurchaseBags} + ਲਿੰਕ ਕਿਸਾਨਾਂ ਦੀ {linkedPurchaseBags}):
+                    </div>
+                    <div className="font-black text-rose-700 font-mono text-base">
+                      - {totalPurchaseBags} Bags
+                    </div>
+                  </div>
+
+                  {/* Step 3 */}
+                  <div className="flex items-center justify-between p-3 bg-amber-50 rounded-xl border border-amber-200 text-sm">
+                    <div className="font-bold text-amber-950">
+                      3. Balance Before Labour / ਮਜ਼ਦੂਰੀ ਤੋਂ ਪਹਿਲਾਂ ਬਕਾਇਆ:
+                    </div>
+                    <div className="font-black text-amber-950 font-mono text-base">
+                      {balanceBeforeLabour} Bags
+                    </div>
+                  </div>
+
+                  {/* Step 4 */}
+                  <div className="flex items-center justify-between p-3 bg-white rounded-xl border border-slate-200 text-sm">
+                    <div className="font-semibold text-slate-800">
+                      4. Less: Labour Bags / ਮਜ਼ਦੂਰੀ ਦੀਆਂ ਬੋਰੀਆਂ (₹{labourExpense} ÷ ₹{bagRate}):
+                    </div>
+                    <div className="font-black text-rose-700 font-mono text-base">
+                      - {labourBags} Bags
+                    </div>
+                  </div>
+
+                  {/* Step 5: Final Balance Highlight */}
+                  <div className="p-4 bg-emerald-100/70 border-2 border-emerald-500 rounded-xl flex items-center justify-between">
                     <div>
-                      <span className="text-slate-400">ਪਿਤਾ ਦਾ ਨਾਮ: </span>
-                      <strong className="text-slate-800">{currentFarmer.fatherNamePa || currentFarmer.fatherName || '—'}</strong>
+                      <div className="text-base font-black text-emerald-950">
+                        Final Balance / ਆਖਰੀ ਬਕਾਇਆ
+                      </div>
+                      <div className="text-xs text-emerald-800 font-medium">
+                        ਕਿਸਾਨ ਦੀਆਂ ਮੰਡੀ ਵਿੱਚ ਬਾਕੀ ਬਚੀਆਂ ਬੋਰੀਆਂ
+                      </div>
+                    </div>
+                    <div className="text-3xl font-black text-emerald-950 font-mono">
+                      {finalBalanceBags} Bags (ਬੋਰੀਆਂ)
+                    </div>
+                  </div>
+
+                  {/* Rupee Balance Settlement Info */}
+                  <div className="pt-2 flex flex-wrap items-center justify-between text-xs text-slate-600">
+                    <div>
+                      Net Amount / ਕੁੱਲ ਬਕਾਇਆ ਰਕਮ: <strong className="text-slate-900">{formatCurrencyINR(accountSummary.netPayableAmount)}</strong>
                     </div>
                     <div>
-                      <span className="text-slate-400">ਪਿੰਡ: </span>
-                      <strong className="text-slate-800">{currentFarmer.villagePa} ({currentFarmer.village})</strong>
-                    </div>
-                    <div>
-                      <span className="text-slate-400">ਮੋਬਾਈਲ: </span>
-                      <strong className="text-slate-800">{currentFarmer.mobile || '—'}</strong>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <span className="text-slate-400">ਆਧਾਰ: </span>
-                      <strong className="text-slate-800 font-mono">
-                        {showMaskedAadhaar ? maskAadhaarNumber(currentFarmer.aadhaar) : currentFarmer.aadhaar}
+                      Final Settlement / ਆਖਰੀ ਨਿਪਟਾਰਾ:{' '}
+                      <strong className={accountSummary.finalNetSettlementBalance >= 0 ? 'text-emerald-800' : 'text-rose-800'}>
+                        {formatCurrencyINR(accountSummary.finalNetSettlementBalance)}
                       </strong>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* ============================================================== */}
+            {/* 5. ADDITIONAL RECORDS TOGGLE (Advances, Payments & Ledger) */}
+            {/* Keeps all existing features intact without cluttering simple view */}
+            {/* ============================================================== */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+              <button
+                onClick={() => setShowAdditionalRecords(!showAdditionalRecords)}
+                className="w-full p-4 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors text-left"
+              >
+                <div className="flex items-center gap-2">
+                  <Coins className="w-5 h-5 text-amber-700" />
+                  <div>
+                    <div className="font-black text-sm text-slate-900">
+                      Additional Records: Advances & Payments / ਵਾਧੂ ਰਿਕਾਰਡ: ਪੇਸ਼ਗੀ ਅਤੇ ਭੁਗਤਾਨ
+                    </div>
+                    <div className="text-xs text-slate-500">
+                      ਪੇਸ਼ਗੀ ਮੂਲ, ਵਿਆਜ ਗਣਨਾ, ਅਦਾਇਗੀਆਂ ਅਤੇ ਸਮੁੱਚਾ ਲੈਣ-ਦੇਣ ਖਾਤਾ
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 text-xs font-bold text-slate-700">
+                  <span>{showAdditionalRecords ? 'ਵੇਰਵਾ ਲੁਕਾਓ (Hide)' : 'ਵੇਰਵਾ ਦੇਖੋ (Show)'}</span>
+                  {showAdditionalRecords ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                </div>
+              </button>
+
+              {showAdditionalRecords && (
+                <div className="p-5 space-y-6 border-t border-slate-200">
+                  {/* ADVANCES SECTION */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h5 className="font-bold text-xs text-slate-900 uppercase">
+                        Advances & Interest / ਪੇਸ਼ਗੀ ਅਤੇ ਵਿਆਜ
+                      </h5>
                       <button
-                        onClick={() => setShowMaskedAadhaar(!showMaskedAadhaar)}
-                        className="text-slate-400 hover:text-slate-700"
-                        title={showMaskedAadhaar ? 'Show full Aadhaar' : 'Hide Aadhaar'}
+                        onClick={handleOpenAddAdvance}
+                        className="px-3 py-1.5 bg-amber-700 hover:bg-amber-800 text-white rounded-lg text-xs font-bold flex items-center gap-1 shadow-xs"
                       >
-                        {showMaskedAadhaar ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>+ ਨਵੀਂ ਪੇਸ਼ਗੀ (Add Advance)</span>
                       </button>
                     </div>
-                  </div>
-                </div>
-              </div>
 
-              {/* Action Buttons */}
-              <div className="flex flex-wrap items-center gap-2 shrink-0 print:hidden">
-                <button
-                  onClick={() => setIsViewProfileOpen(true)}
-                  className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors"
-                >
-                  <Eye className="w-3.5 h-3.5" />
-                  <span>ਪ੍ਰੋਫਾਈਲ (View)</span>
-                </button>
-
-                <button
-                  onClick={() => setIsEditModalOpen(true)}
-                  className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors"
-                >
-                  <Edit className="w-3.5 h-3.5" />
-                  <span>ਸੋਧੋ (Edit)</span>
-                </button>
-
-                <button
-                  onClick={handleExportPDF}
-                  disabled={isExportingPDF}
-                  className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all disabled:opacity-50"
-                >
-                  <FileDown className="w-3.5 h-3.5" />
-                  <span>{isExportingPDF ? 'ਬਣ ਰਿਹਾ ਹੈ...' : 'ਖਾਤਾ PDF'}</span>
-                </button>
-
-                <button
-                  onClick={handlePrint}
-                  className="px-3 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors"
-                >
-                  <Printer className="w-3.5 h-3.5" />
-                  <span>ਪ੍ਰਿੰਟ (Print)</span>
-                </button>
-
-                <button
-                  onClick={handleDeleteFarmer}
-                  className="px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors"
-                  title="Delete Farmer Account"
-                >
-                  <Trash2 className="w-3.5 h-3.5 text-rose-600" />
-                  <span>ਡਿਲੀਟ</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Sub-bar: Bank Details, Bardana, and Quick Transaction Launchers */}
-            <div className="p-4 grid grid-cols-1 md:grid-cols-3 gap-4 text-xs bg-slate-50/50">
-              <div className="p-3 bg-white rounded-xl border border-slate-200 flex items-start gap-2.5 shadow-2xs">
-                <Building className="w-4 h-4 text-emerald-700 shrink-0 mt-0.5" />
-                <div className="space-y-0.5 truncate">
-                  <div className="font-bold text-slate-900">ਬੈਂਕ ਖਾਤਾ (Bank Details)</div>
-                  <div className="text-slate-600 truncate">{currentFarmer.bankDetails?.bankName || 'ਬੈਂਕ ਨਾਮ ਦਰਜ ਨਹੀਂ'}</div>
-                  <div className="font-mono text-slate-800">
-                    A/C: {currentFarmer.bankDetails?.accountNumber || '—'} • IFSC: {currentFarmer.bankDetails?.ifscCode || '—'}
-                  </div>
-                </div>
-              </div>
-
-              <div className="p-3 bg-white rounded-xl border border-slate-200 flex items-start gap-2.5 shadow-2xs">
-                <Layers className="w-4 h-4 text-indigo-700 shrink-0 mt-0.5" />
-                <div className="space-y-0.5">
-                  <div className="font-bold text-slate-900">ਬਾਰਦਾਨਾ ਵਰਤੋਂ (Bardana Used)</div>
-                  <div className="text-slate-600">
-                    ਨਵਾਂ: <strong>{accountSummary.newBardanaUsed}</strong> • ਪੁਰਾਣਾ: <strong>{accountSummary.oldBardanaUsed}</strong>
-                  </div>
-                  <div className="text-indigo-900 font-semibold">
-                    ਕੁੱਲ ਵਰਤਿਆ ਬਾਰਦਾਨਾ: {accountSummary.totalBardanaUsed} ਬੋਰੇ
-                  </div>
-                </div>
-              </div>
-
-              {/* Quick Transaction Adders */}
-              <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200 flex items-center justify-between gap-2 print:hidden shadow-2xs">
-                <div>
-                  <div className="font-bold text-emerald-950">ਨਵਾਂ ਲੈਣ-ਦੇਣ ਦਰਜ ਕਰੋ</div>
-                  <div className="text-[11px] text-emerald-700">ਸਿੱਧਾ ਇਸ ਕਿਸਾਨ ਲਈ ਐਂਟਰੀ</div>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <button
-                    onClick={() => {
-                      setSelectedFarmerForBags(currentFarmer);
-                      setActiveSection('bags-entry');
-                    }}
-                    className="px-2 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-medium shadow-2xs transition-all"
-                    title="Enter Bags"
-                  >
-                    + ਤੁਲਾਈ
-                  </button>
-                  <button
-                    onClick={() => setActiveSection('daily-purchase')}
-                    className="px-2 py-1.5 bg-teal-700 hover:bg-teal-800 text-white rounded-lg text-xs font-medium shadow-2xs transition-all"
-                    title="Enter Daily Purchase"
-                  >
-                    + ਖਰੀਦ
-                  </button>
-                  <button
-                    onClick={handleOpenAddAdvance}
-                    className="px-2 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-medium shadow-2xs transition-all"
-                    title="Record Advance"
-                  >
-                    + ਪੇਸ਼ਗੀ
-                  </button>
-                  <button
-                    onClick={() => setIsPaymentModalOpen(true)}
-                    className="px-2 py-1.5 bg-indigo-700 hover:bg-indigo-800 text-white rounded-lg text-xs font-medium shadow-2xs transition-all"
-                    title="Record Payment"
-                  >
-                    + ਭੁਗਤਾਨ
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* ============================================================== */}
-          {/* 4. COMPREHENSIVE FINAL ACCOUNTING SUMMARY CARD (KEY RECONCILIATION) */}
-          {/* ============================================================== */}
-          <div className="bg-white rounded-2xl border-2 border-emerald-600 shadow-md overflow-hidden">
-            <div className="p-4 bg-gradient-to-r from-emerald-900 to-teal-900 text-white flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <Calculator className="w-5 h-5 text-amber-400" />
-                <div>
-                  <h3 className="font-black text-sm">
-                    ਅੰਤਿਮ ਖਾਤਾ ਅਤੇ ਹਿਸਾਬ-ਕਿਤਾਬ ਸਾਰਾਂਸ਼ / FINAL ACCOUNT RECONCILIATION
-                  </h3>
-                  <p className="text-[11px] text-emerald-200">
-                    ਮੰਡੀ ਆਮਦ, ਲੇਬਰ ਕਟੌਤੀਆਂ, ਏਜੰਸੀ ਖਰੀਦ, ਪੇਸ਼ਗੀ (ਐਡਵਾਂਸ) ਵਿਆਜ ਅਤੇ ਅੰਤਿਮ ਬਕਾਇਆ
-                  </p>
-                </div>
-              </div>
-              <div className="text-right">
-                <div className="text-[11px] text-emerald-300">ਅੰਤਿਮ ਬਕਾਇਆ (Final Settlement)</div>
-                <div className="text-lg font-black text-amber-300">
-                  {formatCurrencyINR(accountSummary.finalNetSettlementBalance)}
-                </div>
-              </div>
-            </div>
-
-            {/* Mathematical Step-by-Step Breakdown Grid */}
-            <div className="p-5 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 text-xs bg-slate-50/70 border-b border-slate-200">
-              <div className="p-3 bg-white rounded-xl border border-slate-200 shadow-2xs">
-                <div className="text-slate-500 font-medium">1. ਕੁੱਲ ਮੰਡੀ ਆਮਦ</div>
-                <div className="text-base font-black text-indigo-900 mt-1">{accountSummary.mandiArrivalBags} Bags</div>
-                <div className="text-[11px] text-slate-600 font-semibold">{accountSummary.mandiArrivalDisplay}</div>
-                <div className="text-[10px] text-indigo-700 font-bold mt-1">
-                  Gross: {formatCurrencyINR(accountSummary.totalGrossAmount)}
-                </div>
-              </div>
-
-              <div className="p-3 bg-white rounded-xl border border-slate-200 shadow-2xs">
-                <div className="text-slate-500 font-medium">2. ਲੇਬਰ ਕਟੌਤੀਆਂ</div>
-                <div className="text-base font-black text-rose-700 mt-1">
-                  -{formatCurrencyINR(accountSummary.totalLabourDeductions)}
-                </div>
-                <div className="text-[10px] text-slate-500 mt-1 space-y-0.5">
-                  <div>ਪੱਕੀ: {formatCurrencyINR(accountSummary.totalPakkiLabour)}</div>
-                  <div>ਡਬਲ: {formatCurrencyINR(accountSummary.totalPakkaDoubleLabour)}</div>
-                  <div>ਸੁੱਕੀ: {formatCurrencyINR(accountSummary.totalSukhiLabour)}</div>
-                </div>
-              </div>
-
-              <div className="p-3 bg-white rounded-xl border border-slate-200 shadow-2xs">
-                <div className="text-slate-500 font-medium">3. ਏਜੰਸੀ ਖਰੀਦ</div>
-                <div className="text-base font-black text-emerald-800 mt-1">
-                  {accountSummary.purchasedBags} Bags
-                </div>
-                <div className="text-[11px] text-emerald-700 font-bold">
-                  {formatCurrencyINR(accountSummary.purchasedAmount)}
-                </div>
-                <div className="text-[10px] text-slate-500 mt-1">
-                  ਬਾਕੀ ਸਟਾਕ: <strong className="text-rose-700">{accountSummary.remainingBags} Bags</strong>
-                </div>
-              </div>
-
-              <div className="p-3 bg-indigo-50/70 rounded-xl border border-indigo-200 shadow-2xs">
-                <div className="text-indigo-800 font-bold">4. ਸ਼ੁੱਧ ਦੇਣਯੋਗ (Crop)</div>
-                <div className="text-base font-black text-indigo-950 mt-1">
-                  {formatCurrencyINR(accountSummary.netPayableAmount)}
-                </div>
-                <div className="text-[10px] text-indigo-600 mt-1 font-medium">
-                  Gross − ਲੇਬਰ − ਏਜੰਸੀ ਖਰੀਦ
-                </div>
-              </div>
-
-              <div className="p-3 bg-amber-50/70 rounded-xl border border-amber-200 shadow-2xs">
-                <div className="text-amber-800 font-bold">5. ਪੇਸ਼ਗੀ + ਵਿਆਜ</div>
-                <div className="text-base font-black text-amber-950 mt-1">
-                  -{formatCurrencyINR(accountSummary.totalAdvanceRecoverable)}
-                </div>
-                <div className="text-[10px] text-amber-800 mt-1 space-y-0.5">
-                  <div>ਮੂਲ: {formatCurrencyINR(accountSummary.totalAdvancePrincipal)}</div>
-                  <div>ਵਿਆਜ: {formatCurrencyINR(accountSummary.totalAdvanceInterest)}</div>
-                </div>
-              </div>
-
-              <div className="p-3 bg-emerald-50 rounded-xl border-2 border-emerald-500 shadow-xs">
-                <div className="text-emerald-800 font-black uppercase text-[11px]">6. ਅੰਤਿਮ ਨਿਪਟਾਰਾ (Final)</div>
-                <div className="text-base font-black text-emerald-950 mt-1">
-                  {formatCurrencyINR(accountSummary.finalNetSettlementBalance)}
-                </div>
-                <div className="text-[10px] text-emerald-700 font-semibold mt-1">
-                  ਅਦਾ ਕੀਤੀ ਰਕਮ: {formatCurrencyINR(accountSummary.paidAmount)}
-                </div>
-              </div>
-            </div>
-
-            {/* A-to-Z Bilingual Complete Khata Summary & Calculation Breakup */}
-            <div className="p-4 bg-white border-t border-slate-200">
-              <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-100">
-                <div className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 animate-pulse"></span>
-                  <h4 className="font-black text-xs text-slate-900 uppercase tracking-wide">
-                    ਸੰਪੂਰਨ ਖਾਤਾ ਹਿਸਾਬ-ਕਿਤਾਬ A-ਤੋਂ-Z / Complete Khata Summary (A to Z)
-                  </h4>
-                </div>
-                <button
-                  onClick={() => setShowBreakupDetails(!showBreakupDetails)}
-                  className="text-xs text-emerald-800 font-bold hover:text-emerald-950 flex items-center gap-1 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1 rounded-lg transition-colors"
-                >
-                  <Info className="w-3.5 h-3.5" />
-                  <span>{showBreakupDetails ? 'ਗਣਨਾ ਵੇਰਵਾ ਲੁਕਾਓ (Hide Breakup)' : 'ਗਣਨਾ ਵੇਰਵਾ ਦੇਖੋ (Show How Calculated)'}</span>
-                </button>
-              </div>
-
-              {showBreakupDetails && (
-                <div className="space-y-3 text-xs">
-                  {/* Step A: Mandi Arrival */}
-                  <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
-                    <div className="flex items-center justify-between font-bold text-slate-800">
-                      <div className="flex items-center gap-2">
-                        <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-800 flex items-center justify-center font-black text-[10px]">A</span>
-                        <span>ਝੋਨਾ ਮੰਡੀ ਆਮਦ ਤੁਲਾਈ (Paddy Mandi Arrival & Gross Amount @ ₹2,461/Qtl)</span>
-                      </div>
-                      <span className="text-sm font-black text-indigo-900">
-                        {formatCurrencyINR(accountSummary.totalGrossAmount)}
-                      </span>
-                    </div>
-                    <div className="mt-2 text-slate-600 font-mono text-[11px] bg-white p-2 rounded-lg border border-slate-200 flex flex-wrap items-center justify-between gap-2">
-                      <div>
-                        ਕੁੱਲ ਬੋਰੇ (Total Bags): <strong className="text-slate-900">{accountSummary.mandiArrivalBags}</strong> •
-                        ਕੁੱਲ ਵਜ਼ਨ: <strong className="text-slate-900">{accountSummary.mandiArrivalDisplay}</strong> ({(accountSummary.mandiArrivalQtl + accountSummary.mandiArrivalKg / 100).toFixed(2)} ਕੁਇੰਟਲ)
-                      </div>
-                      <div className="text-indigo-800 font-bold">
-                        ਗਣਨਾ: {(accountSummary.mandiArrivalQtl + accountSummary.mandiArrivalKg / 100).toFixed(2)} Qtl × ₹2,461 = {formatCurrencyINR(accountSummary.totalGrossAmount)}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Step B: Labour Deductions */}
-                  <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
-                    <div className="flex items-center justify-between font-bold text-slate-800">
-                      <div className="flex items-center gap-2">
-                        <span className="w-5 h-5 rounded-full bg-rose-100 text-rose-800 flex items-center justify-center font-black text-[10px]">B</span>
-                        <span>ਮੰਡੀ ਮਜ਼ਦੂਰੀ / ਲੇਬਰ ਕਟੌਤੀਆਂ (Mandi Labour Deductions)</span>
-                      </div>
-                      <span className="text-sm font-black text-rose-700">
-                        -{formatCurrencyINR(accountSummary.totalLabourDeductions)}
-                      </span>
-                    </div>
-                    <div className="mt-2 text-slate-600 font-mono text-[11px] bg-white p-2 rounded-lg border border-slate-200 grid grid-cols-1 sm:grid-cols-3 gap-2">
-                      <div>ਪੱਕੀ ਲੇਬਰ (₹7/Qtl): <strong className="text-rose-700">-{formatCurrencyINR(accountSummary.totalPakkiLabour)}</strong></div>
-                      <div>ਡਬਲ ਲੇਬਰ (₹14/Qtl): <strong className="text-rose-700">-{formatCurrencyINR(accountSummary.totalPakkaDoubleLabour)}</strong></div>
-                      <div>ਸੁੱਕੀ ਲੇਬਰ (₹5/Qtl): <strong className="text-rose-700">-{formatCurrencyINR(accountSummary.totalSukhiLabour)}</strong></div>
-                    </div>
-                  </div>
-
-                  {/* Step C: Agency Purchases & Payments */}
-                  <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
-                    <div className="flex items-center justify-between font-bold text-slate-800">
-                      <div className="flex items-center gap-2">
-                        <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center font-black text-[10px]">C</span>
-                        <span>ਸਰਕਾਰੀ ਖਰੀਦ ਏਜੰਸੀਆਂ (Agency Purchases & Payments)</span>
-                      </div>
-                      <span className="text-sm font-black text-emerald-800">
-                        {formatCurrencyINR(accountSummary.purchasedAmount)}
-                      </span>
-                    </div>
-                    <div className="mt-2 text-slate-600 font-mono text-[11px] bg-white p-2 rounded-lg border border-slate-200 flex flex-wrap items-center justify-between gap-2">
-                      <div>
-                        ਖਰੀਦ ਬੋਰੇ: <strong className="text-slate-900">{accountSummary.purchasedBags}</strong> •
-                        ਖਰੀਦ ਵਜ਼ਨ: <strong className="text-slate-900">{accountSummary.purchasedWeightDisplay}</strong>
-                      </div>
-                      <div className="text-amber-800 font-bold">
-                        ਮੰਡੀ ਵਿੱਚ ਬਾਕੀ ਝੋਨਾ ਸਟਾਕ: {accountSummary.remainingBags} ਬੋਰੇ ({accountSummary.remainingWeightDisplay})
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Step D: Remaining Paddy Crop Balance */}
-                  <div className="p-3 rounded-xl bg-indigo-50/50 border border-indigo-200">
-                    <div className="flex items-center justify-between font-bold text-indigo-950">
-                      <div className="flex items-center gap-2">
-                        <span className="w-5 h-5 rounded-full bg-indigo-200 text-indigo-900 flex items-center justify-center font-black text-[10px]">D</span>
-                        <span>ਬਾਕੀ ਝੋਨਾ ਫਸਲ ਸ਼ੁੱਧ ਬਕਾਇਆ (Net Paddy Crop Balance Payable)</span>
-                      </div>
-                      <span className="text-sm font-black text-indigo-900">
-                        {formatCurrencyINR(accountSummary.netPayableAmount)}
-                      </span>
-                    </div>
-                    <div className="mt-2 text-indigo-900 font-mono text-[11px] bg-white p-2 rounded-lg border border-indigo-200">
-                      ਫਾਰਮੂਲਾ: ਗ੍ਰਾਸ ਰਕਮ ({formatCurrencyINR(accountSummary.totalGrossAmount)}) − ਲੇਬਰ ({formatCurrencyINR(accountSummary.totalLabourDeductions)}) − ਏਜੰਸੀ ਖਰੀਦ ({formatCurrencyINR(accountSummary.purchasedAmount)}) = <strong className="text-indigo-800 font-black">{formatCurrencyINR(accountSummary.netPayableAmount)}</strong>
-                      <span className="block text-[10px] text-slate-500 mt-0.5">*(ਨੋਟ: ਪੇਸ਼ਗੀ ਅਤੇ ਵਿਆਜ ਨੂੰ ਫਸਲ ਹਿਸਾਬ ਵਿੱਚ ਬਿਲਕੁਲ ਮਿਕਸ ਨਹੀਂ ਕੀਤਾ ਗਿਆ)*</span>
-                    </div>
-                  </div>
-
-                  {/* Step E: Multi-Entry Advances & Separate Interest */}
-                  <div className="p-3 rounded-xl bg-amber-50/50 border border-amber-200">
-                    <div className="flex items-center justify-between font-bold text-amber-950">
-                      <div className="flex items-center gap-2">
-                        <span className="w-5 h-5 rounded-full bg-amber-200 text-amber-900 flex items-center justify-center font-black text-[10px]">E</span>
-                        <span>ਪੇਸ਼ਗੀ ਮੂਲ ਅਤੇ ਸੁਤੰਤਰ ਮਹੀਨਾਵਾਰ ਵਿਆਜ (Independent Multi-Entry Advances & Interest)</span>
-                      </div>
-                      <span className="text-sm font-black text-rose-900">
-                        -{formatCurrencyINR(accountSummary.totalAdvanceRecoverable)}
-                      </span>
-                    </div>
-
-                    {/* Mini table of advances */}
                     {accountSummary.advances.length === 0 ? (
-                      <div className="mt-2 text-slate-500 italic text-[11px] bg-white p-2 rounded-lg border border-amber-200">
-                        ਕੋਈ ਪੇਸ਼ਗੀ ਦਰਜ ਨਹੀਂ ਹੈ। (No advance records found)
+                      <div className="p-4 bg-slate-50 rounded-xl text-center text-xs text-slate-400">
+                        ਕੋਈ ਪੇਸ਼ਗੀ ਦਰਜ ਨਹੀਂ ਹੈ (No advances recorded)
                       </div>
                     ) : (
-                      <div className="mt-2 overflow-x-auto">
-                        <table className="w-full text-left text-[11px] bg-white rounded-lg border border-amber-200 overflow-hidden">
-                          <thead className="bg-amber-100/70 text-amber-950 font-bold border-b border-amber-200">
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-xs border border-slate-200 rounded-xl overflow-hidden">
+                          <thead className="bg-amber-50 text-amber-950 font-bold border-b border-slate-200">
                             <tr>
-                              <th className="p-2">ਮੂਲ (Principal)</th>
-                              <th className="p-2">ਸ਼ੁਰੂਆਤੀ ਮਿਤੀ</th>
-                              <th className="p-2">ਅੰਤਿਮ ਮਿਤੀ</th>
-                              <th className="p-2">ਦਰ %</th>
-                              <th className="p-2">ਦਿਨ</th>
-                              <th className="p-2">ਮਹੀਨੇ+ਦਿਨ</th>
-                              <th className="p-2">ਵਿਆਜ (Interest)</th>
-                              <th className="p-2 text-right">ਕੁੱਲ ਦੇਣਯੋਗ</th>
+                              <th className="p-2.5">Date / ਮਿਤੀ</th>
+                              <th className="p-2.5">Principal / ਮੂਲ</th>
+                              <th className="p-2.5">Rate / ਦਰ</th>
+                              <th className="p-2.5">Duration / ਦਿਨ</th>
+                              <th className="p-2.5">Interest / ਵਿਆਜ</th>
+                              <th className="p-2.5 text-right">Total / ਕੁੱਲ ਦੇਣਯੋਗ</th>
+                              <th className="p-2.5 text-center">ਕਾਰਵਾਈ</th>
                             </tr>
                           </thead>
-                          <tbody className="divide-y divide-amber-100 font-mono">
+                          <tbody className="divide-y divide-slate-100 font-mono">
                             {accountSummary.advances.map((adv) => (
-                              <tr key={adv.id} className="hover:bg-amber-50/50">
-                                <td className="p-2 font-bold text-slate-900">{formatCurrencyINR(adv.principal ?? adv.amount)}</td>
-                                <td className="p-2 text-slate-700">{adv.startDate || adv.date}</td>
-                                <td className="p-2 text-slate-700">{adv.endDate || adv.interestTillDate || '—'}</td>
-                                <td className="p-2 text-amber-800">{adv.monthlyInterestRate ?? 2.0}%</td>
-                                <td className="p-2 text-slate-700">{adv.totalDays || 0}d</td>
-                                <td className="p-2 text-slate-700">{adv.monthsElapsed || 0}M+{adv.daysElapsed || 0}D</td>
-                                <td className="p-2 font-bold text-amber-700">{formatCurrencyINR(adv.interestAmount || 0)}</td>
-                                <td className="p-2 font-black text-rose-900 text-right">{formatCurrencyINR(adv.totalPayableWithInterest || (adv.amount + (adv.interestAmount || 0)))}</td>
+                              <tr key={adv.id} className="hover:bg-amber-50/30">
+                                <td className="p-2.5 font-sans font-medium text-slate-900">{adv.startDate || adv.date}</td>
+                                <td className="p-2.5 font-bold text-slate-900">{formatCurrencyINR(adv.principal ?? adv.amount)}</td>
+                                <td className="p-2.5 text-amber-800">{adv.monthlyInterestRate ?? 2.0}%/ਮਹੀਨਾ</td>
+                                <td className="p-2.5 font-sans text-slate-600">{adv.totalDays || 0} ਦਿਨ</td>
+                                <td className="p-2.5 font-bold text-amber-700">{formatCurrencyINR(adv.interestAmount || 0)}</td>
+                                <td className="p-2.5 font-black text-rose-950 text-right">
+                                  {formatCurrencyINR(adv.totalPayableWithInterest || ((adv.principal ?? adv.amount) + (adv.interestAmount || 0)))}
+                                </td>
+                                <td className="p-2.5 text-center font-sans">
+                                  <div className="flex items-center justify-center gap-1">
+                                    <button
+                                      onClick={() => setViewingAdvance(adv)}
+                                      className="p-1 text-slate-400 hover:text-amber-700 rounded"
+                                      title="View Interest Breakdown"
+                                    >
+                                      <Eye className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      onClick={() => handleOpenEditAdvance(adv)}
+                                      className="p-1 text-slate-400 hover:text-indigo-700 rounded"
+                                      title="Edit Advance"
+                                    >
+                                      <Edit className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      onClick={() => deleteFarmerAdvance(adv.id)}
+                                      className="p-1 text-slate-400 hover:text-rose-700 rounded"
+                                      title="Delete Advance"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                </td>
                               </tr>
                             ))}
                           </tbody>
-                          <tfoot className="bg-amber-50/80 font-bold text-slate-900 border-t border-amber-200">
-                            <tr>
-                              <td className="p-2">ਕੁੱਲ ਮੂਲ: {formatCurrencyINR(accountSummary.totalAdvancePrincipal)}</td>
-                              <td colSpan={4} className="p-2 text-center text-slate-500 text-[10px]">
-                                30 ਦਿਨ ਮਹੀਨਾ ਕਨਵੈਨਸ਼ਨ ਅਨੁਸਾਰ ਹਰ ਇੱਕ ਐਡਵਾਂਸ ਦਾ ਸੁਤੰਤਰ ਹਿਸਾਬ
-                              </td>
-                              <td className="p-2 text-amber-800">ਕੁੱਲ ਵਿਆਜ: {formatCurrencyINR(accountSummary.totalAdvanceInterest)}</td>
-                              <td colSpan={2} className="p-2 text-right text-rose-950 font-black">
-                                ਮੂਲ + ਵਿਆਜ ਕੁੱਲ: {formatCurrencyINR(accountSummary.totalAdvanceRecoverable)}
-                              </td>
-                            </tr>
-                          </tfoot>
                         </table>
                       </div>
                     )}
                   </div>
 
-                  {/* Step F: Direct Payments to Farmer */}
-                  <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
-                    <div className="flex items-center justify-between font-bold text-slate-800">
-                      <div className="flex items-center gap-2">
-                        <span className="w-5 h-5 rounded-full bg-slate-200 text-slate-800 flex items-center justify-center font-black text-[10px]">F</span>
-                        <span>ਕਿਸਾਨ ਨੂੰ ਸਿੱਧੇ ਭੁਗਤਾਨ (Direct Payments Paid to Farmer)</span>
-                      </div>
-                      <span className="text-sm font-black text-slate-900">
-                        -{formatCurrencyINR(accountSummary.paidAmount)}
-                      </span>
+                  {/* PAYMENTS SECTION */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h5 className="font-bold text-xs text-slate-900 uppercase">
+                        Payments to Farmer / ਕਿਸਾਨ ਨੂੰ ਭੁਗਤਾਨ
+                      </h5>
+                      <button
+                        onClick={() => setIsPaymentModalOpen(true)}
+                        className="px-3 py-1.5 bg-indigo-700 hover:bg-indigo-800 text-white rounded-lg text-xs font-bold flex items-center gap-1 shadow-xs"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>+ ਨਵਾਂ ਭੁਗਤਾਨ (Record Payment)</span>
+                      </button>
                     </div>
-                  </div>
 
-                  {/* Step G: Final Settlement Balance */}
-                  <div className={`p-4 rounded-xl border-2 ${
-                    accountSummary.finalNetSettlementBalance >= 0 
-                      ? 'bg-emerald-50 border-emerald-500' 
-                      : 'bg-rose-50 border-rose-500'
-                  }`}>
-                    <div className="flex items-center justify-between font-black">
-                      <div className="flex items-center gap-2">
-                        <span className={`w-6 h-6 rounded-full flex items-center justify-center text-white text-xs ${
-                          accountSummary.finalNetSettlementBalance >= 0 ? 'bg-emerald-600' : 'bg-rose-600'
-                        }`}>G</span>
-                        <span className="text-sm">
-                          ਅੰਤਿਮ ਹਿਸਾਬ ਬਕਾਇਆ (FINAL SETTLEMENT BALANCE):{' '}
-                          <span className={accountSummary.finalNetSettlementBalance >= 0 ? 'text-emerald-800' : 'text-rose-800'}>
-                            {accountSummary.finalNetSettlementBalance >= 0 ? 'ਕਿਸਾਨ ਨੂੰ ਦੇਣਯੋਗ (Payable to Farmer)' : 'ਕਿਸਾਨ ਤੋਂ ਵਸੂਲੀਯੋਗ (Recoverable from Farmer)'}
-                          </span>
-                        </span>
+                    {accountSummary.paymentRecords.length === 0 ? (
+                      <div className="p-4 bg-slate-50 rounded-xl text-center text-xs text-slate-400">
+                        ਕੋਈ ਸਿੱਧਾ ਭੁਗਤਾਨ ਦਰਜ ਨਹੀਂ ਹੈ (No direct payments recorded)
                       </div>
-                      <span className={`text-lg font-black ${
-                        accountSummary.finalNetSettlementBalance >= 0 ? 'text-emerald-950' : 'text-rose-950'
-                      }`}>
-                        {formatCurrencyINR(Math.abs(accountSummary.finalNetSettlementBalance))}
-                      </span>
-                    </div>
-                    <div className="mt-2 text-slate-700 font-mono text-[11px] bg-white p-2.5 rounded-lg border border-slate-300">
-                      ਅੰਤਿਮ ਹਿਸਾਬ ਫਾਰਮੂਲਾ: ਸ਼ੁੱਧ ਫਸਲ ਬਕਾਇਆ ({formatCurrencyINR(accountSummary.netPayableAmount)}) − ਕੁੱਲ ਪੇਸ਼ਗੀ+ਵਿਆਜ ({formatCurrencyINR(accountSummary.totalAdvanceRecoverable)}) − ਸਿੱਧਾ ਭੁਗਤਾਨ ({formatCurrencyINR(accountSummary.paidAmount)}) = <strong className="text-slate-900">{formatCurrencyINR(accountSummary.finalNetSettlementBalance)}</strong>
-                    </div>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-xs border border-slate-200 rounded-xl overflow-hidden">
+                          <thead className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
+                            <tr>
+                              <th className="p-2.5">Date / ਮਿਤੀ</th>
+                              <th className="p-2.5">Mode / ਢੰਗ</th>
+                              <th className="p-2.5">Ref / UTR</th>
+                              <th className="p-2.5">Agency / ਏਜੰਸੀ</th>
+                              <th className="p-2.5 text-right">Amount / ਰਕਮ</th>
+                              <th className="p-2.5 text-center">ਕਾਰਵਾਈ</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 font-mono">
+                            {accountSummary.paymentRecords.map((pay) => (
+                              <tr key={pay.id} className="hover:bg-slate-50">
+                                <td className="p-2.5 font-sans font-medium text-slate-900">{pay.date}</td>
+                                <td className="p-2.5 font-sans font-bold text-slate-800">{pay.paymentMode}</td>
+                                <td className="p-2.5 text-slate-600">{pay.referenceNumber || '—'}</td>
+                                <td className="p-2.5 font-sans text-slate-700">{pay.agency || '—'}</td>
+                                <td className="p-2.5 text-right font-black text-emerald-900">{formatCurrencyINR(pay.amount)}</td>
+                                <td className="p-2.5 text-center font-sans">
+                                  <button
+                                    onClick={() => deleteFarmerPayment(pay.id)}
+                                    className="p-1 text-slate-400 hover:text-rose-700 rounded"
+                                    title="Delete Payment"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
             </div>
           </div>
+        )}
+      </div>
+    )}
+  </div>
 
-          {/* ============================================================== */}
-          {/* 5. NAVIGATION TABS BAR */}
-          {/* ============================================================== */}
-          <div className="flex items-center gap-1.5 border-b border-slate-200 overflow-x-auto pb-2 text-xs font-semibold print:hidden">
-            <button
-              onClick={() => setActiveTab('all')}
-              className={`px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 ${
-                activeTab === 'all'
-                  ? 'bg-emerald-800 text-white shadow-sm font-bold'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
-            >
-              <span>ਸਮੁੱਚਾ ਰਿਕਾਰਡ (All)</span>
-              <span className="px-1.5 py-0.2 bg-black/20 rounded-full text-[10px]">
-                {accountSummary.transactions.length}
-              </span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('arrival')}
-              className={`px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 ${
-                activeTab === 'arrival'
-                  ? 'bg-emerald-800 text-white shadow-sm font-bold'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
-            >
-              <span>1. ਮੰਡੀ ਆਮਦ (Arrivals)</span>
-              <span className="px-1.5 py-0.2 bg-black/20 rounded-full text-[10px]">
-                {accountSummary.mandiArrivalEntries.length}
-              </span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('purchases')}
-              className={`px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 ${
-                activeTab === 'purchases'
-                  ? 'bg-emerald-800 text-white shadow-sm font-bold'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
-            >
-              <span>2. ਖਰੀਦ & ਏਜੰਸੀਆਂ (Purchases)</span>
-              <span className="px-1.5 py-0.2 bg-black/20 rounded-full text-[10px]">
-                {accountSummary.purchaseRecords.length}
-              </span>
-            </button>
-
-            {accountSummary.isMainFarmer && (
-              <button
-                onClick={() => setActiveTab('linked')}
-                className={`px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 ${
-                  activeTab === 'linked'
-                    ? 'bg-amber-700 text-white shadow-sm font-bold'
-                    : 'bg-amber-100 text-amber-900 hover:bg-amber-200'
-                }`}
-              >
-                <span>🔗 ਲਿੰਕਡ ਖਰੀਦਾਂ (Linked Sub-Purchases)</span>
-                <span className="px-1.5 py-0.2 bg-black/20 rounded-full text-[10px]">
-                  {accountSummary.linkedPurchasesList?.length || 0}
-                </span>
-              </button>
-            )}
-
-            <button
-              onClick={() => setActiveTab('advances')}
-              className={`px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 ${
-                activeTab === 'advances'
-                  ? 'bg-amber-800 text-white shadow-sm font-bold'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
-            >
-              <span>5. ਪੇਸ਼ਗੀ / ਐਡਵਾਂਸ & ਵਿਆਜ (Advances)</span>
-              <span className="px-1.5 py-0.2 bg-black/20 rounded-full text-[10px]">
-                {accountSummary.advances?.length || 0}
-              </span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('boli')}
-              className={`px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 ${
-                activeTab === 'boli'
-                  ? 'bg-emerald-800 text-white shadow-sm font-bold'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
-            >
-              <span>3. ਬੋਲੀ (Auctions)</span>
-              <span className="px-1.5 py-0.2 bg-black/20 rounded-full text-[10px]">
-                {accountSummary.boliRecords.length}
-              </span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('payments')}
-              className={`px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 ${
-                activeTab === 'payments'
-                  ? 'bg-emerald-800 text-white shadow-sm font-bold'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
-            >
-              <span>4. ਭੁਗਤਾਨ (Payments)</span>
-              <span className="px-1.5 py-0.2 bg-black/20 rounded-full text-[10px]">
-                {accountSummary.paymentRecords.length}
-              </span>
-            </button>
-          </div>
-
-          {/* ============================================================== */}
-          {/* 6A. MANDI ARRIVAL SUMMARY & SLIPS TABLE */}
-          {/* ============================================================== */}
-          {(activeTab === 'all' || activeTab === 'arrival') && (
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-              <div className="p-4 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <PackageCheck className="w-5 h-5 text-indigo-600" />
-                  <div>
-                    <h3 className="font-bold text-slate-900 text-sm">
-                      1. ਮੰਡੀ ਆਮਦ ਤੁਲਾਈ ਸਾਰਾਂਸ਼ / MANDI ARRIVAL SUMMARY
-                    </h3>
-                    <p className="text-xs text-slate-500">ਕਿਸਾਨ ਦੁਆਰਾ ਮੰਡੀ ਵਿੱਚ ਲਿਆਂਦੀਆਂ ਗਈਆਂ ਬੋਰੀਆਂ ਅਤੇ ਵਜ਼ਨ</p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div className="text-xs font-bold text-indigo-900">
-                    ਕੁੱਲ ਬੋਰੇ: {accountSummary.mandiArrivalBags}
-                  </div>
-                  <div className="text-[11px] text-slate-500">{accountSummary.mandiArrivalDisplay}</div>
-                </div>
-              </div>
-
-              {accountSummary.mandiArrivalEntries.length === 0 ? (
-                <div className="p-8 text-center text-slate-400 text-xs">
-                  ਇਸ ਕਿਸਾਨ ਲਈ ਅਜੇ ਕੋਈ ਮੰਡੀ ਤੁਲਾਈ ਐਂਟਰੀ ਦਰਜ ਨਹੀਂ ਹੈ। (No arrival slips recorded)
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs border-collapse">
-                    <thead>
-                      <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
-                        <th className="p-3">ਮਿਤੀ (Date)</th>
-                        <th className="p-3">ਰਸੀਦ ਨੰਬਰ (Slip #)</th>
-                        <th className="p-3">ਬੋਰੇ (Bags)</th>
-                        <th className="p-3">ਕੁੱਲ ਵਜ਼ਨ (Total Weight)</th>
-                        <th className="p-3">ਤੋਤਾ (Tota Kg)</th>
-                        <th className="p-3">ਬਾਰਦਾਨਾ (Bardana)</th>
-                        <th className="p-3">ਸਰਕਾਰੀ ਰੇਟ (Rate)</th>
-                        <th className="p-3 text-right">ਕੁੱਲ ਰਕਮ (Amount)</th>
-                        <th className="p-3 text-center print:hidden">ਕਾਰਵਾਈ (Action)</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {accountSummary.mandiArrivalEntries.map((slip) => (
-                        <tr key={slip.id} className="hover:bg-slate-50 transition-colors">
-                          <td className="p-3 font-medium text-slate-900">{slip.date}</td>
-                          <td className="p-3 font-mono font-bold text-indigo-700">{slip.entryNumber}</td>
-                          <td className="p-3 font-bold text-slate-900">{slip.bags} Bags</td>
-                          <td className="p-3 font-semibold text-slate-800">{slip.grandTotalDisplay}</td>
-                          <td className="p-3 text-slate-500">{slip.totaKg} Kg</td>
-                          <td className="p-3">
-                            {slip.newBags !== undefined || slip.oldBags !== undefined ? (
-                              (slip.newBags || 0) > 0 && (slip.oldBags || 0) > 0 ? (
-                                <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-indigo-100 text-indigo-900">
-                                  ਨਵਾਂ {slip.newBags} + ਪੁਰਾਣਾ {slip.oldBags}
-                                </span>
-                              ) : (slip.newBags || 0) > 0 ? (
-                                <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-100 text-emerald-800">
-                                  ਨਵਾਂ ({slip.newBags})
-                                </span>
-                              ) : (
-                                <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-amber-100 text-amber-800">
-                                  ਪੁਰਾਣਾ ({slip.oldBags})
-                                </span>
-                              )
-                            ) : (
-                              <span
-                                className={`px-2 py-0.5 rounded text-[11px] font-bold ${
-                                  slip.bardana === 'NEW' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
-                                }`}
-                              >
-                                {slip.bardana}
-                              </span>
-                            )}
-                          </td>
-                          <td className="p-3 text-slate-700">₹{slip.ratePerQtl || 2461}/Q</td>
-                          <td className="p-3 text-right font-black text-slate-900">
-                            {formatCurrencyINR(slip.totalAmount)}
-                          </td>
-                          <td className="p-3 text-center print:hidden">
-                            <div className="flex items-center justify-center gap-1">
-                              <button
-                                onClick={() => setActiveBagsEntryToEdit(slip)}
-                                className="p-1 text-slate-500 hover:text-indigo-600 rounded transition-colors cursor-pointer"
-                                title={isEn ? 'Edit weighment slip' : 'ਪਰਚੀ ਸੋਧੋ (Edit Slip)'}
-                              >
-                                <Edit className="w-3.5 h-3.5" />
-                              </button>
-                              <button
-                                onClick={() => setActiveReceipt(slip)}
-                                className="p-1 text-slate-500 hover:text-emerald-600 rounded transition-colors cursor-pointer"
-                                title={isEn ? 'Print slip' : 'ਰਸੀਦ ਪ੍ਰਿੰਟ ਕਰੋ (Print)'}
-                              >
-                                <Printer className="w-3.5 h-3.5" />
-                              </button>
-                              <button
-                                onClick={() => {
-                                  confirmDelete({
-                                    recordNameEn: `Slip ${slip.entryNumber}`,
-                                    recordNamePa: `ਰਸੀਦ ${slip.entryNumber}`,
-                                    recordId: slip.entryNumber,
-                                    itemDetails: [
-                                      { labelEn: 'Farmer', labelPa: 'ਕਿਸਾਨ', value: `${slip.farmerNamePa} (${slip.farmerId})` },
-                                      { labelEn: 'Bags', labelPa: 'ਬੋਰੀਆਂ', value: `${slip.bags} Bags` },
-                                      { labelEn: 'Weight', labelPa: 'ਵਜ਼ਨ', value: slip.grandTotalDisplay }
-                                    ],
-                                    onConfirm: () => {
-                                      deleteBagsEntry(slip.id);
-                                      notifyDeleteSuccess({
-                                        titlePa: 'ਤੁਲਾਈ ਰਸੀਦ ਸਫਲਤਾਪੂਰਵਕ ਹਟਾ ਦਿੱਤੀ ਗਈ ਹੈ।',
-                                        titleEn: 'Slip Deleted Successfully',
-                                        messagePa: `ਰਸੀਦ ${slip.entryNumber} ਹਟਾ ਦਿੱਤੀ ਗਈ ਹੈ ਅਤੇ ਬਾਕੀ ਸਟਾਕ ਅਪਡੇਟ ਹੋ ਗਿਆ ਹੈ।`
-                                      });
-                                    }
-                                  });
-                                }}
-                                className="p-1 text-slate-400 hover:text-rose-600 rounded transition-colors cursor-pointer"
-                                title="Delete weighment slip"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                    <tfoot>
-                      <tr className="bg-slate-50 font-black text-slate-900 border-t border-slate-200">
-                        <td colSpan={2} className="p-3 text-right">ਕੁੱਲ ਆਮਦ ਜੋੜ (Total):</td>
-                        <td className="p-3">{accountSummary.mandiArrivalBags} Bags</td>
-                        <td colSpan={4} className="p-3">{accountSummary.mandiArrivalDisplay}</td>
-                        <td className="p-3 text-right">
-                          {formatCurrencyINR(accountSummary.totalGrossAmount)}
-                        </td>
-                        <td className="print:hidden"></td>
-                      </tr>
-                    </tfoot>
-                  </table>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* ============================================================== */}
-          {/* 6B. DAILY PURCHASE & AGENCY BREAKDOWN */}
-          {/* ============================================================== */}
-          {(activeTab === 'all' || activeTab === 'purchases') && (
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-              <div className="p-4 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <ShoppingCart className="w-5 h-5 text-emerald-600" />
-                  <div>
-                    <h3 className="font-bold text-slate-900 text-sm">
-                      2. ਰੋਜ਼ਾਨਾ ਖਰੀਦ ਅਤੇ ਏਜੰਸੀ-ਵਾਰ ਵੇਰਵਾ / DAILY PURCHASE & AGENCY BREAKDOWN
-                    </h3>
-                    <p className="text-xs text-slate-500">ਵੱਖ-ਵੱਖ ਖਰੀਦ ਏਜੰਸੀਆਂ ਦੁਆਰਾ ਕੀਤੀ ਗਈ ਖਰੀਦ ਅਤੇ ਬਾਕੀ ਮਾਤਰਾ</p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div className="text-xs font-bold text-emerald-900">
-                    ਖਰੀਦੇ ਬੋਰੇ: {accountSummary.purchasedBags} / ਬਾਕੀ: {accountSummary.remainingBags}
-                  </div>
-                  <div className="text-[11px] text-slate-500">{accountSummary.purchasedWeightDisplay}</div>
-                </div>
-              </div>
-
-              {/* Agency Breakdown Cards */}
-              {accountSummary.agencyWisePurchases.length > 0 && (
-                <div className="p-4 bg-emerald-50/50 border-b border-emerald-100">
-                  <div className="text-xs font-bold text-emerald-950 uppercase tracking-wider mb-2">
-                    ਏਜੰਸੀ-ਵਾਰ ਖਰੀਦ ਸੰਖੇਪ (Agency Procurement Summary):
-                  </div>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-                    {accountSummary.agencyWisePurchases.map((ag) => (
-                      <div key={ag.agency} className="bg-white p-3 rounded-xl border border-emerald-200 shadow-2xs">
-                        <div className="font-bold text-emerald-900 text-xs">{ag.agency}</div>
-                        <div className="text-lg font-black text-slate-900 mt-1">{ag.bags} Bags</div>
-                        <div className="text-[11px] text-slate-500">{formatCurrencyINR(ag.amount)}</div>
-                      </div>
-                    ))}
-                    <div className="bg-rose-50/80 p-3 rounded-xl border border-rose-200 shadow-2xs">
-                      <div className="font-bold text-rose-800 text-xs">ਬਾਕੀ ਅਣਵਿਕਿਆ (Remaining)</div>
-                      <div className="text-lg font-black text-rose-950 mt-1">{accountSummary.remainingBags} Bags</div>
-                      <div className="text-[11px] text-rose-700">{accountSummary.remainingWeightDisplay}</div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {accountSummary.purchaseRecords.length === 0 ? (
-                <div className="p-8 text-center text-slate-400 text-xs">
-                  ਇਸ ਕਿਸਾਨ ਦੀ ਅਜੇ ਕੋਈ ਸਿੱਧੀ ਖਰੀਦ ਦਰਜ ਨਹੀਂ ਹੋਈ। (No direct purchase records yet)
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs border-collapse">
-                    <thead>
-                      <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
-                        <th className="p-3">ਮਿਤੀ (Date)</th>
-                        <th className="p-3">ਖਰੀਦ ਏਜੰਸੀ (Agency)</th>
-                        <th className="p-3">ਵਾਊਚਰ / ਬੋਲੀ (Voucher / Ref)</th>
-                        <th className="p-3">ਬੋਰੇ (Bags)</th>
-                        <th className="p-3">ਵਜ਼ਨ (Weight)</th>
-                        <th className="p-3">ਰੇਟ (Rate)</th>
-                        <th className="p-3 text-right">ਰਕਮ (Total Amount)</th>
-                        <th className="p-3 text-center print:hidden">ਕਾਰਵਾਈ (Action)</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {accountSummary.purchaseRecords.map((pur) => (
-                        <tr key={pur.id} className="hover:bg-slate-50 transition-colors">
-                          <td className="p-3 font-medium text-slate-900">{pur.date}</td>
-                          <td className="p-3 font-bold text-emerald-800">{pur.agency}</td>
-                          <td className="p-3 font-mono text-slate-600">
-                            {pur.id} {pur.boliNumber ? `(Boli: ${pur.boliNumber})` : ''}
-                          </td>
-                          <td className="p-3 font-bold text-slate-900">{pur.bags} Bags</td>
-                          <td className="p-3 font-semibold text-slate-800">
-                            {pur.totalWeightDisplay || `${pur.qul} Qul ${pur.kg} Kg`}
-                          </td>
-                          <td className="p-3 text-slate-700">₹{pur.rate}/Q</td>
-                          <td className="p-3 text-right font-black text-emerald-950">
-                            {formatCurrencyINR(pur.totalAmount)}
-                          </td>
-                          <td className="p-3 text-center print:hidden">
-                            <button
-                              onClick={() => {
-                                confirmDelete({
-                                  recordNameEn: `Purchase ${pur.id}`,
-                                  recordNamePa: `ਖਰੀਦ ਵਾਊਚਰ ${pur.id}`,
-                                  recordId: pur.id,
-                                  itemDetails: [
-                                    { labelEn: 'Farmer', labelPa: 'ਕਿਸਾਨ', value: `${pur.farmerNamePa} (${pur.farmerId})` },
-                                    { labelEn: 'Agency', labelPa: 'ਏਜੰਸੀ', value: pur.agency },
-                                    { labelEn: 'Bags', labelPa: 'ਬੋਰੀਆਂ', value: `${pur.bags} Bags` },
-                                    { labelEn: 'Amount', labelPa: 'ਰਕਮ', value: formatCurrencyINR(pur.totalAmount) }
-                                  ],
-                                  onConfirm: () => {
-                                    deleteDailyPurchase(pur.id);
-                                    notifyDeleteSuccess({
-                                      titlePa: 'ਖਰੀਦ ਵਾਊਚਰ ਹਟਾ ਦਿੱਤਾ ਗਿਆ ਹੈ।',
-                                      titleEn: 'Purchase Deleted Successfully',
-                                      messagePa: `ਖਰੀਦ ${pur.id} ਹਟਾ ਦਿੱਤੀ ਗਈ ਹੈ ਅਤੇ ${pur.bags} ਬੋਰੀਆਂ ਵਾਪਸ ਬਾਕੀ ਸਟਾਕ ਵਿੱਚ ਜਮ੍ਹਾ ਹੋ ਗਈਆਂ ਹਨ।`
-                                    });
-                                  }
-                                });
-                              }}
-                              className="p-1 text-slate-400 hover:text-rose-600 rounded transition-colors"
-                              title="Delete purchase and restore bags"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                    <tfoot>
-                      <tr className="bg-slate-50 font-black text-slate-900 border-t border-slate-200">
-                        <td colSpan={3} className="p-3 text-right">ਕੁੱਲ ਸਿੱਧੀ ਖਰੀਦ ਜੋੜ:</td>
-                        <td className="p-3">{accountSummary.directPurchasedBags} Bags</td>
-                        <td colSpan={2} className="p-3"></td>
-                        <td className="p-3 text-right text-emerald-900">
-                          {formatCurrencyINR(accountSummary.totalAgencyPurchasePayment)}
-                        </td>
-                        <td className="print:hidden"></td>
-                      </tr>
-                    </tfoot>
-                  </table>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* ============================================================== */}
-          {/* 6C. LINKED SUB-FARMER PURCHASES (IF MAIN FARMER) */}
-          {/* ============================================================== */}
-          {accountSummary.isMainFarmer && (activeTab === 'all' || activeTab === 'linked') && (
-            <div className="bg-white rounded-2xl border-2 border-amber-400 shadow-sm overflow-hidden">
-              <div className="p-4 bg-amber-50 border-b border-amber-200 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <LinkIcon className="w-5 h-5 text-amber-700" />
-                  <div>
-                    <h3 className="font-black text-amber-950 text-sm">
-                      ਲਿੰਕਡ ਸਬ-ਕਿਸਾਨਾਂ ਦੁਆਰਾ ਕੀਤੀਆਂ ਖਰੀਦਾਂ / LINKED SUB-FARMER PURCHASES
-                    </h3>
-                    <p className="text-xs text-amber-800">
-                      ਇਹ ਬੋਰੀਆਂ ਮੁੱਖ ਕਿਸਾਨ ਦੇ ਆਮਦ ਸਟਾਕ ਵਿੱਚੋਂ ਕੱਟੀਆਂ ਗਈਆਂ ਹਨ (Main Farmer Account Deduction)
-                    </p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div className="text-xs font-black text-amber-900">
-                    ਕੁੱਲ ਲਿੰਕਡ ਬੋਰੇ: {accountSummary.linkedPurchasedBags} Bags
-                  </div>
-                </div>
-              </div>
-
-              {accountSummary.linkedPurchasesList.length === 0 ? (
-                <div className="p-8 text-center text-slate-400 text-xs">
-                  ਲਿੰਕ ਕੀਤੇ ਕਿਸਾਨਾਂ ਦੁਆਰਾ ਅਜੇ ਕੋਈ ਖਰੀਦ ਦਰਜ ਨਹੀਂ ਹੋਈ।
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs border-collapse">
-                    <thead>
-                      <tr className="bg-amber-100/60 text-amber-950 font-bold border-b border-amber-200">
-                        <th className="p-3">ਮਿਤੀ (Date)</th>
-                        <th className="p-3">ਲਿੰਕਡ ਸਬ-ਕਿਸਾਨ (Linked Sub-Farmer)</th>
-                        <th className="p-3">ਖਰੀਦ ਏਜੰਸੀ (Agency)</th>
-                        <th className="p-3">ਬੋਰੇ (Bags)</th>
-                        <th className="p-3">ਵਜ਼ਨ (Weight)</th>
-                        <th className="p-3">ਰੇਟ (Rate)</th>
-                        <th className="p-3 text-right">ਕੁੱਲ ਰਕਮ (Amount)</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-amber-100">
-                      {accountSummary.linkedPurchasesList.map((lp) => (
-                        <tr key={lp.id} className="hover:bg-amber-50/50 transition-colors">
-                          <td className="p-3 font-medium text-slate-900">{lp.date}</td>
-                          <td className="p-3 font-bold text-amber-900">
-                            {lp.linkedFarmerNamePa || lp.linkedFarmerName}
-                            <span className="font-mono text-[11px] text-amber-700 ml-1">[{lp.linkedFarmerId}]</span>
-                          </td>
-                          <td className="p-3 font-semibold text-slate-800">{lp.agency}</td>
-                          <td className="p-3 font-black text-slate-900">{lp.bags} Bags</td>
-                          <td className="p-3 text-slate-700">{lp.qul} Qul {lp.kg} Kg</td>
-                          <td className="p-3 text-slate-700">₹{lp.rate}/Q</td>
-                          <td className="p-3 text-right font-black text-amber-950">
-                            {formatCurrencyINR(lp.totalAmount)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                    <tfoot>
-                      <tr className="bg-amber-100 font-black text-amber-950 border-t border-amber-200">
-                        <td colSpan={3} className="p-3 text-right">ਕੁੱਲ ਲਿੰਕਡ ਖਰੀਦ ਜੋੜ:</td>
-                        <td className="p-3">{accountSummary.linkedPurchasedBags} Bags</td>
-                        <td colSpan={2} className="p-3"></td>
-                        <td className="p-3 text-right">
-                          {formatCurrencyINR(
-                            accountSummary.linkedPurchasesList.reduce((s, p) => s + (p.totalAmount || 0), 0)
-                          )}
-                        </td>
-                      </tr>
-                    </tfoot>
-                  </table>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* ============================================================== */}
-          {/* 6D. ADVANCES & INTEREST BREAKDOWN */}
-          {/* ============================================================== */}
-          {(activeTab === 'all' || activeTab === 'advances') && (
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-              <div className="p-4 bg-amber-50/80 border-b border-amber-200 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Coins className="w-5 h-5 text-amber-700" />
-                  <div>
-                    <h3 className="font-bold text-amber-950 text-sm">
-                      5. ਪੇਸ਼ਗੀ / ਐਡਵਾਂਸ & ਵਿਆਜ ਹਿਸਾਬ / FARMER ADVANCE & ACCRUED INTEREST
-                    </h3>
-                    <p className="text-xs text-amber-800">
-                      ਮਿਤੀ-ਦਰ-ਮਿਤੀ (30 ਦਿਨ ਮਹੀਨਾ ਕਨਵੈਨਸ਼ਨ) ਮੁਤਾਬਕ ਪੇਸ਼ਗੀ ਮੂਲ ਰਕਮ ਅਤੇ ਵਿਆਜ ਦੀ ਗਣਨਾ
-                    </p>
-                  </div>
-                </div>
-                <button
-                  onClick={handleOpenAddAdvance}
-                  className="px-3 py-1.5 bg-amber-700 hover:bg-amber-800 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-all print:hidden"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>ਨਵੀਂ ਪੇਸ਼ਗੀ ਦਰਜ ਕਰੋ (+ Record Advance)</span>
-                </button>
-              </div>
-
-              {/* Advance Summary Highlights */}
-              <div className="p-4 grid grid-cols-1 sm:grid-cols-3 gap-3 bg-amber-50/30 border-b border-amber-100 text-xs">
-                <div className="p-3 bg-white rounded-xl border border-amber-200 shadow-2xs">
-                  <div className="text-amber-800 font-semibold">ਕੁੱਲ ਪੇਸ਼ਗੀ ਮੂਲ (Total Principal)</div>
-                  <div className="text-lg font-black text-slate-900 mt-1">
-                    {formatCurrencyINR(accountSummary.totalAdvancePrincipal)}
-                  </div>
-                </div>
-
-                <div className="p-3 bg-white rounded-xl border border-amber-200 shadow-2xs">
-                  <div className="text-amber-800 font-semibold">ਕੁੱਲ ਜੁੜਿਆ ਵਿਆਜ (Total Interest)</div>
-                  <div className="text-lg font-black text-amber-700 mt-1">
-                    {formatCurrencyINR(accountSummary.totalAdvanceInterest)}
-                  </div>
-                </div>
-
-                <div className="p-3 bg-white rounded-xl border border-amber-200 shadow-2xs">
-                  <div className="text-rose-800 font-semibold">ਮੂਲ + ਵਿਆਜ ਕੁੱਲ (Principal + Interest Total)</div>
-                  <div className="text-lg font-black text-rose-950 mt-1">
-                    {formatCurrencyINR(accountSummary.totalAdvanceRecoverable)}
-                  </div>
-                </div>
-              </div>
-
-              {accountSummary.advances.length === 0 ? (
-                <div className="p-8 text-center text-slate-400 text-xs">
-                  ਇਸ ਕਿਸਾਨ ਲਈ ਕੋਈ ਪੇਸ਼ਗੀ / ਐਡਵਾਂਸ ਰਿਕਾਰਡ ਦਰਜ ਨਹੀਂ ਹੈ। (No active advance records)
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs border-collapse">
-                    <thead>
-                      <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
-                        <th className="p-3">ਮੂਲ ਰਕਮ (Principal)</th>
-                        <th className="p-3">ਸ਼ੁਰੂਆਤੀ ਮਿਤੀ (Start Date)</th>
-                        <th className="p-3">ਅੰਤਿਮ ਮਿਤੀ (End Date)</th>
-                        <th className="p-3">ਦਰ % (Rate)</th>
-                        <th className="p-3">ਦਿਨ (Days)</th>
-                        <th className="p-3">ਮਹੀਨੇ+ਦਿਨ (Months+Days)</th>
-                        <th className="p-3">ਜੁੜਿਆ ਵਿਆਜ (Interest)</th>
-                        <th className="p-3">ਮੂਲ + ਵਿਆਜ (Total)</th>
-                        <th className="p-3">ਢੰਗ / ਟਿੱਪਣੀ (Mode / Remarks)</th>
-                        <th className="p-3 text-center print:hidden">ਕਾਰਵਾਈ (Actions)</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {accountSummary.advances.map((adv) => (
-                        <tr key={adv.id} className="hover:bg-slate-50 transition-colors">
-                          <td className="p-3 font-black text-slate-900">
-                            {formatCurrencyINR(adv.principal ?? adv.amount)}
-                          </td>
-                          <td className="p-3 font-medium text-slate-900">{adv.startDate || adv.date}</td>
-                          <td className="p-3 font-medium text-slate-700">
-                            {adv.endDate || adv.interestTillDate || '—'}
-                          </td>
-                          <td className="p-3 font-semibold text-amber-800">
-                            {adv.monthlyInterestRate ?? 2.0}% / Mo
-                          </td>
-                          <td className="p-3 font-mono text-slate-700">
-                            {adv.totalDays || 0} ਦਿਨ
-                          </td>
-                          <td className="p-3 font-mono text-slate-700">
-                            {adv.monthsElapsed || 0}M + {adv.daysElapsed || 0}D
-                          </td>
-                          <td className="p-3 font-bold text-amber-700">
-                            {formatCurrencyINR(adv.interestAmount || 0)}
-                          </td>
-                          <td className="p-3 font-black text-rose-900">
-                            {formatCurrencyINR(adv.totalPayableWithInterest || (adv.amount + (adv.interestAmount || 0)))}
-                          </td>
-                          <td className="p-3 text-slate-500">
-                            <span className="font-semibold text-slate-700">{adv.paymentMode}</span>
-                            {adv.remarks ? ` • ${adv.remarks}` : ''}
-                          </td>
-                          <td className="p-3 text-center print:hidden">
-                            <div className="flex items-center justify-center gap-1">
-                              <button
-                                onClick={() => setViewingAdvance(adv)}
-                                className="p-1 text-slate-400 hover:text-blue-700 rounded transition-colors"
-                                title="ਹਿਸਾਬ ਦੇਖੋ (View full interest calculation)"
-                              >
-                                <Eye className="w-3.5 h-3.5" />
-                              </button>
-                              <button
-                                onClick={() => handleOpenEditAdvance(adv)}
-                                className="p-1 text-slate-400 hover:text-emerald-700 rounded transition-colors"
-                                title="ਸੋਧੋ (Edit advance)"
-                              >
-                                <Edit className="w-3.5 h-3.5" />
-                              </button>
-                              <button
-                                onClick={() => handleDeleteAdvance(adv)}
-                                className="p-1 text-slate-400 hover:text-rose-600 rounded transition-colors"
-                                title="ਮਿਟਾਓ (Delete advance)"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                    <tfoot>
-                      <tr className="bg-slate-100 font-black text-slate-900 border-t border-slate-200">
-                        <td className="p-3">{formatCurrencyINR(accountSummary.totalAdvancePrincipal)}</td>
-                        <td colSpan={5} className="p-3 text-right text-slate-600 font-bold">
-                          ਕੁੱਲ ਜੋੜ (Summary Totals):
-                        </td>
-                        <td className="p-3 text-amber-800 font-black">
-                          {formatCurrencyINR(accountSummary.totalAdvanceInterest)}
-                        </td>
-                        <td className="p-3 text-rose-950 font-black">
-                          {formatCurrencyINR(accountSummary.totalAdvanceRecoverable)}
-                        </td>
-                        <td colSpan={2} className="print:hidden"></td>
-                      </tr>
-                    </tfoot>
-                  </table>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* ============================================================== */}
-          {/* 6E. BOLI / AUCTION SUMMARY */}
-          {/* ============================================================== */}
-          {(activeTab === 'all' || activeTab === 'boli') && (
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-              <div className="p-4 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Scale className="w-5 h-5 text-amber-600" />
-                  <div>
-                    <h3 className="font-bold text-slate-900 text-sm">
-                      3. ਬੋਲੀ / ਨਿਲਾਮੀ ਵੇਰਵਾ / BOLI & AUCTION SUMMARY
-                    </h3>
-                    <p className="text-xs text-slate-500">ਕਿਸਾਨ ਦੀ ਫਸਲ ਦੀ ਬੋਲੀ ਅਤੇ ਖਰੀਦਦਾਰ ਏਜੰਸੀਆਂ ਦਾ ਰਿਕਾਰਡ</p>
-                  </div>
-                </div>
-                <div className="text-xs font-bold text-amber-900">
-                  ਕੁੱਲ ਬੋਲੀ ਰਿਕਾਰਡ: {accountSummary.boliRecords.length}
-                </div>
-              </div>
-
-              {accountSummary.boliRecords.length === 0 ? (
-                <div className="p-8 text-center text-slate-400 text-xs">
-                  ਇਸ ਕਿਸਾਨ ਲਈ ਕੋਈ ਵੱਖਰੀ ਬੋਲੀ ਰਿਕਾਰਡ ਨਹੀਂ ਹੈ। (No auction records found)
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs border-collapse">
-                    <thead>
-                      <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
-                        <th className="p-3">ਮਿਤੀ (Date)</th>
-                        <th className="p-3">ਖਰੀਦਦਾਰ ਏਜੰਸੀ (Agency)</th>
-                        <th className="p-3">ਬੋਲੀ / ਗੇਟ ਪਾਸ (Boli / Gate Pass)</th>
-                        <th className="p-3">ਬੋਰੇ (Bags)</th>
-                        <th className="p-3">ਕੁੱਲ ਵਜ਼ਨ (Weight)</th>
-                        <th className="p-3">ਰੇਟ (Rate)</th>
-                        <th className="p-3 text-right">ਕੁੱਲ ਰਕਮ (Amount)</th>
-                        <th className="p-3 text-center">ਸਥਿਤੀ (Status)</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {accountSummary.boliRecords.map((b, idx) => (
-                        <tr key={b.id || idx} className="hover:bg-slate-50 transition-colors">
-                          <td className="p-3 font-medium text-slate-900">{b.date}</td>
-                          <td className="p-3 font-bold text-slate-800">{b.agency}</td>
-                          <td className="p-3 font-mono text-slate-600">{b.boliNumber || b.id}</td>
-                          <td className="p-3 font-bold text-slate-900">{b.bags} Bags</td>
-                          <td className="p-3 font-semibold text-slate-800">{`${b.qul} Qul ${b.kg} Kg`}</td>
-                          <td className="p-3 text-slate-700">₹{b.rate}/Q</td>
-                          <td className="p-3 text-right font-black text-slate-900">
-                            {formatCurrencyINR(b.totalAmount)}
-                          </td>
-                          <td className="p-3 text-center">
-                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800">
-                              {b.status || 'CONFIRMED'}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* ============================================================== */}
-          {/* 6F. PAYMENTS & TRANSFERS */}
-          {/* ============================================================== */}
-          {(activeTab === 'all' || activeTab === 'payments') && (
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-              <div className="p-4 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Wallet className="w-5 h-5 text-emerald-700" />
-                  <div>
-                    <h3 className="font-bold text-slate-900 text-sm">
-                      4. ਭੁਗਤਾਨ ਅਤੇ ਅਦਾਇਗੀ ਸਾਰਾਂਸ਼ / PAYMENT & TRANSFERS
-                    </h3>
-                    <p className="text-xs text-slate-500">ਅਦਾ ਕੀਤੀ ਰਕਮ, ਬਕਾਇਆ ਰਕਮ ਅਤੇ ਬੈਂਕ ਟ੍ਰਾਂਸਫਰ ਰਿਕਾਰਡ</p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setIsPaymentModalOpen(true)}
-                  className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-all print:hidden"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>ਨਵਾਂ ਭੁਗਤਾਨ ਦਰਜ ਕਰੋ (+ Record Payment)</span>
-                </button>
-              </div>
-
-              {/* Payment Summary Header */}
-              <div className="p-4 grid grid-cols-3 gap-3 bg-slate-50/70 border-b border-slate-100 text-center text-xs">
-                <div className="p-3 bg-white rounded-xl border border-slate-200">
-                  <div className="text-slate-500">ਸ਼ੁੱਧ ਦੇਣਯੋਗ (Net Payable)</div>
-                  <div className="text-lg font-black text-slate-900 mt-1">
-                    {formatCurrencyINR(accountSummary.netPayableAmount)}
-                  </div>
-                </div>
-
-                <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200">
-                  <div className="text-emerald-800 font-semibold">ਅਦਾ ਕੀਤੀ ਰਕਮ (Paid Amount)</div>
-                  <div className="text-lg font-black text-emerald-950 mt-1">
-                    {formatCurrencyINR(accountSummary.paidAmount)}
-                  </div>
-                </div>
-
-                <div className="p-3 bg-rose-50 rounded-xl border border-rose-200">
-                  <div className="text-rose-800 font-semibold">ਅੰਤਿਮ ਬਕਾਇਆ (Final Settlement)</div>
-                  <div className="text-lg font-black text-rose-950 mt-1">
-                    {formatCurrencyINR(accountSummary.finalNetSettlementBalance)}
-                  </div>
-                </div>
-              </div>
-
-              {accountSummary.paymentRecords.length === 0 ? (
-                <div className="p-8 text-center text-slate-400 text-xs">
-                  ਕੋਈ ਵੱਖਰੀ ਅਦਾਇਗੀ ਰਿਕਾਰਡ ਦਰਜ ਨਹੀਂ ਹੈ। (No manual payment transactions logged)
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs border-collapse">
-                    <thead>
-                      <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
-                        <th className="p-3">ਮਿਤੀ (Date)</th>
-                        <th className="p-3">ਅਦਾਇਗੀ ਦਾ ਢੰਗ (Payment Mode)</th>
-                        <th className="p-3">ਟ੍ਰਾਂਜੈਕਸ਼ਨ ਨੰਬਰ (Ref #)</th>
-                        <th className="p-3">ਏਜੰਸੀ (Agency)</th>
-                        <th className="p-3">ਟਿੱਪਣੀ (Remarks)</th>
-                        <th className="p-3 text-right">ਰਕਮ (Amount)</th>
-                        <th className="p-3 text-center print:hidden">ਕਾਰਵਾਈ (Action)</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {accountSummary.paymentRecords.map((pay) => (
-                        <tr key={pay.id} className="hover:bg-slate-50 transition-colors">
-                          <td className="p-3 font-medium text-slate-900">{pay.date}</td>
-                          <td className="p-3 font-bold text-slate-800">{pay.paymentMode}</td>
-                          <td className="p-3 font-mono text-slate-600">{pay.referenceNumber || '—'}</td>
-                          <td className="p-3 text-slate-700">{pay.agency || '—'}</td>
-                          <td className="p-3 text-slate-500">{pay.remarks || '—'}</td>
-                          <td className="p-3 text-right font-black text-emerald-800">
-                            {formatCurrencyINR(pay.amount)}
-                          </td>
-                          <td className="p-3 text-center print:hidden">
-                            <button
-                              onClick={() => {
-                                deleteFarmerPayment(pay.id);
-                                notifyDeleteSuccess({
-                                  titlePa: 'ਭੁਗਤਾਨ ਰਿਕਾਰਡ ਹਟਾ ਦਿੱਤਾ ਗਿਆ ਹੈ।',
-                                  titleEn: 'Payment Deleted',
-                                  messagePa: 'ਭੁਗਤਾਨ ਐਂਟਰੀ ਹਟਾ ਦਿੱਤੀ ਗਈ ਹੈ।'
-                                });
-                              }}
-                              className="p-1 text-slate-400 hover:text-rose-600 rounded transition-colors"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* ============================================================== */}
-          {/* 6G. COMPLETE UNIFIED CHRONOLOGICAL TRANSACTION LEDGER */}
-          {/* ============================================================== */}
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="p-4 bg-slate-900 text-white flex items-center justify-between">
+      {/* ==================================================================== */}
+      {/* PDF EXPORT SELECTION MODAL */}
+      {/* ==================================================================== */}
+      {showPdfOptionsModal && currentFarmer && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 print:hidden">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div className="flex items-center gap-2">
-                <Clock className="w-5 h-5 text-amber-400" />
-                <div>
-                  <h3 className="font-bold text-sm">
-                    ਸਮੁੱਚਾ ਲੈਣ-ਦੇਣ ਦਾ ਇਤਿਹਾਸ / COMPLETE CHRONOLOGICAL TRANSACTION LEDGER
-                  </h3>
-                  <p className="text-xs text-slate-400">
-                    ਮੰਡੀ ਆਮਦ, ਖਰੀਦ, ਪੇਸ਼ਗੀ (ਐਡਵਾਂਸ), ਬੋਲੀ ਅਤੇ ਭੁਗਤਾਨ ਐਂਟਰੀਆਂ ਦਾ ਇਕੱਠਾ ਵੇਰਵਾ
-                  </p>
-                </div>
+                <FileDown className="w-5 h-5 text-emerald-700" />
+                <h3 className="text-base font-black text-slate-900">
+                  Export PDF / ਕਿਸਾਨ ਖਾਤਾ PDF
+                </h3>
               </div>
-              <div className="text-xs text-slate-300 font-mono">
-                Total Transactions: {accountSummary.transactions.length}
-              </div>
+              <button
+                onClick={() => setShowPdfOptionsModal(false)}
+                className="text-slate-400 hover:text-slate-700"
+              >
+                ✕
+              </button>
             </div>
 
-            {accountSummary.transactions.length === 0 ? (
-              <div className="p-8 text-center text-slate-400 text-xs">
-                ਇਸ ਕਿਸਾਨ ਲਈ ਅਜੇ ਕੋਈ ਲੈਣ-ਦੇਣ ਦਰਜ ਨਹੀਂ ਹੋਇਆ।
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead>
-                    <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
-                      <th className="p-3">ਮਿਤੀ (Date)</th>
-                      <th className="p-3">ਲੈਣ-ਦੇਣ ਦੀ ਕਿਸਮ (Type)</th>
-                      <th className="p-3">ਏਜੰਸੀ / ਰੈਫਰੈਂਸ (Agency / Ref)</th>
-                      <th className="p-3">ਬੋਰੇ (Bags)</th>
-                      <th className="p-3">ਵਜ਼ਨ (Weight)</th>
-                      <th className="p-3">ਰੇਟ (Rate)</th>
-                      <th className="p-3 text-right">ਕੁੱਲ ਰਕਮ (Amount)</th>
-                      <th className="p-3 text-center">ਸਥਿਤੀ (Status)</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {accountSummary.transactions.map((tx, idx) => (
-                      <tr key={tx.id || idx} className="hover:bg-slate-50 transition-colors">
-                        <td className="p-3 font-medium text-slate-900">{tx.date}</td>
-                        <td className="p-3">
-                          <span
-                            className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                              tx.type === 'MANDI_ARRIVAL'
-                                ? 'bg-indigo-100 text-indigo-800'
-                                : tx.type === 'DAILY_PURCHASE'
-                                ? 'bg-emerald-100 text-emerald-800'
-                                : tx.type === 'BOLI'
-                                ? 'bg-amber-100 text-amber-800'
-                                : tx.type === 'ADVANCE'
-                                ? 'bg-rose-100 text-rose-800'
-                                : 'bg-purple-100 text-purple-800'
-                            }`}
-                          >
-                            {tx.typeLabelPa} ({tx.typeLabelEn})
-                          </span>
-                        </td>
-                        <td className="p-3 font-medium text-slate-800">
-                          {tx.agency !== '—' && <span>{tx.agency} </span>}
-                          {tx.reference && <span className="font-mono text-slate-500">[{tx.reference}]</span>}
-                        </td>
-                        <td className="p-3 font-bold text-slate-900">{tx.bags ? `${tx.bags} Bags` : '—'}</td>
-                        <td className="p-3 text-slate-700">
-                          {tx.qul !== undefined ? `${tx.qul} Qul ${tx.kg} Kg` : '—'}
-                        </td>
-                        <td className="p-3 text-slate-600">{tx.rate ? `₹${tx.rate}/Q` : '—'}</td>
-                        <td className="p-3 text-right font-black text-slate-900">
-                          {tx.totalAmount ? formatCurrencyINR(tx.totalAmount) : '—'}
-                        </td>
-                        <td className="p-3 text-center">
-                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700">
-                            {tx.status || 'COMPLETED'}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+            <p className="text-xs text-slate-600">
+              ਕਿਰਪਾ ਕਰਕੇ PDF ਦੀ ਕਿਸਮ ਚੁਣੋ ਜੋ ਤੁਸੀਂ ਡਾਊਨਲੋਡ ਕਰਨਾ ਚਾਹੁੰਦੇ ਹੋ:
+            </p>
+
+            <div className="space-y-3">
+              {/* Option 1: Exact Reference A4 Statement PDF */}
+              <button
+                onClick={() => handleExportPDF('full')}
+                className="w-full p-3.5 bg-emerald-50 hover:bg-emerald-100 text-left rounded-xl border-2 border-emerald-500 shadow-xs transition-all flex items-center justify-between cursor-pointer"
+              >
+                <div>
+                  <div className="font-bold text-sm text-emerald-950 flex items-center gap-1.5">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    <span>Exact Reference A4 PDF / ਹੂ-ਬ-ਹੂ A4 ਸਟੇਟਮੈਂਟ</span>
+                  </div>
+                  <div className="text-[11px] text-emerald-800 mt-0.5">
+                    100% ਰੈਫਰੈਂਸ ਫਾਰਮੈਟ ਅਨੁਸਾਰ: ਸਾਰੀਆਂ ਖਰੀਦਾਂ, ਲੇਬਰ, ਪੇਸ਼ਗੀ, ਸਮਾਯੋਜਨ ਤੇ ਖਾਤਾ ਸਾਰ (Single Page A4)
+                  </div>
+                </div>
+                <FileDown className="w-5 h-5 text-emerald-700 shrink-0" />
+              </button>
+
+              {/* Option 2: Simple Print PDF */}
+              <button
+                onClick={() => handleExportPDF('simple')}
+                className="w-full p-3.5 bg-slate-50 hover:bg-slate-100 text-left rounded-xl border border-slate-200 hover:border-slate-300 transition-all flex items-center justify-between cursor-pointer"
+              >
+                <div>
+                  <div className="font-bold text-sm text-slate-900">
+                    Simple Summary PDF / ਸਧਾਰਨ PDF
+                  </div>
+                  <div className="text-[11px] text-slate-500">
+                    ਸਿਰਫ਼ ਮੁੱਖ 7 ਸੰਖੇਪ ਰਿਕਾਰਡ, ਲੇਬਰ ਕਟੌਤੀ ਅਤੇ ਬਕਾਇਆ
+                  </div>
+                </div>
+                <FileDown className="w-5 h-5 text-slate-600 shrink-0" />
+              </button>
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <button
+                onClick={() => setShowPdfOptionsModal(false)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold"
+              >
+                ਰੱਦ ਕਰੋ (Cancel)
+              </button>
+            </div>
           </div>
         </div>
       )}
 
-      {/* ============================================================== */}
-      {/* 7. MODALS: PROFILE VIEW, EDIT, ADVANCE RECORDING, & PAYMENT */}
-      {/* ============================================================== */}
+      {/* ==================================================================== */}
+      {/* EXACT REFERENCE A4 PRINT & OFFSCREEN EXPORT VIEW                    */}
+      {/* ==================================================================== */}
+      {currentFarmer && accountSummary && (
+        <>
+          {/* Print container for window.print() */}
+          <div id="farmer-account-print-container" className="hidden print:block font-sans bg-white p-0 m-0">
+            <FarmerAccountStatementA4
+              key={`print-${adjustmentRefreshKey}-${printMode}`}
+              id="farmer-account-reference-a4-print"
+              account={accountSummary}
+              settings={settings}
+              printDate={new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+              isPrintOnly={true}
+              mode={printMode}
+            />
+          </div>
+
+          {/* Off-screen fixed element ensures canvas / html-to-image can always capture the exact reference layout */}
+          <div
+            id="farmer-account-offscreen-wrapper"
+            style={{
+              position: 'fixed',
+              left: '-9999px',
+              top: '0',
+              width: '210mm',
+              zIndex: -100,
+              pointerEvents: 'none',
+              opacity: 1
+            }}
+            aria-hidden="true"
+          >
+            <FarmerAccountStatementA4
+              key={`offscreen-${adjustmentRefreshKey}-${printMode}`}
+              id="farmer-account-reference-a4-offscreen"
+              account={accountSummary}
+              settings={settings}
+              printDate={new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+              isPrintOnly={false}
+              mode={printMode}
+            />
+          </div>
+        </>
+      )}
+
+      {/* ==================================================================== */}
+      {/* MODALS: PROFILE, EDIT, ADVANCE, PAYMENT, & DETAILS */}
+      {/* ==================================================================== */}
       {currentFarmer && (
         <>
           <FarmerProfileViewModal
@@ -1949,7 +1539,7 @@ export const FarmerAccount: React.FC = () => {
         </>
       )}
 
-      {/* ADVANCE MODAL WITH REAL-TIME 30-DAY CONVENTION INTEREST CALCULATOR */}
+      {/* ADVANCE MODAL */}
       {isAdvanceModalOpen && currentFarmer && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200">
@@ -1991,7 +1581,7 @@ export const FarmerAccount: React.FC = () => {
 
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">
-                    ਅੰਤਿਮ / ਵਿਆਜ ਤੱਕ ਮਿਤੀ (End Date / Till Date) <span className="text-rose-500">*</span>
+                    ਅੰਤਿਮ ਮਿਤੀ (Till Date) <span className="text-rose-500">*</span>
                   </label>
                   <div className="flex gap-1.5">
                     <input
@@ -2015,9 +1605,8 @@ export const FarmerAccount: React.FC = () => {
                         })
                       }
                       className="px-2.5 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-900 rounded-xl text-[11px] font-bold whitespace-nowrap transition-colors"
-                      title="Set to today's date"
                     >
-                      ਅੱਜ (Today)
+                      ਅੱਜ
                     </button>
                   </div>
                 </div>
@@ -2049,81 +1638,29 @@ export const FarmerAccount: React.FC = () => {
                     required
                     value={advanceForm.monthlyInterestRate || ''}
                     onChange={(e) => setAdvanceForm({ ...advanceForm, monthlyInterestRate: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-xl font-bold text-slate-900 focus:ring-2 focus:ring-amber-500 focus:outline-none"
-                    placeholder="e.g. 2.0"
-                  />
-                  <span className="text-[10px] text-slate-500">ਮੰਡੀ ਦਰ: 2% ਪ੍ਰਤੀ ਮਹੀਨਾ (ਸਟੈਂਡਰਡ)</span>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">
-                    {isEn ? 'Payment Mode' : 'ਅਦਾਇਗੀ ਦਾ ਢੰਗ (Mode)'}
-                  </label>
-                  <SearchableSelect
-                    id="advance-payment-mode"
-                    value={advanceForm.paymentMode || 'CASH'}
-                    onChange={(val) => setAdvanceForm({ ...advanceForm, paymentMode: val as any })}
-                    options={advancePaymentModeOptions}
-                    placeholder={isEn ? "Select mode..." : "ਢੰਗ ਚੁਣੋ..."}
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">
-                    {isEn ? 'Ref / Cheque #' : 'ਟ੍ਰਾਂਜੈਕਸ਼ਨ / ਚੈੱਕ ਨੰਬਰ (Ref / Cheque #)'}
-                  </label>
-                  <input
-                    type="text"
-                    value={advanceForm.referenceNumber || ''}
-                    onChange={(e) => setAdvanceForm({ ...advanceForm, referenceNumber: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-xl font-medium focus:ring-2 focus:ring-amber-500 focus:outline-none"
-                    placeholder="Optional reference"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl font-bold text-sm text-slate-900 focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                    placeholder="2.0"
                   />
                 </div>
               </div>
 
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">ਟਿੱਪਣੀ (Remarks / Notes)</label>
-                <input
-                  type="text"
-                  value={advanceForm.remarks || ''}
-                  onChange={(e) => setAdvanceForm({ ...advanceForm, remarks: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-xl font-medium focus:ring-2 focus:ring-amber-500 focus:outline-none"
-                  placeholder="e.g. ਫਸਲ ਦੀ ਬਿਜਾਈ ਲਈ ਪੇਸ਼ਗੀ"
-                />
-              </div>
-
-              {/* Real-time Calculation Preview Box */}
-              <div className="p-3.5 bg-amber-50 rounded-xl border border-amber-300 space-y-1.5">
-                <div className="font-bold text-amber-950 text-xs flex items-center justify-between">
-                  <span>30 ਦਿਨ ਮਹੀਨਾ ਕਨਵੈਨਸ਼ਨ ਅਨੁਸਾਰ ਲਾਈਵ ਵਿਆਜ ਗਣਨਾ:</span>
-                  <span className="text-[11px] text-amber-800 font-mono">
-                    {previewCalculation.months} ਮਹੀਨੇ + {previewCalculation.days} ਦਿਨ ({previewCalculation.totalDays} ਦਿਨ)
-                  </span>
-                </div>
-                <div className="grid grid-cols-3 gap-2 pt-1 text-center">
-                  <div className="p-2 bg-white rounded-lg border border-amber-200">
-                    <div className="text-[10px] text-slate-500">ਮੂਲ ਰਕਮ</div>
-                    <div className="font-bold text-slate-900 text-xs">
-                      {formatCurrencyINR(parseFloat(advanceForm.amount) || 0)}
-                    </div>
+              {/* Live Interest Preview */}
+              {parseFloat(advanceForm.amount) > 0 && (
+                <div className="p-3 bg-amber-50/80 rounded-xl border border-amber-200 space-y-1">
+                  <div className="font-bold text-amber-950 flex items-center justify-between">
+                    <span>ਵਿਆਜ ਗਣਨਾ (Preview):</span>
+                    <span className="font-mono text-amber-900">
+                      {previewCalculation.months} ਮਹੀਨੇ + {previewCalculation.days} ਦਿਨ ({previewCalculation.totalDays} ਦਿਨ)
+                    </span>
                   </div>
-                  <div className="p-2 bg-white rounded-lg border border-amber-200">
-                    <div className="text-[10px] text-amber-800 font-semibold">ਜੁੜਿਆ ਵਿਆਜ</div>
-                    <div className="font-bold text-amber-700 text-xs">
-                      {formatCurrencyINR(previewCalculation.interest)}
-                    </div>
-                  </div>
-                  <div className="p-2 bg-white rounded-lg border border-amber-200">
-                    <div className="text-[10px] text-rose-800 font-semibold">ਕੁੱਲ ਦੇਣਯੋਗ</div>
-                    <div className="font-black text-rose-950 text-xs">
-                      {formatCurrencyINR(previewCalculation.totalPayable)}
-                    </div>
+                  <div className="flex items-center justify-between text-[11px] text-slate-700 pt-1 border-t border-amber-200">
+                    <span>ਜੁੜਿਆ ਵਿਆਜ: <strong>{formatCurrencyINR(previewCalculation.interest)}</strong></span>
+                    <span className="font-bold text-rose-900">
+                      ਕੁੱਲ ਦੇਣਯੋਗ: {formatCurrencyINR(previewCalculation.totalPayable)}
+                    </span>
                   </div>
                 </div>
-              </div>
+              )}
 
               <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
                 <button
@@ -2137,7 +1674,7 @@ export const FarmerAccount: React.FC = () => {
                   type="submit"
                   className="px-4 py-2 bg-amber-700 hover:bg-amber-800 text-white rounded-xl font-bold shadow-sm"
                 >
-                  {editingAdvance ? 'ਅਪਡੇਟ ਕਰੋ (Update Advance)' : 'ਪੇਸ਼ਗੀ ਸੇਵ ਕਰੋ (Save Advance)'}
+                  {editingAdvance ? 'ਅਪਡੇਟ ਕਰੋ (Update)' : 'ਦਰਜ ਕਰੋ (Save)'}
                 </button>
               </div>
             </form>
@@ -2145,18 +1682,21 @@ export const FarmerAccount: React.FC = () => {
         </div>
       )}
 
-      {/* Payment Recording Modal */}
-      {isPaymentModalOpen && currentFarmer && accountSummary && (
+      {/* PAYMENT MODAL */}
+      {isPaymentModalOpen && currentFarmer && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200">
             <div className="flex items-center justify-between pb-4 border-b border-slate-100">
-              <div>
-                <h3 className="text-base font-bold text-slate-900">
-                  ਨਵਾਂ ਭੁਗਤਾਨ ਦਰਜ ਕਰੋ / Record Payment
-                </h3>
-                <p className="text-xs text-slate-500">
-                  ਕਿਸਾਨ: {currentFarmer.farmerNamePa} ({currentFarmer.id})
-                </p>
+              <div className="flex items-center gap-2">
+                <IndianRupee className="w-5 h-5 text-emerald-600" />
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">
+                    ਨਵਾਂ ਭੁਗਤਾਨ ਦਰਜ ਕਰੋ (Record Payment)
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    ਕਿਸਾਨ: {currentFarmer.farmerNamePa} ({currentFarmer.id})
+                  </p>
+                </div>
               </div>
               <button
                 onClick={() => setIsPaymentModalOpen(false)}
@@ -2167,53 +1707,48 @@ export const FarmerAccount: React.FC = () => {
             </div>
 
             <form onSubmit={handleSavePayment} className="mt-4 space-y-4 text-xs">
-              <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 flex items-center justify-between">
-                <span className="text-amber-800 font-semibold">ਅੰਤਿਮ ਬਕਾਇਆ (Final Settlement):</span>
-                <span className="font-black text-amber-950 text-sm">
-                  {formatCurrencyINR(accountSummary.finalNetSettlementBalance)}
-                </span>
-              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    ਮਿਤੀ (Date) <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={paymentForm.date || ''}
+                    onChange={(e) => setPaymentForm({ ...paymentForm, date: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl font-medium focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                    placeholder="DD/MM/YYYY"
+                  />
+                </div>
 
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">
-                  ਭੁਗਤਾਨ ਮਿਤੀ (Date) <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={paymentForm.date || ''}
-                  onChange={(e) => setPaymentForm({ ...paymentForm, date: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-xl font-medium focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                  placeholder="DD/MM/YYYY"
-                />
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">
-                  ਅਦਾਇਗੀ ਰਕਮ (Amount in ₹) <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="number"
-                  step="any"
-                  required
-                  value={paymentForm.amount || ''}
-                  onChange={(e) => setPaymentForm({ ...paymentForm, amount: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-xl font-bold text-sm text-slate-900 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                  placeholder="e.g. 50000"
-                />
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    ਭੁਗਤਾਨ ਰਕਮ (Amount ₹) <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    required
+                    value={paymentForm.amount || ''}
+                    onChange={(e) => setPaymentForm({ ...paymentForm, amount: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl font-bold text-sm text-slate-900 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                    placeholder="e.g. 50000"
+                  />
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">
-                    {isEn ? 'Payment Mode' : 'ਅਦਾਇਗੀ ਦਾ ਢੰਗ (Mode)'}
+                    ਢੰਗ (Payment Mode)
                   </label>
                   <SearchableSelect
-                    id="settlement-payment-mode"
+                    id="farmer-payment-mode-select"
                     value={paymentForm.paymentMode || 'BANK_TRANSFER'}
                     onChange={(val) => setPaymentForm({ ...paymentForm, paymentMode: val as any })}
                     options={paymentModeOptions}
-                    placeholder={isEn ? "Select mode..." : "ਢੰਗ ਚੁਣੋ..."}
+                    placeholder="ਢੰਗ ਚੁਣੋ..."
                   />
                 </div>
 
@@ -2230,24 +1765,13 @@ export const FarmerAccount: React.FC = () => {
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">ਟ੍ਰਾਂਜੈਕਸ਼ਨ / ਰੈਫਰੈਂਸ ਨੰਬਰ (Ref / UTR No.)</label>
+                <label className="block font-semibold text-slate-700 mb-1">ਰੈਫਰੈਂਸ / UTR ਨੰਬਰ</label>
                 <input
                   type="text"
                   value={paymentForm.referenceNumber || ''}
                   onChange={(e) => setPaymentForm({ ...paymentForm, referenceNumber: e.target.value })}
                   className="w-full px-3 py-2 border border-slate-300 rounded-xl font-medium focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                   placeholder="e.g. UTR123456789"
-                />
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">ਟਿੱਪਣੀ (Remarks / Notes)</label>
-                <input
-                  type="text"
-                  value={paymentForm.remarks || ''}
-                  onChange={(e) => setPaymentForm({ ...paymentForm, remarks: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-xl font-medium focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                  placeholder="Optional remarks"
                 />
               </div>
 
@@ -2263,7 +1787,7 @@ export const FarmerAccount: React.FC = () => {
                   type="submit"
                   className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl font-bold shadow-sm"
                 >
-                  ਭੁਗਤਾਨ ਸੇਵ ਕਰੋ (Save Payment)
+                  ਭੁਗਤਾਨ ਸੇਵ ਕਰੋ (Save)
                 </button>
               </div>
             </form>
@@ -2271,124 +1795,50 @@ export const FarmerAccount: React.FC = () => {
         </div>
       )}
 
-      {/* View Individual Advance Calculation Modal */}
+      {/* VIEW ADVANCE DETAILS MODAL */}
       {viewingAdvance && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-amber-300">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-amber-300 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center text-amber-800">
-                  <Calculator className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="text-base font-black text-slate-900">
-                    ਪੇਸ਼ਗੀ ਅਤੇ ਸੁਤੰਤਰ ਵਿਆਜ ਵੇਰਵਾ / Advance Details
-                  </h3>
-                  <p className="text-xs text-slate-500 font-mono">
-                    ਆਈ.ਡੀ: {viewingAdvance.id} • {viewingAdvance.paymentMode}
-                  </p>
-                </div>
+                <Calculator className="w-5 h-5 text-amber-700" />
+                <h3 className="text-base font-black text-slate-900">
+                  ਪੇਸ਼ਗੀ ਵਿਆਜ ਵੇਰਵਾ / Advance Details
+                </h3>
               </div>
               <button
                 onClick={() => setViewingAdvance(null)}
-                className="p-1 text-slate-400 hover:text-slate-700 rounded-lg transition-colors"
+                className="text-slate-400 hover:text-slate-700"
               >
-                <X className="w-5 h-5" />
+                ✕
               </button>
             </div>
 
-            <div className="py-4 space-y-3 text-xs">
-              {/* Key Values Grid */}
-              <div className="grid grid-cols-2 gap-2.5">
-                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
-                  <div className="text-slate-500 font-semibold">ਮੂਲ ਰਕਮ (Principal Amount)</div>
-                  <div className="text-lg font-black text-slate-900 mt-0.5">
-                    {formatCurrencyINR(viewingAdvance.principal ?? viewingAdvance.amount)}
-                  </div>
-                </div>
-
-                <div className="p-3 bg-amber-50 rounded-xl border border-amber-200">
-                  <div className="text-amber-800 font-semibold">ਮਾਸਿਕ ਵਿਆਜ ਦਰ (Interest Rate)</div>
-                  <div className="text-lg font-black text-amber-900 mt-0.5">
-                    {viewingAdvance.monthlyInterestRate ?? 2.0}% / Month
-                  </div>
-                </div>
-
-                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
-                  <div className="text-slate-500 font-semibold">ਸ਼ੁਰੂਆਤੀ ਮਿਤੀ (Start Date)</div>
-                  <div className="text-sm font-bold text-slate-900 mt-0.5">
-                    {viewingAdvance.startDate || viewingAdvance.date}
-                  </div>
-                </div>
-
-                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
-                  <div className="text-slate-500 font-semibold">ਅੰਤਿਮ ਮਿਤੀ (End Date / Till)</div>
-                  <div className="text-sm font-bold text-slate-900 mt-0.5">
-                    {viewingAdvance.endDate || viewingAdvance.interestTillDate || '—'}
-                  </div>
-                </div>
+            <div className="space-y-2 text-xs">
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex justify-between">
+                <span className="text-slate-600">ਮੂਲ ਰਕਮ (Principal):</span>
+                <strong className="font-mono text-slate-900">{formatCurrencyINR(viewingAdvance.principal ?? viewingAdvance.amount)}</strong>
               </div>
-
-              {/* Exact Duration Breakdown */}
-              <div className="p-3.5 bg-slate-100 rounded-xl border border-slate-200">
-                <div className="font-bold text-slate-800 mb-1">
-                  ਸਮਾਂ ਮਿਆਦ (Duration Breakdown - 30-Day Month Convention):
-                </div>
-                <div className="flex items-center justify-between text-slate-700 font-mono">
-                  <span>ਕੁੱਲ ਦਿਨ (Exact Days): <strong>{viewingAdvance.totalDays || 0} ਦਿਨ</strong></span>
-                  <span>ਮਹੀਨੇ + ਦਿਨ: <strong>{viewingAdvance.monthsElapsed || 0} ਮਹੀਨੇ + {viewingAdvance.daysElapsed || 0} ਦਿਨ</strong></span>
-                </div>
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex justify-between">
+                <span className="text-slate-600">ਮਿਆਦ (Days):</span>
+                <strong className="text-slate-900">{viewingAdvance.totalDays || 0} ਦਿਨ ({viewingAdvance.monthsElapsed || 0} ਮਹੀਨੇ + {viewingAdvance.daysElapsed || 0} ਦਿਨ)</strong>
               </div>
-
-              {/* Calculation Formula */}
-              <div className="p-3.5 bg-amber-50 rounded-xl border border-amber-300 space-y-1 text-slate-700">
-                <div className="font-bold text-amber-950">ਗਣਨਾ ਫਾਰਮੂਲਾ (How Interest Was Calculated):</div>
-                <div className="text-[11px] font-mono bg-white p-2 rounded-lg border border-amber-200">
-                  ਮਾਸਿਕ ਵਿਆਜ = {formatCurrencyINR(viewingAdvance.principal ?? viewingAdvance.amount)} × {(viewingAdvance.monthlyInterestRate ?? 2.0)}% = {formatCurrencyINR(((viewingAdvance.principal ?? viewingAdvance.amount) * (viewingAdvance.monthlyInterestRate ?? 2.0)) / 100)} / ਮਹੀਨਾ<br />
-                  ਰੋਜ਼ਾਨਾ ਵਿਆਜ = ਮਾਸਿਕ ਵਿਆਜ ÷ 30 ਦਿਨ = {formatCurrencyINR((((viewingAdvance.principal ?? viewingAdvance.amount) * (viewingAdvance.monthlyInterestRate ?? 2.0)) / 100) / 30)} / ਦਿਨ<br />
-                  ਜੁੜਿਆ ਵਿਆਜ = ({viewingAdvance.monthsElapsed || 0} ਮਹੀਨੇ × ਮਾਸਿਕ) + ({viewingAdvance.daysElapsed || 0} ਦਿਨ × ਰੋਜ਼ਾਨਾ) = <strong className="text-amber-800">{formatCurrencyINR(viewingAdvance.interestAmount || 0)}</strong>
-                </div>
+              <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 flex justify-between">
+                <span className="text-amber-900 font-bold">ਜੁੜਿਆ ਵਿਆਜ (Interest):</span>
+                <strong className="font-mono text-amber-900">{formatCurrencyINR(viewingAdvance.interestAmount || 0)}</strong>
               </div>
-
-              {/* Totals Summary */}
-              <div className="grid grid-cols-2 gap-2.5 pt-1">
-                <div className="p-3 bg-amber-100/60 rounded-xl border border-amber-300">
-                  <div className="text-amber-900 font-bold">ਜੁੜਿਆ ਵਿਆਜ (Interest Amount)</div>
-                  <div className="text-lg font-black text-amber-900 mt-0.5">
-                    {formatCurrencyINR(viewingAdvance.interestAmount || 0)}
-                  </div>
-                </div>
-                <div className="p-3 bg-rose-100/60 rounded-xl border border-rose-300">
-                  <div className="text-rose-900 font-bold">ਕੁੱਲ ਦੇਣਯੋਗ (Principal + Interest)</div>
-                  <div className="text-lg font-black text-rose-950 mt-0.5">
-                    {formatCurrencyINR(viewingAdvance.totalPayableWithInterest || ((viewingAdvance.principal ?? viewingAdvance.amount) + (viewingAdvance.interestAmount || 0)))}
-                  </div>
-                </div>
+              <div className="p-3 bg-rose-50 rounded-xl border border-rose-200 flex justify-between text-sm">
+                <span className="text-rose-900 font-black">ਕੁੱਲ ਦੇਣਯੋਗ (Total Payable):</span>
+                <strong className="font-mono text-rose-950 font-black">
+                  {formatCurrencyINR(viewingAdvance.totalPayableWithInterest || ((viewingAdvance.principal ?? viewingAdvance.amount) + (viewingAdvance.interestAmount || 0)))}
+                </strong>
               </div>
-
-              {viewingAdvance.remarks && (
-                <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200 text-slate-600">
-                  <strong>ਟਿੱਪਣੀ (Remarks):</strong> {viewingAdvance.remarks}
-                </div>
-              )}
             </div>
 
-            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+            <div className="flex justify-end pt-2">
               <button
-                type="button"
-                onClick={() => {
-                  const adv = viewingAdvance;
-                  setViewingAdvance(null);
-                  handleOpenEditAdvance(adv);
-                }}
-                className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl font-bold shadow-sm transition-all"
-              >
-                ਸੋਧੋ (Edit Advance)
-              </button>
-              <button
-                type="button"
                 onClick={() => setViewingAdvance(null)}
-                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-medium transition-all"
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold"
               >
                 ਬੰਦ ਕਰੋ (Close)
               </button>
@@ -2396,6 +1846,427 @@ export const FarmerAccount: React.FC = () => {
           </div>
         </div>
       )}
-    </div>
+
+      {/* ==================================================================== */}
+      {/* MODAL: PAYMENT ADJUSTMENT & BAG TRANSFER (Sections 8 & 9)           */}
+      {/* ==================================================================== */}
+      {currentFarmer && isAdjustmentModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl border border-slate-200">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-indigo-50 text-indigo-700 rounded-xl">
+                  <ArrowRightLeft className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900">
+                    Payment Adjustment & Bag Transfer / ਐਡਜਸਟਮੈਂਟ ਤੇ ਟ੍ਰਾਂਸਫਰ
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    ਕਿਸਾਨ: {currentFarmer.farmerNamePa} ({currentFarmer.farmerName}) [A/C: {currentFarmer.id}]
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsAdjustmentModalOpen(false)}
+                className="p-2 hover:bg-slate-100 rounded-xl text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Sub-Tabs */}
+            <div className="flex border-b border-slate-200 my-4">
+              <button
+                type="button"
+                onClick={() => setAdjustmentTab('payment_transfer')}
+                className={`flex-1 py-2 text-xs font-bold border-b-2 text-center transition-colors ${
+                  adjustmentTab === 'payment_transfer'
+                    ? 'border-indigo-600 text-indigo-700'
+                    : 'border-transparent text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                A. ਕਿਸਾਨ ਤੋਂ ਕਿਸਾਨ ਪੇਮੈਂਟ (Payment Transfer)
+              </button>
+              <button
+                type="button"
+                onClick={() => setAdjustmentTab('same_adjustment')}
+                className={`flex-1 py-2 text-xs font-bold border-b-2 text-center transition-colors ${
+                  adjustmentTab === 'same_adjustment'
+                    ? 'border-indigo-600 text-indigo-700'
+                    : 'border-transparent text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                B. ਖਾਤੇ ਵਿੱਚ ਅੰਦਰੂਨੀ (Same A/C)
+              </button>
+              <button
+                type="button"
+                onClick={() => setAdjustmentTab('bag_transfer')}
+                className={`flex-1 py-2 text-xs font-bold border-b-2 text-center transition-colors ${
+                  adjustmentTab === 'bag_transfer'
+                    ? 'border-indigo-600 text-indigo-700'
+                    : 'border-transparent text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                ਬੋਰੀ ਟ੍ਰਾਂਸਫਰ (Bag Transfer)
+              </button>
+            </div>
+
+            {/* TAB 1: PAYMENT TRANSFER (A) */}
+            {adjustmentTab === 'payment_transfer' && (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!paymentTransferForm.toFarmerId || !paymentTransferForm.amount) return;
+                  const target = farmers.find(f => f.id === paymentTransferForm.toFarmerId);
+                  savePaymentTransfer({
+                    fromFarmerId: currentFarmer.id,
+                    fromFarmerName: currentFarmer.farmerName,
+                    toFarmerId: paymentTransferForm.toFarmerId,
+                    toFarmerName: target ? target.farmerName : paymentTransferForm.toFarmerId,
+                    amount: parseFloat(paymentTransferForm.amount) || 0,
+                    date: paymentTransferForm.date,
+                    reason: paymentTransferForm.reason || 'Payment Transfer'
+                  });
+                  notifySaveSuccess({
+                    titleEn: 'Payment Transfer Saved',
+                    titlePa: 'ਪੇਮੈਂਟ ਟ੍ਰਾਂਸਫਰ ਦਰਜ ਹੋ ਗਈ',
+                    messageEn: `Transferred ₹${paymentTransferForm.amount} to ${target?.farmerName || paymentTransferForm.toFarmerId}`,
+                    messagePa: `₹${paymentTransferForm.amount} ਸਫਲਤਾਪੂਰਵਕ ਟ੍ਰਾਂਸਫਰ ਹੋ ਗਿਆ।`
+                  });
+                  setPaymentTransferForm({
+                    toFarmerId: '',
+                    amount: '',
+                    date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+                    reason: ''
+                  });
+                  setAdjustmentRefreshKey(k => k + 1);
+                  setIsAdjustmentModalOpen(false);
+                }}
+                className="space-y-4"
+              >
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    ਟ੍ਰਾਂਸਫਰ ਕਿਸ ਕਿਸਾਨ ਨੂੰ ਕਰਨੀ ਹੈ? (Transfer To Farmer):
+                  </label>
+                  <select
+                    value={paymentTransferForm.toFarmerId}
+                    onChange={(e) => setPaymentTransferForm({ ...paymentTransferForm, toFarmerId: e.target.value })}
+                    required
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                  >
+                    <option value="">-- ਕਿਸਾਨ ਚੁਣੋ (Select Farmer) --</option>
+                    {farmers.filter(f => f.id !== currentFarmer.id).map(f => (
+                      <option key={f.id} value={f.id}>
+                        {f.farmerNamePa} ({f.farmerName}) - A/C: {f.id} ({f.village})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      ਰਕਮ (Amount ₹):
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      min="1"
+                      placeholder="e.g. 50000"
+                      value={paymentTransferForm.amount}
+                      onChange={(e) => setPaymentTransferForm({ ...paymentTransferForm, amount: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs font-mono font-bold focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      ਮਿਤੀ (Date):
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={paymentTransferForm.date}
+                      onChange={(e) => setPaymentTransferForm({ ...paymentTransferForm, date: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs font-mono focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    ਕਾਰਨ / ਵੇਰਵਾ (Reason / Note):
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Sandeep ਨੂੰ ਰਕਮ ਟ੍ਰਾਂਸਫਰ ਕੀਤੀ ਗਈ"
+                    value={paymentTransferForm.reason}
+                    onChange={(e) => setPaymentTransferForm({ ...paymentTransferForm, reason: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                  />
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2 border-t border-slate-200">
+                  <button
+                    type="button"
+                    onClick={() => setIsAdjustmentModalOpen(false)}
+                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold"
+                  >
+                    ਰੱਦ ਕਰੋ (Cancel)
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 bg-indigo-700 hover:bg-indigo-800 text-white rounded-xl text-xs font-bold shadow-sm"
+                  >
+                    ਟ੍ਰਾਂਸਫਰ ਦਰਜ ਕਰੋ (Save Transfer)
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {/* TAB 2: SAME FARMER ADJUSTMENT (B) */}
+            {adjustmentTab === 'same_adjustment' && (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!sameAdjustmentForm.amount) return;
+                  const typeLabelEn =
+                    sameAdjustmentForm.type === 'ADVANCE_TO_PURCHASE'
+                      ? 'Advance → Purchase'
+                      : sameAdjustmentForm.type === 'PURCHASE_TO_ADVANCE'
+                      ? 'Purchase → Advance'
+                      : sameAdjustmentForm.type === 'LABOUR_ADJUSTMENT'
+                      ? 'Labour Adjustment'
+                      : 'Internal Adjustment';
+                  const typeLabelPa =
+                    sameAdjustmentForm.type === 'ADVANCE_TO_PURCHASE'
+                      ? 'ਐਡਵਾਂਸ ਤੋਂ ਖਰੀਦ'
+                      : sameAdjustmentForm.type === 'PURCHASE_TO_ADVANCE'
+                      ? 'ਖਰੀਦ ਤੋਂ ਐਡਵਾਂਸ'
+                      : 'ਮਜ਼ਦੂਰੀ / ਖਾਤਾ ਐਡਜਸਟਮੈਂਟ';
+
+                  saveSameFarmerAdjustment({
+                    farmerId: currentFarmer.id,
+                    farmerName: currentFarmer.farmerName,
+                    type: sameAdjustmentForm.type,
+                    typeLabelEn,
+                    typeLabelPa,
+                    fromAllocation: sameAdjustmentForm.type.split('_TO_')[0] || 'Internal',
+                    toAllocation: sameAdjustmentForm.type.split('_TO_')[1] || 'Internal',
+                    amount: parseFloat(sameAdjustmentForm.amount) || 0,
+                    date: sameAdjustmentForm.date,
+                    reason: sameAdjustmentForm.reason || typeLabelEn
+                  });
+                  notifySaveSuccess({
+                    titleEn: 'Account Adjustment Saved',
+                    titlePa: 'ਅੰਦਰੂਨੀ ਐਡਜਸਟਮੈਂਟ ਦਰਜ ਹੋ ਗਈ',
+                    messageEn: `Adjusted ₹${sameAdjustmentForm.amount} (${typeLabelEn})`,
+                    messagePa: `₹${sameAdjustmentForm.amount} ਦੀ ਐਡਜਸਟਮੈਂਟ ਦਰਜ ਕਰ ਲਈ ਗਈ ਹੈ।`
+                  });
+                  setSameAdjustmentForm({
+                    type: 'ADVANCE_TO_PURCHASE',
+                    amount: '',
+                    date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+                    reason: ''
+                  });
+                  setAdjustmentRefreshKey(k => k + 1);
+                  setIsAdjustmentModalOpen(false);
+                }}
+                className="space-y-4"
+              >
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    ਐਡਜਸਟਮੈਂਟ ਦੀ ਕਿਸਮ (Adjustment Type):
+                  </label>
+                  <select
+                    value={sameAdjustmentForm.type}
+                    onChange={(e) => setSameAdjustmentForm({ ...sameAdjustmentForm, type: e.target.value as any })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                  >
+                    <option value="ADVANCE_TO_PURCHASE">Advance → Purchase (ਐਡਵਾਂਸ ਤੋਂ ਖਰੀਦ ਖਾਤਾ)</option>
+                    <option value="PURCHASE_TO_ADVANCE">Purchase → Advance (ਖਰੀਦ ਤੋਂ ਐਡਵਾਂਸ ਖਾਤਾ)</option>
+                    <option value="LABOUR_ADJUSTMENT">Labour Adjustment (ਮਜ਼ਦੂਰੀ ਖਾਤਾ ਐਡਜਸਟਮੈਂਟ)</option>
+                    <option value="OTHER">Other Adjustment (ਹੋਰ ਖਾਤਾ ਬਦਲਾਅ)</option>
+                  </select>
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    * ਅਸਲ ਖਰੀਦ ਜਾਂ ਐਡਵਾਂਸ ਰਿਕਾਰਡ ਡਿਲੀਟ ਨਹੀਂ ਹੋਵੇਗਾ, ਸਿਰਫ਼ ਅਕਾਊਂਟਿੰਗ ਅਲਾਟਮੈਂਟ ਬਦਲੇਗੀ।
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      ਰਕਮ (Amount ₹):
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      min="1"
+                      placeholder="e.g. 70000"
+                      value={sameAdjustmentForm.amount}
+                      onChange={(e) => setSameAdjustmentForm({ ...sameAdjustmentForm, amount: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs font-mono font-bold focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      ਮਿਤੀ (Date):
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={sameAdjustmentForm.date}
+                      onChange={(e) => setSameAdjustmentForm({ ...sameAdjustmentForm, date: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs font-mono focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    ਕਾਰਨ / ਵੇਰਵਾ (Reason / Note):
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. ਫਸਲ ਖਰੀਦ ਬਦਲੇ ਐਡਵਾਂਸ ਵਿੱਚੋਂ ਕੱਟੀ ਗਈ ਰਕਮ"
+                    value={sameAdjustmentForm.reason}
+                    onChange={(e) => setSameAdjustmentForm({ ...sameAdjustmentForm, reason: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                  />
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2 border-t border-slate-200">
+                  <button
+                    type="button"
+                    onClick={() => setIsAdjustmentModalOpen(false)}
+                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold"
+                  >
+                    ਰੱਦ ਕਰੋ (Cancel)
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 bg-indigo-700 hover:bg-indigo-800 text-white rounded-xl text-xs font-bold shadow-sm"
+                  >
+                    ਐਡਜਸਟਮੈਂਟ ਦਰਜ ਕਰੋ (Save Adjustment)
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {/* TAB 3: BAG TRANSFER */}
+            {adjustmentTab === 'bag_transfer' && (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!bagTransferForm.toFarmerId || !bagTransferForm.bags) return;
+                  const target = farmers.find(f => f.id === bagTransferForm.toFarmerId);
+                  saveBagTransfer({
+                    fromFarmerId: currentFarmer.id,
+                    fromFarmerName: currentFarmer.farmerName,
+                    toFarmerId: bagTransferForm.toFarmerId,
+                    toFarmerName: target ? target.farmerName : bagTransferForm.toFarmerId,
+                    bags: parseInt(bagTransferForm.bags, 10) || 0,
+                    date: bagTransferForm.date,
+                    reason: bagTransferForm.reason || 'Bag Transfer'
+                  });
+                  notifySaveSuccess({
+                    titleEn: 'Bag Transfer Saved',
+                    titlePa: 'ਬੋਰੀ ਟ੍ਰਾਂਸਫਰ ਦਰਜ ਹੋ ਗਈ',
+                    messageEn: `Transferred ${bagTransferForm.bags} bags to ${target?.farmerName || bagTransferForm.toFarmerId}`,
+                    messagePa: `${bagTransferForm.bags} ਬੋਰੀਆਂ ਸਫਲਤਾਪੂਰਵਕ ਟ੍ਰਾਂਸਫਰ ਹੋ ਗਈਆਂ।`
+                  });
+                  setBagTransferForm({
+                    toFarmerId: '',
+                    bags: '',
+                    date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+                    reason: ''
+                  });
+                  setAdjustmentRefreshKey(k => k + 1);
+                  setIsAdjustmentModalOpen(false);
+                }}
+                className="space-y-4"
+              >
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    ਬੋਰੀਆਂ ਕਿਸ ਕਿਸਾਨ ਨੂੰ ਟ੍ਰਾਂਸਫਰ ਕਰਨੀਆਂ ਹਨ? (Transfer Bags To Farmer):
+                  </label>
+                  <select
+                    value={bagTransferForm.toFarmerId}
+                    onChange={(e) => setBagTransferForm({ ...bagTransferForm, toFarmerId: e.target.value })}
+                    required
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                  >
+                    <option value="">-- ਕਿਸਾਨ ਚੁਣੋ (Select Farmer) --</option>
+                    {farmers.filter(f => f.id !== currentFarmer.id).map(f => (
+                      <option key={f.id} value={f.id}>
+                        {f.farmerNamePa} ({f.farmerName}) - A/C: {f.id} ({f.village})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      ਬੋਰੀਆਂ ਦੀ ਗਿਣਤੀ (Number of Bags):
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      min="1"
+                      placeholder="e.g. 600"
+                      value={bagTransferForm.bags}
+                      onChange={(e) => setBagTransferForm({ ...bagTransferForm, bags: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs font-mono font-bold focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      ਮਿਤੀ (Date):
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={bagTransferForm.date}
+                      onChange={(e) => setBagTransferForm({ ...bagTransferForm, date: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs font-mono focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    ਕਾਰਨ / ਵੇਰਵਾ (Reason / Note):
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. ਬਚਿਆ ਬੋਰੀ ਕੋਟਾ Sandeep ਨੂੰ ਟ੍ਰਾਂਸਫਰ ਕੀਤਾ ਗਿਆ"
+                    value={bagTransferForm.reason}
+                    onChange={(e) => setBagTransferForm({ ...bagTransferForm, reason: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                  />
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2 border-t border-slate-200">
+                  <button
+                    type="button"
+                    onClick={() => setIsAdjustmentModalOpen(false)}
+                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold"
+                  >
+                    ਰੱਦ ਕਰੋ (Cancel)
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 bg-indigo-700 hover:bg-indigo-800 text-white rounded-xl text-xs font-bold shadow-sm"
+                  >
+                    ਬੋਰੀ ਟ੍ਰਾਂਸਫਰ ਸੇਵ ਕਰੋ (Save Bag Transfer)
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
+    </>
   );
 };

@@ -13,11 +13,13 @@ import {
   Database,
   RefreshCw,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  FileSpreadsheet
 } from 'lucide-react';
 import { FirmManagerModal } from '../firm/FirmManagerModal';
 import { SellerMasterModal } from '../seller/SellerMasterModal';
 import { SupabaseSyncModal } from '../supabase/SupabaseSyncModal';
+import { GoogleSheetsSyncModal } from '../farmer/GoogleSheetsSyncModal';
 
 export const Header: React.FC = () => {
   const {
@@ -41,6 +43,7 @@ export const Header: React.FC = () => {
 
   const [isFirmModalOpen, setIsFirmModalOpen] = useState(false);
   const [isSellerModalOpen, setIsSellerModalOpen] = useState(false);
+  const [isGoogleSheetsModalOpen, setIsGoogleSheetsModalOpen] = useState(false);
 
   const totalBags = bagsEntries.reduce((sum, b) => sum + (b.bags || 0), 0);
 
@@ -172,6 +175,17 @@ export const Header: React.FC = () => {
               )}
             </button>
 
+            {/* Google Sheets & Drive Sync Button */}
+            <button
+              type="button"
+              onClick={() => setIsGoogleSheetsModalOpen(true)}
+              title="Google Sheets & Excel Import/Export"
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-teal-600/70 bg-teal-950/80 hover:bg-teal-900 text-teal-300 text-xs font-bold transition shadow-2xs cursor-pointer"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
+              <span>{language === 'en' ? 'Google Sheets' : 'ਗੂਗਲ ਸ਼ੀਟਸ'}</span>
+            </button>
+
             {/* Quick Metrics */}
             <div className="hidden xl:flex items-center gap-2 bg-slate-800/60 px-2 py-1 rounded-lg border border-slate-700/60 text-xs">
               <div className="flex items-center gap-1 text-slate-300">
@@ -228,6 +242,12 @@ export const Header: React.FC = () => {
       <SupabaseSyncModal
         isOpen={isSupabaseSyncModalOpen}
         onClose={() => setIsSupabaseSyncModalOpen(false)}
+      />
+
+      {/* Google Sheets & Drive Sync Modal */}
+      <GoogleSheetsSyncModal
+        isOpen={isGoogleSheetsModalOpen}
+        onClose={() => setIsGoogleSheetsModalOpen(false)}
       />
     </>
   );

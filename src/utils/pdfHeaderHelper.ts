@@ -52,6 +52,7 @@ export function renderStandardPdfHeader(options: StandardPdfHeaderOptions): numb
 
   let curY = startY;
   const centerX = pageWidth / 2;
+  const fontName = (doc as any).__gurmukhiFontRegistered ? 'NotoSansGurmukhi' : 'helvetica';
 
   // Header Box Top Banner (Deep forest green / slate for official authoritative Mandi look)
   const bannerHeight = compact ? (isLandscape ? 17.5 : 20) : (isLandscape ? 29 : 31);
@@ -64,25 +65,25 @@ export function renderStandardPdfHeader(options: StandardPdfHeaderOptions): numb
 
   // 1. FIRM NAME (Centre Aligned at the top, prominent and bold)
   doc.setTextColor(255, 255, 255);
-  doc.setFont('helvetica', 'bold');
+  doc.setFont(fontName, 'bold');
   doc.setFontSize(compact ? (isLandscape ? 12 : 11.5) : (isLandscape ? 15 : 13.5));
   doc.text(firmName, centerX, curY + (compact ? 5.2 : 8.5), { align: 'center' });
 
   // 2. COMPLETE FIRM ADDRESS (Centre Aligned directly below Firm Name)
-  doc.setFont('helvetica', 'normal');
+  doc.setFont(fontName, 'normal');
   doc.setFontSize(compact ? (isLandscape ? 7.5 : 7) : (isLandscape ? 9 : 8.5));
   doc.setTextColor(226, 232, 240); // slate-200
   doc.text(firmAddress, centerX, curY + (compact ? 9.2 : 14.5), { align: 'center' });
 
   // 3. LICENCE NO, MOBILE NO, PAN CARD NUMBER (Neatly below without crowding)
-  doc.setFont('helvetica', 'bold');
+  doc.setFont(fontName, 'bold');
   doc.setFontSize(compact ? (isLandscape ? 7.2 : 6.8) : (isLandscape ? 8.5 : 8));
   doc.setTextColor(254, 240, 138); // Yellow-200 for high readability
   const creds = `Licence No: ${licenceNo}   •   Mobile: +91 ${mobile}   •   PAN No: ${pan}`;
   doc.text(creds, centerX, curY + (compact ? 13.0 : 20.5), { align: 'center' });
 
   // 4. Market Committee & Mandi Board Tag (Neatly centered at bottom of header banner)
-  doc.setFont('helvetica', 'normal');
+  doc.setFont(fontName, 'normal');
   doc.setFontSize(compact ? (isLandscape ? 6.8 : 6.5) : (isLandscape ? 8 : 7.5));
   doc.setTextColor(148, 163, 184); // slate-400
   doc.text(`${marketCommittee} • Punjab Mandi Board (Regd. Govt. Licenced Arthia)`, centerX, curY + (compact ? 16.2 : (isLandscape ? 25.5 : 26.5)), { align: 'center' });
@@ -116,7 +117,7 @@ export function renderStandardPdfHeader(options: StandardPdfHeaderOptions): numb
     doc.setDrawColor(52, 211, 153); // Emerald-400 border
     doc.roundedRect(margin, curY, contentWidth, agHeight, 1, 1, 'S');
 
-    doc.setFont('helvetica', 'bold');
+    doc.setFont(fontName, 'bold');
     doc.setFontSize(compact ? 8.5 : 10);
     doc.setTextColor(6, 78, 59); // Emerald-900
     doc.text(`PURCHASE AGENCY: ${cleanAgency}`, margin + (compact ? 4 : 6), curY + (compact ? 4.5 : 6.6));
@@ -124,7 +125,7 @@ export function renderStandardPdfHeader(options: StandardPdfHeaderOptions): numb
     // Badge on the right of Agency bar if provided
     if (badgeValue) {
       const bText = `${(badgeLabel || 'RECORD ID').toUpperCase()}: ${badgeValue}`;
-      doc.setFont('helvetica', 'bold');
+      doc.setFont(fontName, 'bold');
       doc.setFontSize(compact ? 7 : 8);
       const bWidth = doc.getTextWidth(bText) + (compact ? 6 : 8);
       const bX = pageWidth - margin - bWidth - (compact ? 2 : 3);
@@ -138,7 +139,7 @@ export function renderStandardPdfHeader(options: StandardPdfHeaderOptions): numb
   }
 
   // Document Title & Subtitle
-  doc.setFont('helvetica', 'bold');
+  doc.setFont(fontName, 'bold');
   doc.setFontSize(compact ? (isLandscape ? 9.5 : 9) : (isLandscape ? 11 : 10.5));
   doc.setTextColor(15, 23, 42);
   doc.text(title.toUpperCase(), margin + 2, curY + (compact ? 2.8 : 3.5));
@@ -146,7 +147,7 @@ export function renderStandardPdfHeader(options: StandardPdfHeaderOptions): numb
   // Badge on the right of Title bar if agency bar was not rendered
   if (badgeValue && !hasAgencyBar) {
     const bText = `${(badgeLabel || 'RECORD ID').toUpperCase()}: ${badgeValue}`;
-    doc.setFont('helvetica', 'bold');
+    doc.setFont(fontName, 'bold');
     doc.setFontSize(compact ? 7 : 8);
     const bWidth = doc.getTextWidth(bText) + (compact ? 6 : 8);
     const bX = pageWidth - margin - bWidth - 2;
@@ -157,16 +158,16 @@ export function renderStandardPdfHeader(options: StandardPdfHeaderOptions): numb
   }
 
   if (subtitle) {
-    doc.setFont('helvetica', 'normal');
+    curY += (compact ? 4.5 : 5.5);
+    doc.setFont(fontName, 'normal');
     doc.setFontSize(compact ? 7.5 : 8.5);
     doc.setTextColor(100, 116, 139);
-    const subX = badgeValue && !agencyName ? pageWidth - margin - (compact ? 40 : 50) : pageWidth - margin - 2;
-    doc.text(subtitle, subX, curY + (compact ? 2.8 : 3.5), { align: 'right' });
+    doc.text(subtitle, margin + 2, curY + (compact ? 2.5 : 3.2));
   }
 
   doc.setDrawColor(203, 213, 225);
-  doc.line(margin, curY + (compact ? 4.5 : 6.5), pageWidth - margin, curY + (compact ? 4.5 : 6.5));
+  doc.line(margin, curY + (compact ? 4.5 : 5.5), pageWidth - margin, curY + (compact ? 4.5 : 5.5));
 
-  curY += (compact ? 6.5 : 9.5);
+  curY += (compact ? 6.5 : 8.5);
   return curY;
 }

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useMandi } from '../../context/MandiContext';
 import { NavigationSection } from '../../types/mandi';
 import {
@@ -19,6 +19,7 @@ import {
   Settings,
   Scale
 } from 'lucide-react';
+import { GoogleSheetsSyncModal } from '../farmer/GoogleSheetsSyncModal';
 
 interface NavItem {
   id: NavigationSection;
@@ -149,6 +150,8 @@ export const Sidebar: React.FC = () => {
     language
   } = useMandi();
 
+  const [isGoogleSheetsModalOpen, setIsGoogleSheetsModalOpen] = useState(false);
+
   const isEn = language === 'en';
 
   return (
@@ -247,6 +250,21 @@ export const Sidebar: React.FC = () => {
         })}
       </div>
 
+      {/* Google Sheets Quick Access */}
+      <div className="p-3 border-t border-slate-100">
+        <button
+          type="button"
+          onClick={() => setIsGoogleSheetsModalOpen(true)}
+          className="w-full flex items-center justify-between px-3 py-2 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-900 rounded-lg text-xs font-bold transition shadow-2xs cursor-pointer group"
+        >
+          <div className="flex items-center gap-2">
+            <FileSpreadsheet className="w-4 h-4 text-emerald-600 group-hover:scale-110 transition-transform" />
+            <span>{isEn ? 'Google Sheets & Excel' : 'ਗੂਗਲ ਸ਼ੀਟਸ ਤੇ ਐਕਸਲ'}</span>
+          </div>
+          <span className="text-[10px] bg-emerald-200 text-emerald-800 px-1.5 py-0.5 rounded font-mono">Sync</span>
+        </button>
+      </div>
+
       {/* Bottom Status Info */}
       <div className="p-3 border-t border-slate-200 bg-slate-50 text-[11px] text-slate-600 space-y-1">
         <div className="flex justify-between items-center">
@@ -258,6 +276,12 @@ export const Sidebar: React.FC = () => {
           <strong className="text-emerald-700 font-mono font-bold">₹2,461 / Qul</strong>
         </div>
       </div>
+
+      {/* Google Sheets Modal */}
+      <GoogleSheetsSyncModal
+        isOpen={isGoogleSheetsModalOpen}
+        onClose={() => setIsGoogleSheetsModalOpen(false)}
+      />
     </aside>
   );
 };
