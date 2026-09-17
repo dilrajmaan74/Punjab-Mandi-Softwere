@@ -131,6 +131,7 @@ export interface BardanaReceivedRecord {
   receivedFrom: BardanaSourceType; // 'SELLER' | 'AGENCY' | 'OTHER_PARTY'
   sourceName: string; // Seller Name, Agency Name, or Other Party Name (e.g. "Khalsa Commission Agent")
   sourceNamePa?: string;
+  sellerId?: string; // Seller ID or Farmer ID
   otherPartyName?: string; // Other party/arhtiya for borrow/loan
   partyMobile?: string;
   partyAddress?: string;
@@ -145,6 +146,7 @@ export interface BardanaReceivedRecord {
   boxes?: number; // total boxes
   capacityPerBox?: number;
   bags: number; // total bags (newBags + oldBags)
+  totalBags?: number;
   remarks?: string;
   firmId?: string;
   fiscalYear?: string;

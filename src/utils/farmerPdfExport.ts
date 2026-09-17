@@ -2,6 +2,7 @@ import { jsPDF } from 'jspdf';
 import { Farmer, MandiSettings } from '../types/mandi';
 import { cleanPdfText } from './translations';
 import { renderStandardPdfHeader } from './pdfHeaderHelper';
+import { registerGurmukhiFont } from './gurmukhiPdfFont';
 
 function cleanText(text: string | number | null | undefined): string {
   return cleanPdfText(text);
@@ -16,6 +17,8 @@ export async function exportFarmerProfilePDF(farmer: Farmer, settings: MandiSett
     unit: 'mm',
     format: 'a4'
   });
+  registerGurmukhiFont(doc);
+  const fontName = (doc as any).__gurmukhiFontRegistered ? 'NotoSansGurmukhi' : 'helvetica';
 
   const pageWidth = doc.internal.pageSize.getWidth();
   const margin = 14;

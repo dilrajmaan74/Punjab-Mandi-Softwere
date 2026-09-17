@@ -61,6 +61,28 @@ export function calculateGrandTotal(bagsWeightKg: number, totaKg: number): Weigh
 }
 
 /**
+ * Format Total Weight in Kg to Quintal + Kg format for Lefting / Dispatch:
+ * Format: "XXX Qtl XX Kg"
+ * Rules:
+ * - 1 Qtl = 100 Kg
+ * - Automatically convert entered Total Weight Kg into Qtl + remaining Kg
+ * Examples:
+ * 15000 Kg -> 150 Qtl 00 Kg
+ * 14850 Kg -> 148 Qtl 50 Kg
+ * 14925 Kg -> 149 Qtl 25 Kg
+ */
+export function formatLeftingWeightQtlKg(totalKg: number | string | undefined | null): string {
+  const kgNum = typeof totalKg === 'string' ? parseFloat(totalKg) : Number(totalKg);
+  if (isNaN(kgNum) || kgNum <= 0) return '0 Qtl 00 Kg';
+  const qtl = Math.floor(kgNum / 100);
+  const remKg = Math.round((kgNum - qtl * 100) * 100) / 100;
+  const remKgStr = Number.isInteger(remKg)
+    ? (remKg < 10 ? `0${remKg}` : String(remKg))
+    : (remKg < 10 ? `0${remKg}` : String(remKg));
+  return `${qtl} Qtl ${remKgStr} Kg`;
+}
+
+/**
  * Calculate Total Payable Amount at ₹2,461 / Qul
  */
 export function calculatePayableAmount(grandTotalKg: number, ratePerQtl = FIXED_RATE_PER_QTL): number {

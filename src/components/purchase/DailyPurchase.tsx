@@ -95,12 +95,30 @@ export const DailyPurchase: React.FC = () => {
     customLabourRate: number;
   }
 
+  // Generate an empty purchase row
+  const createEmptyPurchaseRow = (index?: number | string): MultiFarmerPurchaseRow => ({
+    rowId: `row_${Date.now()}_${index ?? Math.random().toString(36).substring(2, 6)}_${Math.random().toString(36).substring(2, 5)}`,
+    farmerId: '',
+    newBags: 0,
+    oldBags: 0,
+    bags: 0
+  });
+
+  // By default, create 5 empty rows automatically (Sr. No. 1, 2, 3, 4, 5)
+  const createInitial5PurchaseRows = (): MultiFarmerPurchaseRow[] => [
+    createEmptyPurchaseRow(1),
+    createEmptyPurchaseRow(2),
+    createEmptyPurchaseRow(3),
+    createEmptyPurchaseRow(4),
+    createEmptyPurchaseRow(5)
+  ];
+
   const { draft, saveDraft, clearDraft } = useFormDraft<DailyPurchaseDraft>({
     formKey: 'draft_daily_purchase',
     initialValues: {
       fixedAgency: agencies.length > 0 ? agencies[0].nameEn : 'Markfed',
       purchaseDate: getTodayFormatted(),
-      rows: [{ rowId: `row_${Date.now()}_1`, farmerId: '', newBags: 0, oldBags: 0, bags: 0 }],
+      rows: createInitial5PurchaseRows(),
       labourType: 'NONE',
       labourUnit: 'PER_QTL',
       customLabourRate: 7
@@ -122,13 +140,21 @@ export const DailyPurchase: React.FC = () => {
 
   // ==================================================
   // 2. MULTI FARMER PURCHASE TABLE STATE
-  // Continuously reduces available mandi balance per row
+  // By default, show 5 empty rows automatically when Daily Purchase is opened.
   // ==================================================
-  const [rows, setRows] = useState<MultiFarmerPurchaseRow[]>(
-    draft.rows && draft.rows.length > 0
-      ? draft.rows
-      : [{ rowId: `row_${Date.now()}_1`, farmerId: '', newBags: 0, oldBags: 0, bags: 0 }]
-  );
+  const [rows, setRows] = useState<MultiFarmerPurchaseRow[]>(() => {
+    if (draft.rows && draft.rows.length >= 5) {
+      return draft.rows;
+    }
+    if (draft.rows && draft.rows.length > 0) {
+      const padded = [...draft.rows];
+      while (padded.length < 5) {
+        padded.push(createEmptyPurchaseRow(padded.length + 1));
+      }
+      return padded;
+    }
+    return createInitial5PurchaseRows();
+  });
 
   // Sync back to universal draft on every change
   useEffect(() => {
@@ -253,34 +279,36 @@ export const DailyPurchase: React.FC = () => {
     return Math.max(0, summary.remainingBags - usedInPrecedingRows);
   };
 
-  // Add a blank row
+  // Add a blank row (Sr No automatically generated: 6, 7, 8, 9, 10...)
   const addRow = () => {
     setRows((prev) => [
       ...prev,
-      {
-        rowId: `row_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-        farmerId: '',
-        newBags: 0,
-        oldBags: 0,
-        bags: 0
-      }
+      createEmptyPurchaseRow(prev.length + 1)
     ]);
   };
 
-  // Add specific farmer row from search
+  // Add specific farmer row from search (fills first empty row or appends)
   const addFarmerRow = (farmerId: string) => {
     setRows((prev) => {
-      if (prev.length === 1 && !prev[0].farmerId && prev[0].bags === 0) {
-        return [{ ...prev[0], farmerId, newBags: 0, oldBags: 0, bags: 0 }];
-      }
-      return [
-        ...prev,
-        {
-          rowId: `row_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      // If there's an existing empty row (no farmerId and 0 bags), populate the first empty row
+      const firstEmptyIndex = prev.findIndex((r) => !r.farmerId && Number(r.bags) === 0);
+      if (firstEmptyIndex !== -1) {
+        const updated = [...prev];
+        updated[firstEmptyIndex] = {
+          ...updated[firstEmptyIndex],
           farmerId,
           newBags: 0,
           oldBags: 0,
           bags: 0
+        };
+        return updated;
+      }
+      // If all current rows have data, append a new row
+      return [
+        ...prev,
+        {
+          ...createEmptyPurchaseRow(prev.length + 1),
+          farmerId
         }
       ];
     });
@@ -288,13 +316,21 @@ export const DailyPurchase: React.FC = () => {
     setShowFarmerSearchDropdown(false);
   };
 
-  // Remove a row
+  // Remove a row - ensure clean, sequential Sr. No. and maintain at least 5 rows
   const removeRow = (rowId: string) => {
-    if (rows.length <= 1) {
-      setRows([{ rowId: `row_${Date.now()}_1`, farmerId: '', newBags: 0, oldBags: 0, bags: 0 }]);
-      return;
-    }
-    setRows((prev) => prev.filter((r) => r.rowId !== rowId));
+    setRows((prev) => {
+      const filtered = prev.filter((r) => r.rowId !== rowId);
+      // Ensure at least 5 rows are always maintained
+      if (filtered.length < 5) {
+        const needed = 5 - filtered.length;
+        const appended: MultiFarmerPurchaseRow[] = [];
+        for (let i = 0; i < needed; i++) {
+          appended.push(createEmptyPurchaseRow(filtered.length + i + 1));
+        }
+        return [...filtered, ...appended];
+      }
+      return filtered;
+    });
   };
 
   // Update a row
@@ -484,8 +520,8 @@ export const DailyPurchase: React.FC = () => {
       // Clear draft upon successful save
       clearDraft();
 
-      // Reset rows to one blank row
-      setRows([{ rowId: `row_${Date.now()}_1`, farmerId: '', newBags: 0, oldBags: 0, bags: 0 }]);
+      // Reset rows to 5 blank rows automatically
+      setRows(createInitial5PurchaseRows());
       // Automatically expand today's date in summary
       setExpandedDates((prev) => ({ ...prev, [purchaseDate]: true }));
     } catch {
@@ -1250,7 +1286,26 @@ export const DailyPurchase: React.FC = () => {
             Columns ONLY:
             Sr No | Farmer Name | Father Name | Mobile | Village | Bags | Qul
         */}
-        <div className="border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
+        <div className="border border-slate-200 rounded-xl overflow-hidden shadow-2xs bg-white">
+          {/* Table Header Bar with Add Row action */}
+          <div className="bg-slate-50 px-4 py-2.5 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-slate-800">
+                {isEn ? 'Daily Purchase Entry Table' : 'ਰੋਜ਼ਾਨਾ ਖਰੀਦ ਐਂਟਰੀ ਟੇਬਲ'}
+              </span>
+              <span className="text-[11px] bg-slate-200 text-slate-700 px-2 py-0.5 rounded font-mono font-bold">
+                {rows.length} {isEn ? 'Rows' : 'ਲਾਈਨਾਂ'}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={addRow}
+              className="bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-300 font-bold px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 transition active:scale-95 shadow-2xs cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5 text-emerald-700" />
+              <span>Add Row / ਹੋਰ ਲਾਈਨ ਜੋੜੋ</span>
+            </button>
+          </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-100 text-slate-800 font-bold border-b border-slate-200">
@@ -1287,8 +1342,8 @@ export const DailyPurchase: React.FC = () => {
 
                   return (
                     <tr key={row.rowId} className={`hover:bg-slate-50/70 ${isOverLimit ? 'bg-rose-50/40' : ''}`}>
-                      {/* 1. Sr No */}
-                      <td className="py-2.5 px-3 text-center font-mono font-bold text-slate-500">
+                      {/* 1. Sr No - Generated automatically 1, 2, 3, 4, 5... Never typed manually */}
+                      <td className="py-2.5 px-3 text-center font-mono font-bold text-slate-600 bg-slate-50/60 select-none">
                         {index + 1}
                       </td>
 
@@ -1462,10 +1517,10 @@ export const DailyPurchase: React.FC = () => {
               <button
                 type="button"
                 onClick={addRow}
-                className="flex-1 lg:flex-initial bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold px-3.5 py-2 rounded-lg text-xs flex items-center justify-center gap-1 transition"
+                className="flex-1 lg:flex-initial bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-300 font-bold px-4 py-2 rounded-lg text-xs flex items-center justify-center gap-1.5 transition active:scale-95 shadow-2xs cursor-pointer"
               >
-                <Plus className="w-3.5 h-3.5" />
-                <span>ਕਤਾਰ ਸ਼ਾਮਲ ਕਰੋ</span>
+                <Plus className="w-4 h-4 text-emerald-700" />
+                <span>Add Row / ਹੋਰ ਲਾਈਨ ਜੋੜੋ</span>
               </button>
               <button
                 type="button"

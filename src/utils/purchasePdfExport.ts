@@ -2,6 +2,7 @@ import { DailyPurchaseRecord, MandiSettings, FarmerPurchaseSummary } from '../ty
 import { formatCurrencyINR, maskAadhaarNumber } from './calculations';
 import { cleanPdfText } from './translations';
 import { renderStandardPdfHeader } from './pdfHeaderHelper';
+import { registerGurmukhiFont } from './gurmukhiPdfFont';
 
 /**
  * Clean string for safe jsPDF rendering without broken glyphs
@@ -84,6 +85,8 @@ export async function exportDailyPurchaseVoucherPDF(
     unit: 'mm',
     format: 'a4'
   });
+  registerGurmukhiFont(doc);
+  const fontName = (doc as any).__gurmukhiFontRegistered ? 'NotoSansGurmukhi' : 'helvetica';
 
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
@@ -530,6 +533,8 @@ export async function exportDailyPurchaseRegisterPDF(
     unit: 'mm',
     format: 'a4'
   });
+  registerGurmukhiFont(doc);
+  const fontName = (doc as any).__gurmukhiFontRegistered ? 'NotoSansGurmukhi' : 'helvetica';
 
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();

@@ -1790,13 +1790,13 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const oldLoose = Number(record.oldLooseBags) || 0;
     const loose = Number(record.looseBags) || 0;
 
-    const newBags = record.newBags !== undefined && record.newBags > 0
-      ? Number(record.newBags)
+    const newBags = record.newBags !== undefined
+      ? Math.max(0, Number(record.newBags))
       : (newBoxes * 500) + newLoose;
-    const oldBags = record.oldBags !== undefined && record.oldBags > 0
-      ? Number(record.oldBags)
+    const oldBags = record.oldBags !== undefined
+      ? Math.max(0, Number(record.oldBags))
       : (oldBoxes * 50) + oldLoose;
-    const totalBags = record.bags !== undefined && record.bags > 0
+    const totalBags = record.bags !== undefined && Number(record.bags) > 0
       ? Number(record.bags)
       : newBags + oldBags + loose;
 
@@ -1806,6 +1806,7 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       firmId: record.firmId || activeFirmId,
       fiscalYear: record.fiscalYear || activeFiscalYear,
       actionType: record.actionType || 'RECEIVE',
+      sellerId: record.sellerId || undefined,
       newBoxCount: newBoxes,
       newLooseBags: newLoose,
       newBags,
@@ -1816,6 +1817,7 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       boxes: newBoxes + oldBoxes,
       capacityPerBox: record.bardanaType === 'NEW' ? 500 : 50,
       bags: totalBags,
+      totalBags,
       createdAt: new Date().toISOString()
     };
 
@@ -1836,13 +1838,24 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           const oldLoose = updates.oldLooseBags !== undefined ? Number(updates.oldLooseBags) : (item.oldLooseBags || 0);
           const loose = updates.looseBags !== undefined ? Number(updates.looseBags) : (item.looseBags || 0);
 
-          const newBags = updates.newBags !== undefined ? Number(updates.newBags) : (newBoxes * 500) + newLoose;
-          const oldBags = updates.oldBags !== undefined ? Number(updates.oldBags) : (oldBoxes * 50) + oldLoose;
-          const totalBags = updates.bags !== undefined ? Number(updates.bags) : (newBags + oldBags + loose);
+          const newBags = updates.newBags !== undefined
+            ? Math.max(0, Number(updates.newBags))
+            : (updates.newBoxCount !== undefined
+                ? (newBoxes * 500) + newLoose
+                : (item.newBags !== undefined ? item.newBags : (newBoxes * 500) + newLoose));
+          const oldBags = updates.oldBags !== undefined
+            ? Math.max(0, Number(updates.oldBags))
+            : (updates.oldBoxCount !== undefined
+                ? (oldBoxes * 50) + oldLoose
+                : (item.oldBags !== undefined ? item.oldBags : (oldBoxes * 50) + oldLoose));
+          const totalBags = updates.bags !== undefined
+            ? Math.max(0, Number(updates.bags))
+            : (newBags + oldBags + loose);
 
           return {
             ...item,
             ...updates,
+            sellerId: updates.sellerId !== undefined ? updates.sellerId : item.sellerId,
             newBoxCount: newBoxes,
             newLooseBags: newLoose,
             newBags,
@@ -1852,6 +1865,7 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             looseBags: loose,
             boxes: newBoxes + oldBoxes,
             bags: totalBags,
+            totalBags,
             updatedAt: new Date().toISOString()
           };
         }

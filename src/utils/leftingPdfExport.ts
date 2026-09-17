@@ -2,6 +2,8 @@ import { jsPDF } from 'jspdf';
 import { LeftingRecord, MandiSettings } from '../types/mandi';
 import { cleanPdfText } from './translations';
 import { renderStandardPdfHeader } from './pdfHeaderHelper';
+import { formatLeftingWeightQtlKg } from './calculations';
+import { registerGurmukhiFont } from './gurmukhiPdfFont';
 
 function cleanText(text: string | number | null | undefined): string {
   return cleanPdfText(text);
@@ -19,6 +21,8 @@ export async function exportLeftingVoucherPDF(
     unit: 'mm',
     format: 'a4'
   });
+  registerGurmukhiFont(doc);
+  const fontName = (doc as any).__gurmukhiFontRegistered ? 'NotoSansGurmukhi' : 'helvetica';
 
   const pageWidth = doc.internal.pageSize.getWidth();
   const margin = 14;
@@ -130,9 +134,9 @@ export async function exportLeftingVoucherPDF(
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8.5);
   doc.text('ITEM DESCRIPTION', margin + 4, currentY + 5.5);
-  doc.text('BARDANA', margin + 70, currentY + 5.5);
+  doc.text('BARDANA', margin + 65, currentY + 5.5);
   doc.text('DISPATCHED BAGS', margin + 105, currentY + 5.5);
-  doc.text('TOTAL WEIGHT (QTL + KG)', margin + 140, currentY + 5.5);
+  doc.text('TOTAL WEIGHT (QTL + KG)', margin + 135, currentY + 5.5);
 
   currentY += 8;
 
@@ -147,10 +151,11 @@ export async function exportLeftingVoucherPDF(
   doc.setFontSize(8.5);
   doc.text('Paddy Dispatch', margin + 4, currentY + 6);
   doc.setFont('helvetica', 'normal');
-  doc.text(`${cleanText(record.bardanaType)} (${record.newBags || 0}N / ${record.oldBags || 0}O)`, margin + 70, currentY + 6);
+  doc.text(`${cleanText(record.bardanaType)} (${record.newBags || 0}N / ${record.oldBags || 0}O)`, margin + 65, currentY + 6);
   doc.setFont('helvetica', 'bold');
   doc.text(`${record.bags} Bags`, margin + 105, currentY + 6);
-  doc.text(`${record.qul} Qul ${record.kg} Kg (${record.totalWeightKg} Kg)`, margin + 140, currentY + 6);
+  const dispWeightKg = record.totalWeightKg ?? (record.qul * 100 + record.kg);
+  doc.text(formatLeftingWeightQtlKg(dispWeightKg), margin + 135, currentY + 6);
 
   currentY += 9;
 

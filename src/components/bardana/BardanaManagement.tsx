@@ -52,6 +52,7 @@ export const BardanaManagement: React.FC = () => {
     bardanaRecords,
     bagsEntries,
     sellers,
+    farmers,
     settings,
     addBardanaRecord,
     deleteBardanaRecord,
@@ -89,12 +90,16 @@ export const BardanaManagement: React.FC = () => {
   const [selectedSellerId, setSelectedSellerId] = useState<string>('');
   const [sourceName, setSourceName] = useState<string>('');
   const [otherPartyMobile, setOtherPartyMobile] = useState<string>('');
-  const [bardanaType, setBardanaType] = useState<BardanaType>('NEW');
-  const [boxes, setBoxes] = useState<number>(2);
-  const [bags, setBags] = useState<number>(1000); // 2 * 500
+  const [newBags, setNewBags] = useState<number | string>(1000);
+  const [oldBags, setOldBags] = useState<number | string>(230);
   const [remarks, setRemarks] = useState<string>('');
   const [formError, setFormError] = useState<string>('');
   const [isSaving, setIsSaving] = useState<boolean>(false);
+
+  // Derived Bags Calculations
+  const numNewBags = Math.max(0, Number(newBags) || 0);
+  const numOldBags = Math.max(0, Number(oldBags) || 0);
+  const totalBags = numNewBags + numOldBags;
 
   // Seller Master Modal
   const [isSellerModalOpen, setIsSellerModalOpen] = useState<boolean>(false);
@@ -117,20 +122,6 @@ export const BardanaManagement: React.FC = () => {
   // Computed Inventory Summary
   const summary = getBardanaSummary();
 
-  // Handle Box or Type change
-  const handleBoxesChange = (val: number) => {
-    const numBoxes = Math.max(0, val);
-    setBoxes(numBoxes);
-    const capacity = bardanaType === 'NEW' ? 500 : 50;
-    setBags(numBoxes * capacity);
-  };
-
-  const handleTypeChange = (newType: BardanaType) => {
-    setBardanaType(newType);
-    const capacity = newType === 'NEW' ? 500 : 50;
-    setBags(boxes * capacity);
-  };
-
   const agencyOptions: SearchableSelectOption[] = useMemo(() => {
     const opts: SearchableSelectOption[] = STANDARD_AGENCIES.map((ag) => ({
       value: ag,
@@ -147,14 +138,63 @@ export const BardanaManagement: React.FC = () => {
   }, [isEn]);
 
   const sellerOptions: SearchableSelectOption[] = useMemo(() => {
-    return sellers.map((s) => ({
-      value: s.id,
-      label: s.firmName,
-      subLabel: `${isEn ? 'Code/City' : 'ਕੋਡ/ਸ਼ਹਿਰ'}: ${s.code || s.city || '-'}`,
-      badge: s.licenceNo || undefined,
-      keywords: [s.firmName, s.code || '', s.city || '', s.phone || '', s.mobile || '']
-    }));
-  }, [sellers, isEn]);
+    const list: SearchableSelectOption[] = [];
+
+    // Sellers from Seller Master
+    sellers.forEach((s) => {
+      const name = s.firmName || s.name || '';
+      const namePa = s.namePa ? ` (${s.namePa})` : '';
+      list.push({
+        value: s.id,
+        label: `${name}${namePa}`,
+        subLabel: `${isEn ? 'Code/City' : 'ਕੋਡ/ਸ਼ਹਿਰ'}: ${s.code || s.city || '-'} • ${s.mobile || s.phone || ''}`,
+        badge: s.sellerType === 'COMMISSION_AGENT' ? (isEn ? 'Agent' : 'ਆੜ੍ਹਤੀਆ') : (isEn ? 'Seller' : 'ਸੈਲਰ'),
+        badgeColor: 'bg-blue-100 text-blue-800',
+        keywords: [name, s.name || '', s.firmName || '', s.namePa || '', s.code || '', s.city || '', s.phone || '', s.mobile || '']
+      });
+    });
+
+    // Farmers from Farmer Master
+    farmers.forEach((f) => {
+      const fName = `${f.farmerName} ${f.fatherName ? `s/o ${f.fatherName}` : ''}`.trim();
+      list.push({
+        value: `FARMER_${f.id}`,
+        label: `${fName} (${f.village || ''})`,
+        subLabel: `${isEn ? 'Farmer ID' : 'ਕਿਸਾਨ ਆਈਡੀ'}: ${f.id} • ${f.mobile || ''}`,
+        badge: isEn ? 'Farmer' : 'ਕਿਸਾਨ',
+        badgeColor: 'bg-emerald-100 text-emerald-800',
+        keywords: [f.farmerName, f.fatherName || '', f.village || '', f.mobile || '', f.id]
+      });
+    });
+
+    return list;
+  }, [sellers, farmers, isEn]);
+
+  const handleSelectSeller = (sid: string) => {
+    setSelectedSellerId(sid);
+    if (!sid) {
+      setSourceName('');
+      return;
+    }
+    const matchSeller = sellers.find(s => s.id === sid);
+    if (matchSeller) {
+      setSourceName(matchSeller.firmName || matchSeller.name || '');
+      return;
+    }
+    if (sid.startsWith('FARMER_')) {
+      const fId = sid.replace('FARMER_', '');
+      const matchFarmer = farmers.find(f => f.id === fId);
+      if (matchFarmer) {
+        setSourceName(matchFarmer.farmerName);
+        return;
+      }
+    }
+    const matchFarmerDirect = farmers.find(f => f.id === sid);
+    if (matchFarmerDirect) {
+      setSourceName(matchFarmerDirect.farmerName);
+      return;
+    }
+  };
 
   const filterSourceTypeOptions: SearchableSelectOption[] = useMemo(() => [
     { value: 'ALL', label: isEn ? 'All Sources (Seller & Agency)' : 'ਸਾਰੇ ਸਰੋਤ (Seller & Agency)' },
@@ -193,8 +233,13 @@ export const BardanaManagement: React.FC = () => {
       return;
     }
 
-    if (boxes <= 0 || bags <= 0) {
-      setFormError('ਬਕਸਿਆਂ ਤੇ ਬੋਰਿਆਂ ਦੀ ਗਿਣਤੀ 0 ਤੋਂ ਵੱਧ ਹੋਣੀ ਚਾਹੀਦੀ ਹੈ (Boxes and Bags must be > 0).');
+    if (Number(newBags) < 0 || Number(oldBags) < 0) {
+      setFormError('ਨਵੀਂ ਅਤੇ ਪੁਰਾਣੀ ਜੂਥ ਦੀ ਮਾਤਰਾ ਰਿਣਆਤਮਕ ਨਹੀਂ ਹੋ ਸਕਦੀ (Bags cannot be negative).');
+      return;
+    }
+
+    if (totalBags <= 0) {
+      setFormError('ਕੁੱਲ ਬੋਰੀਆਂ 0 ਤੋਂ ਵੱਧ ਹੋਣੀਆਂ ਚਾਹੀਦੀਆਂ ਹਨ (Total Bags must be > 0. Please enter New Juth or Old Juth bags).');
       return;
     }
 
@@ -206,13 +251,21 @@ export const BardanaManagement: React.FC = () => {
         agency: effectiveAgency,
         actionType,
         receivedFrom,
+        sellerId: selectedSellerId || undefined,
         sourceName: effectiveSourceName,
         otherPartyName: receivedFrom === 'OTHER_PARTY' ? effectiveSourceName : undefined,
         partyMobile: otherPartyMobile.trim() || undefined,
-        bardanaType,
-        boxes,
-        capacityPerBox: bardanaType === 'NEW' ? 500 : 50,
-        bags,
+        bardanaType: (numNewBags > 0 && numOldBags > 0) ? 'BOTH' : (numOldBags > 0 ? 'OLD' : 'NEW'),
+        newBags: numNewBags,
+        oldBags: numOldBags,
+        newBoxCount: Math.floor(numNewBags / 500),
+        newLooseBags: numNewBags % 500,
+        oldBoxCount: Math.floor(numOldBags / 50),
+        oldLooseBags: numOldBags % 50,
+        boxes: Math.floor(numNewBags / 500) + Math.floor(numOldBags / 50),
+        capacityPerBox: 500,
+        bags: totalBags,
+        totalBags: totalBags,
         remarks: remarks.trim() || undefined
       });
 
@@ -221,8 +274,8 @@ export const BardanaManagement: React.FC = () => {
       notifySaveSuccess({
         titlePa: 'ਬਾਰਦਾਨਾ ਐਂਟਰੀ ਸਫਲਤਾਪੂਰਵਕ ਸੇਵ ਹੋ ਗਈ ਹੈ।',
         titleEn: 'Bardana Entry Saved Successfully',
-        messagePa: `ਏਜੰਸੀ: ${effectiveAgency} | ਸਰੋਤ: ${effectiveSourceName} | ਕਾਰਵਾਈ: ${actionLabel} | ${bags} ਬੋਰੇ।`,
-        details: `${newRec.id} • ${bardanaType === 'NEW' ? 'New Juth (ਨਵਾਂ)' : 'Old Juth (ਪੁਰਾਣਾ)'} • ${boxes} ਬਕਸੇ (${bags} ਬੋਰੇ)`
+        messagePa: `ਏਜੰਸੀ: ${effectiveAgency} | ਸਰੋਤ: ${effectiveSourceName} | ਕਾਰਵਾਈ: ${actionLabel} | ਕੁੱਲ: ${totalBags} ਬੋਰੀਆਂ।`,
+        details: `${newRec.id} • ਨਵੀਂ ਜੂਥ: ${numNewBags} • ਪੁਰਾਣੀ ਜੂਥ: ${numOldBags} • ਕੁੱਲ ਬੋਰੀਆਂ: ${totalBags}`
       });
 
       // Reset specific fields but keep agency
@@ -230,8 +283,8 @@ export const BardanaManagement: React.FC = () => {
       setSelectedSellerId('');
       setOtherPartyMobile('');
       setRemarks('');
-      setBoxes(bardanaType === 'NEW' ? 2 : 2);
-      setBags(bardanaType === 'NEW' ? 1000 : 100);
+      setNewBags(0);
+      setOldBags(0);
     } catch {
       notifyError({
         titlePa: 'ਐਂਟਰੀ ਸੇਵ ਕਰਨ ਵਿੱਚ ਗਲਤੀ ਆਈ',
@@ -870,7 +923,7 @@ export const BardanaManagement: React.FC = () => {
                 <div className="flex items-center justify-between mb-1">
                   <label className="block font-bold text-slate-700">
                     {receivedFrom === 'SELLER' ? (
-                      <span>ਸੈਲਰ ਦਾ ਨਾਂ (Seller / Sheller Name) <span className="text-rose-500">*</span></span>
+                      <span>ਸੈਲਰ ਜਾਂ ਕਿਸਾਨ ਚੁਣੋ (Select Seller / Sheller / Farmer) <span className="text-rose-500">*</span></span>
                     ) : receivedFrom === 'OTHER_PARTY' ? (
                       <span>ਦੂਜੀ ਪਾਰਟੀ / ਆੜ੍ਹਤੀਆ ਦਾ ਨਾਂ (Party / Arhtiya Name) <span className="text-rose-500">*</span></span>
                     ) : (
@@ -882,7 +935,7 @@ export const BardanaManagement: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => setIsSellerModalOpen(true)}
-                      className="text-[11px] font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                      className="text-[11px] font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1 bg-blue-50 hover:bg-blue-100 px-2 py-0.5 rounded transition"
                     >
                       <Plus className="w-3 h-3" />
                       <span>ਸੈਲਰ ਮਾਸਟਰ (Manage Sellers)</span>
@@ -890,33 +943,63 @@ export const BardanaManagement: React.FC = () => {
                   )}
                 </div>
 
-                {receivedFrom === 'SELLER' && sellers.length > 0 ? (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    <SearchableSelect
-                      id="bardana-seller-select"
-                      value={selectedSellerId}
-                      onChange={(sid) => {
-                        setSelectedSellerId(sid);
-                        const match = sellers.find(s => s.id === sid);
-                        if (match) {
-                          setSourceName(match.firmName);
-                        } else {
-                          setSourceName('');
-                        }
-                      }}
-                      options={sellerOptions}
-                      placeholder={isEn ? "Search saved seller..." : "ਸੈਲਰ ਖੋਜੋ ਤੇ ਚੁਣੋ..."}
-                      searchPlaceholder={isEn ? "Type seller firm name..." : "ਸੈਲਰ ਫਰਮ ਦਾ ਨਾਂ ਲਿਖੋ..."}
-                      allowClear
-                    />
+                {receivedFrom === 'SELLER' ? (
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <div>
+                        <SearchableSelect
+                          id="bardana-seller-select"
+                          value={selectedSellerId}
+                          onChange={handleSelectSeller}
+                          options={sellerOptions}
+                          placeholder={isEn ? "Search and select seller..." : "ਸੈਲਰ / ਕਿਸਾਨ ਖੋਜੋ ਤੇ ਚੁਣੋ..."}
+                          searchPlaceholder={isEn ? "Search by firm name, code, mobile..." : "ਫਰਮ ਦਾ ਨਾਂ, ਕੋਡ, ਮੋਬਾਈਲ ਲਿਖੋ..."}
+                          allowClear
+                        />
+                      </div>
 
-                    <input
-                      type="text"
-                      value={sourceName}
-                      onChange={(e) => setSourceName(e.target.value)}
-                      placeholder={isEn ? "Or enter seller name directly..." : "ਜਾਂ ਸੈਲਰ ਦਾ ਨਾਂ ਸਿੱਧਾ ਲਿਖੋ..."}
-                      className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
-                    />
+                      <div>
+                        <input
+                          type="text"
+                          value={sourceName}
+                          onChange={(e) => {
+                            setSourceName(e.target.value);
+                            if (selectedSellerId) setSelectedSellerId('');
+                          }}
+                          placeholder={isEn ? "Selected Seller Name (or enter directly)..." : "ਚੁਣਿਆ ਗਿਆ ਸੈਲਰ ਨਾਮ (ਜਾਂ ਸਿੱਧਾ ਲਿਖੋ)..."}
+                          className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Visual Card showing the Selected Seller */}
+                    {sourceName && (
+                      <div className="flex items-center justify-between bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-1.5 text-xs">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-emerald-900">
+                            {isEn ? 'Selected Seller:' : 'ਚੁਣਿਆ ਹੋਇਆ ਸੈਲਰ:'}
+                          </span>
+                          <span className="font-black text-emerald-950 bg-white px-2 py-0.5 rounded border border-emerald-300">
+                            {sourceName}
+                          </span>
+                          {selectedSellerId && (
+                            <span className="text-[10px] text-emerald-700 font-mono">
+                              (ID: {selectedSellerId})
+                            </span>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedSellerId('');
+                            setSourceName('');
+                          }}
+                          className="text-[11px] font-bold text-slate-500 hover:text-rose-600 transition ml-2"
+                        >
+                          ✕ ਸਾਫ਼ ਕਰੋ (Clear)
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ) : receivedFrom === 'OTHER_PARTY' ? (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -946,98 +1029,106 @@ export const BardanaManagement: React.FC = () => {
                 )}
               </div>
 
-              {/* 4. Bardana Type, Boxes, Bags */}
+              {/* 4. Separate New Juth and Old Juth Receiving */}
               <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-3">
-                <label className="block font-bold text-slate-700">
-                  ਬਾਰਦਾਨਾ ਕਿਸਮ ਤੇ ਗਿਣਤੀ (Bardana Type & Box Capacity) <span className="text-rose-500">*</span>
-                </label>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {/* Type 1: New Juth */}
-                  <button
-                    type="button"
-                    onClick={() => handleTypeChange('NEW')}
-                    className={`p-3 rounded-xl border text-left transition ${
-                      bardanaType === 'NEW'
-                        ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
-                        : 'bg-white text-slate-800 border-slate-200 hover:border-slate-300'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="font-black text-xs">New Juth (ਨਵਾਂ ਬੋਰਾ)</span>
-                      <span
-                        className={`text-[10px] px-1.5 py-0.2 rounded font-bold ${
-                          bardanaType === 'NEW'
-                            ? 'bg-emerald-700 text-white'
-                            : 'bg-emerald-100 text-emerald-800'
-                        }`}
-                      >
-                        1 Box = 500 Bags
-                      </span>
-                    </div>
-                    <p className={`text-[10px] mt-1 ${bardanaType === 'NEW' ? 'text-emerald-100' : 'text-slate-500'}`}>
-                      ਹਰੇਕ ਬਕਸੇ ਵਿੱਚ 500 ਨਵੇਂ ਬੋਰੇ ਹੁੰਦੇ ਹਨ
-                    </p>
-                  </button>
-
-                  {/* Type 2: Old Juth */}
-                  <button
-                    type="button"
-                    onClick={() => handleTypeChange('OLD')}
-                    className={`p-3 rounded-xl border text-left transition ${
-                      bardanaType === 'OLD'
-                        ? 'bg-amber-600 text-white border-amber-600 shadow-sm'
-                        : 'bg-white text-slate-800 border-slate-200 hover:border-slate-300'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="font-black text-xs">Old Juth (ਪੁਰਾਣਾ ਬੋਰਾ)</span>
-                      <span
-                        className={`text-[10px] px-1.5 py-0.2 rounded font-bold ${
-                          bardanaType === 'OLD'
-                            ? 'bg-amber-700 text-white'
-                            : 'bg-amber-100 text-amber-800'
-                        }`}
-                      >
-                        1 Box = 50 Bags
-                      </span>
-                    </div>
-                    <p className={`text-[10px] mt-1 ${bardanaType === 'OLD' ? 'text-amber-100' : 'text-slate-500'}`}>
-                      ਹਰੇਕ ਬਕਸੇ ਵਿੱਚ 50 ਪੁਰਾਣੇ ਬੋਰੇ ਹੁੰਦੇ ਹਨ
-                    </p>
-                  </button>
+                <div className="flex items-center justify-between">
+                  <label className="block font-bold text-slate-700">
+                    ਬਾਰਦਾਨਾ ਮਾਤਰਾ ਦਰਜ ਕਰੋ (Bardana Quantities) <span className="text-rose-500">*</span>
+                  </label>
+                  <span className="text-[10px] text-slate-500 font-medium">
+                    1 New Box = 500 Bags • 1 Old Box = 50 Bags
+                  </span>
                 </div>
 
-                {/* Boxes & Bags Inputs */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1">
-                      ਬਕਸਿਆਂ ਦੀ ਗਿਣਤੀ (Number of Boxes) <span className="text-rose-500">*</span>
-                    </label>
-                    <input
-                      type="number"
-                      min="1"
-                      step="1"
-                      value={boxes || ''}
-                      onChange={(e) => handleBoxesChange(parseInt(e.target.value, 10) || 0)}
-                      className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs font-mono font-bold text-slate-900 focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
-                    />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* Field 1: New Juth */}
+                  <div className="bg-white border border-emerald-300 rounded-xl p-3 space-y-1.5 shadow-2xs">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-black text-emerald-950 flex items-center gap-1.5">
+                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block"></span>
+                        <span>New Juth / ਨਵੀਂ ਜੂਥ</span>
+                      </label>
+                      <span className="text-[10px] font-bold bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded">
+                        500 Bags / Box
+                      </span>
+                    </div>
+
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={newBags}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setNewBags(val === '' ? '' : Math.max(0, parseInt(val, 10) || 0));
+                        }}
+                        placeholder="0"
+                        className="w-full bg-emerald-50/40 border border-emerald-300 rounded-lg px-3 py-2 text-base font-mono font-black text-emerald-950 focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-hidden pr-14"
+                      />
+                      <span className="absolute right-3 top-2.5 text-xs font-bold text-emerald-700">
+                        Bags
+                      </span>
+                    </div>
+
+                    <div className="text-[10px] text-slate-500 flex justify-between pt-0.5">
+                      <span>ਬਕਸੇ: {Math.floor(numNewBags / 500)} Boxes</span>
+                      <span>ਖੁੱਲ੍ਹੇ: {numNewBags % 500} Loose Bags</span>
+                    </div>
                   </div>
 
+                  {/* Field 2: Old Juth */}
+                  <div className="bg-white border border-amber-300 rounded-xl p-3 space-y-1.5 shadow-2xs">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-black text-amber-950 flex items-center gap-1.5">
+                        <span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block"></span>
+                        <span>Old Juth / ਪੁਰਾਣੀ ਜੂਥ</span>
+                      </label>
+                      <span className="text-[10px] font-bold bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded">
+                        50 Bags / Box
+                      </span>
+                    </div>
+
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={oldBags}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setOldBags(val === '' ? '' : Math.max(0, parseInt(val, 10) || 0));
+                        }}
+                        placeholder="0"
+                        className="w-full bg-amber-50/40 border border-amber-300 rounded-lg px-3 py-2 text-base font-mono font-black text-amber-950 focus:bg-white focus:ring-2 focus:ring-amber-500 focus:outline-hidden pr-14"
+                      />
+                      <span className="absolute right-3 top-2.5 text-xs font-bold text-amber-700">
+                        Bags
+                      </span>
+                    </div>
+
+                    <div className="text-[10px] text-slate-500 flex justify-between pt-0.5">
+                      <span>ਬਕਸੇ: {Math.floor(numOldBags / 50)} Boxes</span>
+                      <span>ਖੁੱਲ੍ਹੇ: {numOldBags % 50} Loose Bags</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Real-time Automatically Calculated Total Bags */}
+                <div className="bg-gradient-to-r from-emerald-900 to-slate-900 text-white rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-sm">
                   <div>
-                    <label className="block font-bold text-slate-700 mb-1">
-                      ਕੁੱਲ ਬੋਰਿਆਂ ਦੀ ਗਿਣਤੀ (Total Bags) <span className="text-rose-500">*</span>
-                    </label>
-                    <input
-                      type="number"
-                      min="1"
-                      step="1"
-                      value={bags || ''}
-                      onChange={(e) => setBags(parseInt(e.target.value, 10) || 0)}
-                      className="w-full bg-white border border-emerald-400 rounded-lg px-3 py-2 text-xs font-mono font-black text-emerald-950 focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
-                    />
-                    <span className="text-[10px] text-slate-500 mt-1 block">
-                      ਹਿਸਾਬ: {boxes} ਬਕਸੇ × {bardanaType === 'NEW' ? 500 : 50} = {boxes * (bardanaType === 'NEW' ? 500 : 50)} ਬੋਰੇ ({bardanaType === 'NEW' ? 'New Juth' : 'Old Juth'} Stock)
+                    <span className="text-[11px] font-bold text-emerald-300 uppercase tracking-wider block">
+                      ਕੁੱਲ ਬੋਰੀਆਂ (Total Bags Calculation)
+                    </span>
+                    <span className="text-xs text-slate-300">
+                      ਸੂਤਰ: ਨਵੀਂ ਜੂਥ ({numNewBags}) + ਪੁਰਾਣੀ ਜੂਥ ({numOldBags})
+                    </span>
+                  </div>
+
+                  <div className="text-right flex items-baseline sm:flex-col justify-between sm:justify-end gap-2">
+                    <span className="text-xl sm:text-2xl font-black font-mono text-emerald-400">
+                      {totalBags.toLocaleString('en-IN')}{' '}
+                      <span className="text-xs font-bold text-white">Bags / ਬੋਰੀਆਂ</span>
                     </span>
                   </div>
                 </div>
@@ -1170,9 +1261,9 @@ export const BardanaManagement: React.FC = () => {
                     <th className="py-2.5 px-3">ਏਜੰਸੀ (Agency)</th>
                     <th className="py-2.5 px-3">ਕਿੱਥੋਂ ਪ੍ਰਾਪਤ (From)</th>
                     <th className="py-2.5 px-3">ਸੈਲਰ / ਸਰੋਤ ਦਾ ਨਾਂ</th>
-                    <th className="py-2.5 px-3 text-center">ਬਾਰਦਾਨਾ ਕਿਸਮ</th>
-                    <th className="py-2.5 px-3 text-right">ਬਕਸੇ</th>
-                    <th className="py-2.5 px-3 text-right">ਕੁੱਲ ਬੋਰੇ</th>
+                    <th className="py-2.5 px-3 text-right text-emerald-300">ਨਵੀਂ ਜੂਥ (New)</th>
+                    <th className="py-2.5 px-3 text-right text-amber-300">ਪੁਰਾਣੀ ਜੂਥ (Old)</th>
+                    <th className="py-2.5 px-3 text-right text-white">ਕੁੱਲ ਬੋਰੀਆਂ (Total)</th>
                     <th className="py-2.5 px-3 text-center">ਐਕਸ਼ਨ (Actions)</th>
                   </tr>
                 </thead>
@@ -1190,97 +1281,155 @@ export const BardanaManagement: React.FC = () => {
                       </td>
                     </tr>
                   ) : (
-                    filteredRecords.map((rec) => (
-                      <tr key={rec.id} className="hover:bg-slate-50 transition">
-                        <td className="py-2.5 px-3 font-mono font-bold text-slate-900 whitespace-nowrap">
-                          {rec.date}
-                        </td>
-                        <td className="py-2.5 px-3 whitespace-nowrap">
-                          <span className="bg-slate-100 text-slate-900 font-mono font-bold text-[11px] px-2 py-0.5 rounded">
-                            {rec.id}
-                          </span>
-                        </td>
-                        <td className="py-2.5 px-3 font-bold text-slate-900 whitespace-nowrap">
-                          {rec.agency}
-                        </td>
-                        <td className="py-2.5 px-3 whitespace-nowrap">
-                          <span
-                            className={`px-2 py-0.5 rounded text-[10px] font-black ${
-                              rec.receivedFrom === 'SELLER'
-                                ? 'bg-blue-100 text-blue-900'
-                                : 'bg-purple-100 text-purple-900'
-                            }`}
-                          >
-                            {rec.receivedFrom === 'SELLER' ? 'Seller (ਸੈਲਰ)' : 'Agency (ਏਜੰਸੀ)'}
-                          </span>
-                        </td>
-                        <td className="py-2.5 px-3 font-bold text-slate-900 whitespace-nowrap">
-                          {rec.sourceName}
-                        </td>
-                        <td className="py-2.5 px-3 text-center whitespace-nowrap">
-                          <span
-                            className={`px-2 py-0.5 rounded text-[10px] font-black ${
-                              rec.bardanaType === 'NEW'
-                                ? 'bg-emerald-100 text-emerald-800'
-                                : 'bg-amber-100 text-amber-800'
-                            }`}
-                          >
-                            {rec.bardanaType === 'NEW' ? 'New Juth (500)' : 'Old Juth (50)'}
-                          </span>
-                        </td>
-                        <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-700 whitespace-nowrap">
-                          {rec.boxes}
-                        </td>
-                        <td className="py-2.5 px-3 text-right font-mono font-black text-emerald-950 whitespace-nowrap">
-                          +{rec.bags.toLocaleString('en-IN')}
-                        </td>
-                        <td className="py-2.5 px-3 text-center whitespace-nowrap">
-                          <div className="flex items-center justify-center gap-1">
-                            {/* View */}
-                            <button
-                              type="button"
-                              onClick={() => setViewRecord(rec)}
-                              title="ਵੇਖੋ (View)"
-                              className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md transition"
-                            >
-                              <Eye className="w-3.5 h-3.5" />
-                            </button>
+                    filteredRecords.map((rec) => {
+                      const recNewBags = rec.newBags !== undefined ? rec.newBags : (rec.bardanaType === 'NEW' ? rec.bags : 0);
+                      const recOldBags = rec.oldBags !== undefined ? rec.oldBags : (rec.bardanaType === 'OLD' ? rec.bags : 0);
+                      const recTotalBags = Number((rec as any).totalBags ?? rec.bags ?? (recNewBags + recOldBags)) || 0;
 
-                            {/* Edit */}
-                            <button
-                              type="button"
-                              onClick={() => setEditRecord(rec)}
-                              title="ਸੋਧੋ (Edit)"
-                              className="p-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-md transition"
+                      return (
+                        <tr key={rec.id} className="hover:bg-slate-50 transition">
+                          <td className="py-2.5 px-3 font-mono font-bold text-slate-900 whitespace-nowrap">
+                            {rec.date}
+                          </td>
+                          <td className="py-2.5 px-3 whitespace-nowrap">
+                            <span className="bg-slate-100 text-slate-900 font-mono font-bold text-[11px] px-2 py-0.5 rounded">
+                              {rec.id}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-3 font-bold text-slate-900 whitespace-nowrap">
+                            {rec.agency}
+                          </td>
+                          <td className="py-2.5 px-3 whitespace-nowrap">
+                            <span
+                              className={`px-2 py-0.5 rounded text-[10px] font-black ${
+                                rec.receivedFrom === 'SELLER'
+                                  ? 'bg-blue-100 text-blue-900'
+                                  : rec.receivedFrom === 'OTHER_PARTY'
+                                  ? 'bg-amber-100 text-amber-900'
+                                  : 'bg-purple-100 text-purple-900'
+                              }`}
                             >
-                              <Edit className="w-3.5 h-3.5" />
-                            </button>
+                              {rec.receivedFrom === 'SELLER' ? 'Seller (ਸੈਲਰ)' : rec.receivedFrom === 'OTHER_PARTY' ? 'Other (ਹੋਰ)' : 'Agency (ਏਜੰਸੀ)'}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-3 font-bold text-slate-900 whitespace-nowrap">
+                            <div className="flex items-center gap-1.5">
+                              <span>{rec.sourceName}</span>
+                              {rec.sellerId && (
+                                <span className="text-[10px] font-mono font-normal text-blue-600 bg-blue-50 px-1 py-0.2 rounded border border-blue-200">
+                                  ID: {rec.sellerId}
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="py-2.5 px-3 text-right font-mono font-bold text-emerald-700 whitespace-nowrap">
+                            {recNewBags > 0 ? (
+                              <div>
+                                <span>+{recNewBags.toLocaleString('en-IN')}</span>
+                                <span className="text-[10px] block text-slate-400 font-normal">
+                                  {Math.floor(recNewBags / 500)}bx
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-slate-300 font-normal">0</span>
+                            )}
+                          </td>
+                          <td className="py-2.5 px-3 text-right font-mono font-bold text-amber-700 whitespace-nowrap">
+                            {recOldBags > 0 ? (
+                              <div>
+                                <span>+{recOldBags.toLocaleString('en-IN')}</span>
+                                <span className="text-[10px] block text-slate-400 font-normal">
+                                  {Math.floor(recOldBags / 50)}bx
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-slate-300 font-normal">0</span>
+                            )}
+                          </td>
+                          <td className="py-2.5 px-3 text-right font-mono font-black text-slate-950 whitespace-nowrap">
+                            +{recTotalBags.toLocaleString('en-IN')}
+                          </td>
+                          <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                            <div className="flex items-center justify-center gap-1">
+                              {/* View */}
+                              <button
+                                type="button"
+                                onClick={() => setViewRecord(rec)}
+                                title="ਵੇਖੋ (View)"
+                                className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md transition"
+                              >
+                                <Eye className="w-3.5 h-3.5" />
+                              </button>
 
-                            {/* PDF */}
-                            <button
-                              type="button"
-                              onClick={() => exportBardanaReceivedVoucherPDF(rec, settings)}
-                              title="PDF ਐਕਸਪੋਰਟ"
-                              className="p-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-md transition"
-                            >
-                              <Download className="w-3.5 h-3.5" />
-                            </button>
+                              {/* Edit */}
+                              <button
+                                type="button"
+                                onClick={() => setEditRecord(rec)}
+                                title="ਸੋਧੋ (Edit)"
+                                className="p-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-md transition"
+                              >
+                                <Edit className="w-3.5 h-3.5" />
+                              </button>
 
-                            {/* Delete */}
-                            <button
-                              type="button"
-                              onClick={() => handleDelete(rec)}
-                              title="ਮਿਟਾਓ (Delete)"
-                              className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-md transition"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
+                              {/* PDF */}
+                              <button
+                                type="button"
+                                onClick={() => exportBardanaReceivedVoucherPDF(rec, settings)}
+                                title="PDF ਐਕਸਪੋਰਟ"
+                                className="p-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-md transition"
+                              >
+                                <Download className="w-3.5 h-3.5" />
+                              </button>
+
+                              {/* Delete */}
+                              <button
+                                type="button"
+                                onClick={() => handleDelete(rec)}
+                                title="ਮਿਟਾਓ (Delete)"
+                                className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-md transition"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
+                {filteredRecords.length > 0 && (
+                  <tfoot className="bg-slate-100 border-t-2 border-slate-300 font-bold text-slate-900 text-xs">
+                    <tr>
+                      <td colSpan={5} className="py-2.5 px-3 text-right uppercase tracking-wider text-[11px] font-black">
+                        ਕੁੱਲ ਜੋੜ (Total Filtered):
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-mono font-black text-emerald-800">
+                        +
+                        {filteredRecords
+                          .reduce((sum, r) => sum + (r.newBags !== undefined ? r.newBags : (r.bardanaType === 'NEW' ? r.bags : 0)), 0)
+                          .toLocaleString('en-IN')}
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-mono font-black text-amber-800">
+                        +
+                        {filteredRecords
+                          .reduce((sum, r) => sum + (r.oldBags !== undefined ? r.oldBags : (r.bardanaType === 'OLD' ? r.bags : 0)), 0)
+                          .toLocaleString('en-IN')}
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-mono font-black text-slate-950">
+                        +
+                        {filteredRecords
+                          .reduce(
+                            (sum, r) =>
+                              sum +
+                              (Number((r as any).totalBags ?? r.bags ?? ((r.newBags || 0) + (r.oldBags || 0))) || 0),
+                            0
+                          )
+                          .toLocaleString('en-IN')}
+                      </td>
+                      <td></td>
+                    </tr>
+                  </tfoot>
+                )}
               </table>
             </div>
           </div>

@@ -1,1279 +1,1843 @@
 import React, { useState, useMemo } from 'react';
 import { useMandi } from '../../context/MandiContext';
 import {
-  FileSpreadsheet,
+  FileText,
   Printer,
-  Edit,
   Download,
-  Filter,
-  Users,
-  Package,
+  Layers,
   Scale,
-  DollarSign,
-  Building2,
   ShoppingBag,
-  UserCheck,
+  Truck,
+  Boxes,
+  Calculator,
+  Users,
+  CreditCard,
+  ArrowLeftRight,
+  PackageCheck,
+  Search,
   Calendar,
-  ChevronDown,
-  ChevronUp
+  Filter,
+  CheckCircle2,
+  ChevronDown
 } from 'lucide-react';
 import {
   formatCurrency,
   formatKgToQulKg,
-  FIXED_RATE_PER_QTL,
   FIXED_BAG_WEIGHT_KG
 } from '../../utils/calculations';
-import { exportDailyPurchaseRegisterPDF } from '../../utils/purchasePdfExport';
-import { SearchableSelect, SearchableSelectOption } from '../common/SearchableSelect';
+import {
+  exportFarmerAccountSummaryListPDF,
+  exportFarmerAccountFullDetailsSingleOrAllPDF,
+  exportMandiArrivalReportPDF,
+  exportDailyPurchaseReportPDF,
+  exportLeftingReportPDF,
+  exportBardanaCategorizedPDF,
+  exportStockBalanceCategoryPDF,
+  exportFarmerRegisterPDF,
+  exportAdvanceInterestPDF,
+  exportPaymentAdjustmentPDF,
+  exportBagTransferPDF,
+  exportCombinedAllReportsPDF
+} from '../../utils/reportsPdfExports';
+import {
+  getPaymentTransfers,
+  getSameFarmerAdjustments,
+  getBagTransfers
+} from '../../utils/farmerAdjustmentsStorage';
+import { StockLedgerExportOptions } from '../../utils/stockBalancePdfExport';
 
-type ReportTab = 'daily-totals' | 'weighment' | 'farmer-master' | 'village-summary' | 'bardana-summary' | 'market-committee';
+export type ReportCategoryTab =
+  | 'farmer-account'
+  | 'mandi-arrival'
+  | 'daily-purchase'
+  | 'lefting'
+  | 'bardana'
+  | 'stock-balance'
+  | 'farmer-register'
+  | 'advance-interest'
+  | 'payment-adjustment'
+  | 'bag-transfer';
 
 export const MandiReports: React.FC = () => {
   const {
     farmers,
     bagsEntries,
     dailyPurchaseRecords,
+    leftingRecords,
+    bardanaRecords,
+    farmerAdvances,
     agencies,
-    setActiveReceipt,
-    setActiveBagsEntryToEdit,
     settings,
     getAllFarmersPurchaseSummaries,
-    getFarmerPurchaseSummary,
     language
   } = useMandi();
 
   const isEn = language === 'en';
 
-  const [activeTab, setActiveTab] = useState<ReportTab>('daily-totals');
+  const [activeTab, setActiveTab] = useState<ReportCategoryTab>('farmer-account');
+  const [showCombinedModal, setShowCombinedModal] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+
+  // Common Filter States
+  const [filterDate, setFilterDate] = useState<string>('');
+  const [filterFarmerId, setFilterFarmerId] = useState<string>('ALL');
+  const [filterAgency, setFilterAgency] = useState<string>('ALL');
   const [filterVillage, setFilterVillage] = useState<string>('ALL');
-  const [filterBardana, setFilterBardana] = useState<string>('ALL');
-  const [searchFarmer, setSearchFarmer] = useState<string>('');
-  const [expandedDailyDates, setExpandedDailyDates] = useState<{ [date: string]: boolean }>({});
+  const [searchQuery, setSearchQuery] = useState<string>('');
 
-  const toggleDailyDate = (date: string) => {
-    setExpandedDailyDates((prev) => ({ ...prev, [date]: !prev[date] }));
+  // Live adjustments from storage
+  const paymentTransfers = useMemo(() => getPaymentTransfers(), [activeTab]);
+  const sameAdjustments = useMemo(() => getSameFarmerAdjustments(), [activeTab]);
+  const bagTransfers = useMemo(() => getBagTransfers(), [activeTab]);
+
+  // Farmer purchase summaries
+  const allSummaries = useMemo(() => getAllFarmersPurchaseSummaries(), [getAllFarmersPurchaseSummaries, farmers, bagsEntries, dailyPurchaseRecords, farmerAdvances]);
+
+  // Unique villages
+  const uniqueVillages = useMemo(() => Array.from(new Set(farmers.map((f) => f.village).filter(Boolean))), [farmers]);
+
+  // Selected Farmer Object
+  const selectedFarmer = useMemo(() => {
+    if (!filterFarmerId || filterFarmerId === 'ALL') return null;
+    return farmers.find((f) => f.id === filterFarmerId) || null;
+  }, [farmers, filterFarmerId]);
+
+  // Reset Filters when switching tabs
+  const handleTabChange = (tab: ReportCategoryTab) => {
+    setActiveTab(tab);
+    setSearchQuery('');
   };
-
-  // Market Committee Report Filters
-  const [mcAgencyFilter, setMcAgencyFilter] = useState<string>('ALL');
-  const [mcDateFilter, setMcDateFilter] = useState<string>('');
-  const [mcVillageFilter, setMcVillageFilter] = useState<string>('ALL');
-  const [mcSearchQuery, setMcSearchQuery] = useState<string>('');
-
-  // Extract unique villages
-  const uniqueVillages = useMemo(() => Array.from(new Set(farmers.map((f) => f.village))), [farmers]);
-
-  const reportAgencyFilterOptions: SearchableSelectOption[] = useMemo(() => [
-    { value: 'ALL', label: isEn ? 'All Agencies' : 'ਸਾਰੀਆਂ ਏਜੰਸੀਆਂ (All Agencies)' },
-    ...agencies.map((ag) => ({
-      value: ag.nameEn,
-      label: isEn ? ag.nameEn : `${ag.namePa} (${ag.nameEn})`,
-      keywords: [ag.nameEn, ag.namePa]
-    }))
-  ], [agencies, isEn]);
-
-  const reportVillageFilterOptions: SearchableSelectOption[] = useMemo(() => [
-    { value: 'ALL', label: isEn ? 'All Villages' : 'ਸਾਰੇ ਪਿੰਡ (All Villages)' },
-    ...uniqueVillages.map((v) => ({
-      value: v,
-      label: v,
-      keywords: [v]
-    }))
-  ], [uniqueVillages, isEn]);
-
-  const reportBardanaFilterOptions: SearchableSelectOption[] = useMemo(() => [
-    { value: 'ALL', label: isEn ? 'All Bardana' : 'ਸਾਰਾ ਬਾਰਦਾਨਾ (All Bardana)' },
-    { value: 'NEW', label: isEn ? 'New Bardana' : 'ਨਵਾਂ ਬਾਰਦਾਨਾ (New)' },
-    { value: 'OLD', label: isEn ? 'Old Bardana' : 'ਪੁਰਾਣਾ ਬਾਰਦਾਨਾ (Old)' }
-  ], [isEn]);
-
-  // Filtered Bags Entries
-  const filteredBagsEntries = bagsEntries.filter((b) => {
-    if (filterVillage !== 'ALL' && b.farmerVillage !== filterVillage) return false;
-    if (filterBardana !== 'ALL' && b.bardana !== filterBardana) return false;
-    if (searchFarmer) {
-      const q = searchFarmer.toLowerCase();
-      const match =
-        b.farmerName.toLowerCase().includes(q) ||
-        b.farmerNamePa.toLowerCase().includes(q) ||
-        b.farmerId.toLowerCase().includes(q) ||
-        b.entryNumber.toLowerCase().includes(q);
-      if (!match) return false;
-    }
-    return true;
-  });
-
-  // Filtered Daily Purchases for Market Committee tab
-  const filteredPurchases = dailyPurchaseRecords.filter((p) => {
-    if (mcAgencyFilter !== 'ALL' && p.agency !== mcAgencyFilter) return false;
-    if (mcVillageFilter !== 'ALL' && p.village !== mcVillageFilter) return false;
-    if (mcDateFilter.trim() && p.date !== mcDateFilter.trim()) return false;
-    if (mcSearchQuery.trim()) {
-      const q = mcSearchQuery.toLowerCase().trim();
-      const match =
-        p.id.toLowerCase().includes(q) ||
-        p.agency.toLowerCase().includes(q) ||
-        p.farmerName.toLowerCase().includes(q) ||
-        (p.farmerNamePa && p.farmerNamePa.toLowerCase().includes(q)) ||
-        p.farmerId.toLowerCase().includes(q) ||
-        p.village.toLowerCase().includes(q);
-      if (!match) return false;
-    }
-    return true;
-  });
-
-  // Calculate totals
-  const totalBags = filteredBagsEntries.reduce((s, b) => s + b.bags, 0);
-  const totalBagsWeightKg = filteredBagsEntries.reduce((s, b) => s + b.totalBagsWeightKg, 0);
-  const totalTotaKg = filteredBagsEntries.reduce((s, b) => s + b.totaKg, 0);
-  const totalGrandKg = totalBagsWeightKg + totalTotaKg;
-  const totalAmount = filteredBagsEntries.reduce((s, b) => s + b.totalAmount, 0);
-
-  const bagsWeightBreakdown = formatKgToQulKg(totalBagsWeightKg);
-  const grandTotalBreakdown = formatKgToQulKg(totalGrandKg);
-
-  // Market committee purchase totals
-  const mcTotalBags = filteredPurchases.reduce((s, p) => s + (Number(p.bags) || 0), 0);
-  const mcTotalWeightKg = filteredPurchases.reduce((s, p) => s + (Number(p.totalWeightKg) || 0), 0);
-  const mcTotalAmount = filteredPurchases.reduce((s, p) => s + (Number(p.totalAmount) || 0), 0);
-
-  // Village summary aggregation
-  const villageSummary = uniqueVillages.map((vil) => {
-    const vilEntries = bagsEntries.filter((b) => b.farmerVillage === vil);
-    const vilFarmers = farmers.filter((f) => f.village === vil);
-    const vilBags = vilEntries.reduce((s, b) => s + b.bags, 0);
-    const vilWeightKg = vilEntries.reduce((s, b) => s + b.grandTotalKg, 0);
-    const vilAmount = vilEntries.reduce((s, b) => s + b.totalAmount, 0);
-    const vilPa = vilFarmers[0]?.villagePa || vil;
-
-    return {
-      village: vil,
-      villagePa: vilPa,
-      farmerCount: vilFarmers.length,
-      bags: vilBags,
-      weightBreakdown: formatKgToQulKg(vilWeightKg),
-      amount: vilAmount
-    };
-  });
-
-  // Export CSV for Weighment
-  const exportToCsv = () => {
-    const headers = [
-      'Slip No',
-      'Date',
-      'Farmer ID',
-      'Farmer Name (English)',
-      'Farmer Name (Punjabi)',
-      'Father Name',
-      'Village',
-      'Mobile',
-      'Aadhaar',
-      'Bags',
-      'Weight Per Bag (KG)',
-      'Bags Weight',
-      'Tota (KG)',
-      'Grand Total Weight',
-      'Bardana',
-      'Rate Per Qtl',
-      'Total Amount (INR)'
-    ];
-
-    const rows = filteredBagsEntries.map((b) => [
-      b.entryNumber,
-      b.date,
-      b.farmerId,
-      `"${b.farmerName}"`,
-      `"${b.farmerNamePa}"`,
-      `"${b.farmerFatherName || ''}"`,
-      `"${b.farmerVillage}"`,
-      b.farmerMobile,
-      b.farmerAadhaar,
-      b.bags,
-      '37.50',
-      `"${b.totalBagsWeightDisplay}"`,
-      b.totaKg,
-      `"${b.grandTotalDisplay}"`,
-      b.bardana,
-      b.ratePerQtl,
-      b.totalAmount
-    ]);
-
-    const csvContent =
-      'data:text/csv;charset=utf-8,' +
-      [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
-
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `Punjab_Mandi_Report_${Date.now()}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  // Export Market Committee CSV
-  const exportMarketCommitteeCsv = () => {
-    const headers = [
-      'Voucher ID',
-      'Date',
-      'Agency',
-      'Farmer ID',
-      'Farmer Name (English)',
-      'Farmer Name (Punjabi)',
-      'Father Name',
-      'Village',
-      'Mobile',
-      'Bags Purchased',
-      'Weight (Qul)',
-      'Weight (Kg)',
-      'Total Weight (KG)',
-      'Rate (INR/Qtl)',
-      'Total Amount (INR)',
-      'Boli Number',
-      'Gate Pass Number',
-      'Remarks'
-    ];
-
-    const rows = filteredPurchases.map((p) => [
-      p.id,
-      p.date,
-      `"${p.agency}"`,
-      p.farmerId,
-      `"${p.farmerName}"`,
-      `"${p.farmerNamePa || ''}"`,
-      `"${p.fatherName || ''}"`,
-      `"${p.village}"`,
-      p.mobile || '',
-      p.bags,
-      p.qul,
-      p.kg,
-      p.totalWeightKg.toFixed(2),
-      p.rate,
-      p.totalAmount.toFixed(2),
-      `"${p.boliNumber || ''}"`,
-      `"${p.gatePassNumber || ''}"`,
-      `"${p.remarks || ''}"`
-    ]);
-
-    const csvContent =
-      'data:text/csv;charset=utf-8,' +
-      [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
-
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `Market_Committee_Report_${Date.now()}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  // Group all daily arrivals & purchases by Date for Daily Totals
-  const dailyTotalsData = useMemo(() => {
-    const dateMap = new Map<
-      string,
-      {
-        date: string;
-        arrivals: typeof bagsEntries;
-        purchases: typeof dailyPurchaseRecords;
-        uniqueFarmers: Set<string>;
-        totalArrivalBags: number;
-        totalArrivalKg: number;
-        totalArrivalAmount: number;
-        totalPurchasedBags: number;
-        totalPurchasedKg: number;
-        totalPurchasedAmount: number;
-      }
-    >();
-
-    // Add all bags entries (Mandi Arrivals / Weighments)
-    bagsEntries.forEach((b) => {
-      if (!dateMap.has(b.date)) {
-        dateMap.set(b.date, {
-          date: b.date,
-          arrivals: [],
-          purchases: [],
-          uniqueFarmers: new Set(),
-          totalArrivalBags: 0,
-          totalArrivalKg: 0,
-          totalArrivalAmount: 0,
-          totalPurchasedBags: 0,
-          totalPurchasedKg: 0,
-          totalPurchasedAmount: 0
-        });
-      }
-      const entry = dateMap.get(b.date)!;
-      entry.arrivals.push(b);
-      entry.uniqueFarmers.add(b.farmerId);
-      entry.totalArrivalBags += Number(b.bags) || 0;
-      entry.totalArrivalKg += Number(b.grandTotalKg) || 0;
-      entry.totalArrivalAmount += Number(b.totalAmount) || 0;
-    });
-
-    // Add all daily purchases (Procurement)
-    dailyPurchaseRecords.forEach((p) => {
-      if (!dateMap.has(p.date)) {
-        dateMap.set(p.date, {
-          date: p.date,
-          arrivals: [],
-          purchases: [],
-          uniqueFarmers: new Set(),
-          totalArrivalBags: 0,
-          totalArrivalKg: 0,
-          totalArrivalAmount: 0,
-          totalPurchasedBags: 0,
-          totalPurchasedKg: 0,
-          totalPurchasedAmount: 0
-        });
-      }
-      const entry = dateMap.get(p.date)!;
-      entry.purchases.push(p);
-      entry.uniqueFarmers.add(p.farmerId);
-      entry.totalPurchasedBags += Number(p.bags) || 0;
-      entry.totalPurchasedKg += Number(p.totalWeightKg) || 0;
-      entry.totalPurchasedAmount += Number(p.totalAmount) || 0;
-    });
-
-    // Sort dates descending (newest first)
-    return Array.from(dateMap.values()).sort((a, b) => {
-      const partsA = a.date.split('/');
-      const partsB = b.date.split('/');
-      if (partsA.length === 3 && partsB.length === 3) {
-        const dA = new Date(parseInt(partsA[2], 10), parseInt(partsA[1], 10) - 1, parseInt(partsA[0], 10));
-        const dB = new Date(parseInt(partsB[2], 10), parseInt(partsB[1], 10) - 1, parseInt(partsB[0], 10));
-        return dB.getTime() - dA.getTime();
-      }
-      return b.date.localeCompare(a.date);
-    });
-  }, [bagsEntries, dailyPurchaseRecords]);
 
   const handlePrint = () => {
     window.print();
   };
 
+  // Helper for safe PDF async triggers
+  const runExport = async (task: () => Promise<void>) => {
+    try {
+      setIsExporting(true);
+      await task();
+    } catch (err) {
+      console.error('PDF Export Error:', err);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  // 1. Filtered Farmer Accounts
+  const filteredFarmerSummaries = useMemo(() => {
+    return allSummaries.filter((s) => {
+      if (filterFarmerId !== 'ALL' && s.farmer.id !== filterFarmerId) return false;
+      if (filterVillage !== 'ALL' && s.farmer.village !== filterVillage) return false;
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        const f = s.farmer;
+        const match =
+          f.farmerName.toLowerCase().includes(q) ||
+          f.id.toLowerCase().includes(q) ||
+          (f.farmerNamePa && f.farmerNamePa.includes(q)) ||
+          f.village.toLowerCase().includes(q);
+        if (!match) return false;
+      }
+      return true;
+    });
+  }, [allSummaries, filterFarmerId, filterVillage, searchQuery]);
+
+  // 2. Filtered Mandi Arrivals (Tola)
+  const filteredArrivals = useMemo(() => {
+    return bagsEntries.filter((b) => {
+      if (filterDate && b.date !== filterDate) return false;
+      if (filterFarmerId !== 'ALL' && b.farmerId !== filterFarmerId) return false;
+      if (filterVillage !== 'ALL' && b.farmerVillage !== filterVillage) return false;
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        const match =
+          b.farmerName.toLowerCase().includes(q) ||
+          (b.farmerNamePa && b.farmerNamePa.includes(q)) ||
+          b.entryNumber.toLowerCase().includes(q) ||
+          b.farmerId.toLowerCase().includes(q);
+        if (!match) return false;
+      }
+      return true;
+    });
+  }, [bagsEntries, filterDate, filterFarmerId, filterVillage, searchQuery]);
+
+  // 3. Filtered Purchases
+  const filteredPurchases = useMemo(() => {
+    return dailyPurchaseRecords.filter((p) => {
+      if (filterDate && p.date !== filterDate) return false;
+      if (filterAgency !== 'ALL' && p.agency !== filterAgency) return false;
+      if (filterFarmerId !== 'ALL' && p.farmerId !== filterFarmerId) return false;
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        const match =
+          p.farmerName.toLowerCase().includes(q) ||
+          p.id.toLowerCase().includes(q) ||
+          (p.agency && p.agency.toLowerCase().includes(q));
+        if (!match) return false;
+      }
+      return true;
+    });
+  }, [dailyPurchaseRecords, filterDate, filterAgency, filterFarmerId, searchQuery]);
+
+  // 4. Filtered Lefting
+  const filteredLeftings = useMemo(() => {
+    return leftingRecords.filter((l) => {
+      const d = l.date || (l as any).dispatchDate;
+      if (filterDate && d !== filterDate) return false;
+      if (filterAgency !== 'ALL' && l.agency !== filterAgency && (l as any).sellerOrAgency !== filterAgency) return false;
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        const match =
+          l.id.toLowerCase().includes(q) ||
+          (l.sellerName && l.sellerName.toLowerCase().includes(q)) ||
+          ((l as any).destination && (l as any).destination.toLowerCase().includes(q)) ||
+          ((l as any).truckNo && (l as any).truckNo.toLowerCase().includes(q));
+        if (!match) return false;
+      }
+      return true;
+    });
+  }, [leftingRecords, filterDate, filterAgency, searchQuery]);
+
+  // 5. Filtered Bardana
+  const filteredBardana = useMemo(() => {
+    return bardanaRecords.filter((b) => {
+      if (filterDate && b.date !== filterDate) return false;
+      if (filterAgency !== 'ALL' && b.agency !== filterAgency) return false;
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        const match =
+          b.id.toLowerCase().includes(q) ||
+          (b.sourceName && b.sourceName.toLowerCase().includes(q)) ||
+          (b.agency && b.agency.toLowerCase().includes(q));
+        if (!match) return false;
+      }
+      return true;
+    });
+  }, [bardanaRecords, filterDate, filterAgency, searchQuery]);
+
+  // 6. Stock Balance Ledger Summary
+  const stockBalanceData: StockLedgerExportOptions = useMemo(() => {
+    const totTolaBags = bagsEntries.reduce((s, b) => s + b.bags, 0);
+    const totTolaKg = bagsEntries.reduce((s, b) => s + b.grandTotalKg, 0);
+
+    const totPurchBags = dailyPurchaseRecords.reduce((s, p) => s + (Number(p.bags) || 0), 0);
+    const totPurchKg = dailyPurchaseRecords.reduce((s, p) => s + (Number(p.totalWeightKg) || 0), 0);
+
+    const totLeftBags = leftingRecords.reduce((s, l) => s + (Number(l.bags) || 0), 0);
+    const totLeftKg = leftingRecords.reduce((s, l) => s + (Number(l.totalWeightKg) || (Number(l.bags) || 0) * 37.5), 0);
+
+    const totBardanaRecv = bardanaRecords
+      .filter((b) => b.actionType !== 'GIVE')
+      .reduce((s, b) => s + (Number(b.newBags) || 0) + (Number(b.oldBags) || 0), 0);
+
+    return {
+      settings,
+      filterDateLabel: filterDate || 'All Dates (ਪੂਰਾ ਸੀਜ਼ਨ)',
+      filterAgencyLabel: filterAgency !== 'ALL' ? filterAgency : 'All Agencies (ਸਾਰੀਆਂ ਏਜੰਸੀਆਂ)',
+      filterCategoryLabel: 'ALL CATEGORIES (ਸਾਰੀਆਂ ਸ਼੍ਰੇਣੀਆਂ)',
+      filterPartyLabel: 'All Parties (ਸਾਰੀਆਂ ਧਿਰਾਂ)',
+      summary: {
+        totalTolaBags: totTolaBags,
+        totalPurchaseBags: totPurchBags,
+        totalBardanaBags: totBardanaRecv,
+        totalLeftingBags: totLeftBags
+      },
+      sections: [
+        {
+          categoryTitleEn: '1. TOLA / WEIGHMENT (ਮੰਡੀ ਆਮਦ ਤੁਲਾਈ)',
+          categoryTitlePa: 'ਤੋਲ / ਮੰਡੀ ਆਮਦ',
+          totalStockStr: `${totTolaBags.toLocaleString()} Bags (${formatKgToQulKg(totTolaKg).qtl} Qtl)`,
+          rows: [
+            {
+              sourceType: 'Tola (ਤੋਲ)',
+              totalQty: totTolaBags,
+              totalQtyStr: `${totTolaBags}`,
+              usedType: 'Purchase (ਖਰੀਦ)',
+              usedQty: totPurchBags,
+              usedQtyStr: `${totPurchBags}`,
+              balance: totTolaBags - totPurchBags,
+              balanceStr: `${totTolaBags - totPurchBags} Bags`,
+              statusDesc: totTolaBags >= totPurchBags ? 'Unpurchased Paddy in Mandi' : 'Excess Purchase recorded'
+            },
+            {
+              sourceType: 'Tola (ਤੋਲ)',
+              totalQty: totTolaBags,
+              totalQtyStr: `${totTolaBags}`,
+              usedType: 'Lefting (ਲਿਫਟਿੰਗ)',
+              usedQty: totLeftBags,
+              usedQtyStr: `${totLeftBags}`,
+              balance: totTolaBags - totLeftBags,
+              balanceStr: `${totTolaBags - totLeftBags} Bags`,
+              statusDesc: totTolaBags >= totLeftBags ? 'Remaining in Mandi Pharr' : 'Excess Lefting'
+            },
+            {
+              sourceType: 'Tola (ਤੋਲ)',
+              totalQty: totTolaBags,
+              totalQtyStr: `${totTolaBags}`,
+              usedType: 'Bardana (ਬਾਰਦਾਨਾ)',
+              usedQty: totBardanaRecv,
+              usedQtyStr: `${totBardanaRecv}`,
+              balance: totTolaBags - totBardanaRecv,
+              balanceStr: `${totTolaBags - totBardanaRecv} Bags`,
+              statusDesc: 'Bags arrival vs Total Bardana Stock'
+            }
+          ]
+        },
+        {
+          categoryTitleEn: '2. PURCHASE (ਸਰਕਾਰੀ ਖਰੀਦ ਲੇਖਾ)',
+          categoryTitlePa: 'ਖਰੀਦ / ਪ੍ਰਕਿਉਰਮੈਂਟ',
+          totalStockStr: `${totPurchBags.toLocaleString()} Bags (${formatKgToQulKg(totPurchKg).qtl} Qtl)`,
+          rows: [
+            {
+              sourceType: 'Purchase (ਖਰੀਦ)',
+              totalQty: totPurchBags,
+              totalQtyStr: `${totPurchBags}`,
+              usedType: 'Lefting (ਲਿਫਟਿੰਗ)',
+              usedQty: totLeftBags,
+              usedQtyStr: `${totLeftBags}`,
+              balance: totPurchBags - totLeftBags,
+              balanceStr: `${totPurchBags - totLeftBags} Bags`,
+              statusDesc: totPurchBags >= totLeftBags ? 'Purchased Pending Lefting' : 'Over-dispatch'
+            },
+            {
+              sourceType: 'Purchase (ਖਰੀਦ)',
+              totalQty: totPurchBags,
+              totalQtyStr: `${totPurchBags}`,
+              usedType: 'Bardana (ਬਾਰਦਾਨਾ)',
+              usedQty: totBardanaRecv,
+              usedQtyStr: `${totBardanaRecv}`,
+              balance: totPurchBags - totBardanaRecv,
+              balanceStr: `${totPurchBags - totBardanaRecv} Bags`,
+              statusDesc: 'Bags filled vs Bardana Received'
+            }
+          ]
+        },
+        {
+          categoryTitleEn: '3. LEFTING / DISPATCH (ਸ਼ੈਲਰ ਰਵਾਨਗੀ)',
+          categoryTitlePa: 'ਲਿਫਟਿੰਗ / ਸ਼ੈਲਰ ਡਿਸਪੈਚ',
+          totalStockStr: `${totLeftBags.toLocaleString()} Bags (${formatKgToQulKg(totLeftKg).qtl} Qtl)`,
+          rows: [
+            {
+              sourceType: 'Lefting (ਲਿਫਟਿੰਗ)',
+              totalQty: totLeftBags,
+              totalQtyStr: `${totLeftBags}`,
+              usedType: 'Tola (ਤੋਲ)',
+              usedQty: totTolaBags,
+              usedQtyStr: `${totTolaBags}`,
+              balance: totLeftBags - totTolaBags,
+              balanceStr: `${totLeftBags - totTolaBags} Bags`,
+              statusDesc: 'Total Dispatched compared to Total Arrival'
+            },
+            {
+              sourceType: 'Lefting (ਲਿਫਟਿੰਗ)',
+              totalQty: totLeftBags,
+              totalQtyStr: `${totLeftBags}`,
+              usedType: 'Purchase (ਖਰੀਦ)',
+              usedQty: totPurchBags,
+              usedQtyStr: `${totPurchBags}`,
+              balance: totLeftBags - totPurchBags,
+              balanceStr: `${totLeftBags - totPurchBags} Bags`,
+              statusDesc: 'Dispatched compared to Purchased'
+            }
+          ]
+        },
+        {
+          categoryTitleEn: '4. BARDANA / JUTH STOCK (ਬਾਰਦਾਨਾ ਸਟਾਕ)',
+          categoryTitlePa: 'ਬਾਰਦਾਨਾ / ਜੂਠ ਸਟਾਕ',
+          totalStockStr: `${totBardanaRecv.toLocaleString()} Bags`,
+          rows: [
+            {
+              sourceType: 'Bardana (ਬਾਰਦਾਨਾ)',
+              totalQty: totBardanaRecv,
+              totalQtyStr: `${totBardanaRecv}`,
+              usedType: 'Lefting (ਲਿਫਟਿੰਗ)',
+              usedQty: totLeftBags,
+              usedQtyStr: `${totLeftBags}`,
+              balance: totBardanaRecv - totLeftBags,
+              balanceStr: `${totBardanaRecv - totLeftBags} Bags`,
+              statusDesc: 'Bardana in Mandi vs Dispatched'
+            },
+            {
+              sourceType: 'Bardana (ਬਾਰਦਾਨਾ)',
+              totalQty: totBardanaRecv,
+              totalQtyStr: `${totBardanaRecv}`,
+              usedType: 'Tola (ਤੋਲ)',
+              usedQty: totTolaBags,
+              usedQtyStr: `${totTolaBags}`,
+              balance: totBardanaRecv - totTolaBags,
+              balanceStr: `${totBardanaRecv - totTolaBags} Bags`,
+              statusDesc: 'Available empty bags stock balance'
+            }
+          ]
+        }
+      ]
+    };
+  }, [settings, bagsEntries, dailyPurchaseRecords, leftingRecords, bardanaRecords, filterDate, filterAgency]);
+
+  // 7. Filtered Farmer Master List
+  const filteredFarmers = useMemo(() => {
+    return farmers.filter((f) => {
+      if (filterVillage !== 'ALL' && f.village !== filterVillage) return false;
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        const match =
+          f.farmerName.toLowerCase().includes(q) ||
+          f.id.toLowerCase().includes(q) ||
+          (f.farmerNamePa && f.farmerNamePa.includes(q)) ||
+          f.mobile.includes(q);
+        if (!match) return false;
+      }
+      return true;
+    });
+  }, [farmers, filterVillage, searchQuery]);
+
+  // 8. Filtered Advances
+  const filteredAdvances = useMemo(() => {
+    return farmerAdvances.filter((a) => {
+      if (filterDate && a.date !== filterDate) return false;
+      if (filterFarmerId !== 'ALL' && a.farmerId !== filterFarmerId) return false;
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        const match =
+          a.id.toLowerCase().includes(q) ||
+          (a.farmerName && a.farmerName.toLowerCase().includes(q)) ||
+          a.farmerId.toLowerCase().includes(q);
+        if (!match) return false;
+      }
+      return true;
+    });
+  }, [farmerAdvances, filterDate, filterFarmerId, searchQuery]);
+
+  // 9. Filtered Payment Adjustments
+  const filteredPaymentTransfers = useMemo(() => {
+    return paymentTransfers.filter((p) => {
+      if (filterFarmerId !== 'ALL' && p.fromFarmerId !== filterFarmerId && p.toFarmerId !== filterFarmerId) return false;
+      if (filterDate && p.date !== filterDate) return false;
+      return true;
+    });
+  }, [paymentTransfers, filterFarmerId, filterDate]);
+
+  // 10. Filtered Bag Transfers
+  const filteredBagTransfers = useMemo(() => {
+    return bagTransfers.filter((b) => {
+      if (filterFarmerId !== 'ALL' && b.fromFarmerId !== filterFarmerId && b.toFarmerId !== filterFarmerId) return false;
+      if (filterDate && b.date !== filterDate) return false;
+      return true;
+    });
+  }, [bagTransfers, filterFarmerId, filterDate]);
+
+  // Master Combined Export
+  const handleExportCombinedMasterPDF = async () => {
+    setShowCombinedModal(false);
+    await runExport(async () => {
+      await exportCombinedAllReportsPDF({
+        settings,
+        farmers,
+        summaries: allSummaries,
+        arrivals: bagsEntries,
+        purchases: dailyPurchaseRecords,
+        leftings: leftingRecords,
+        bardana: bardanaRecords,
+        advances: farmerAdvances,
+        transfers: paymentTransfers,
+        sameAdjustments,
+        bagTransfers
+      });
+    });
+  };
+
+  const tabsConfig: { id: ReportCategoryTab; titleEn: string; titlePa: string; icon: any }[] = [
+    { id: 'farmer-account', titleEn: '1. Farmer Account', titlePa: 'ਕਿਸਾਨ ਖਾਤਾ', icon: Users },
+    { id: 'mandi-arrival', titleEn: '2. Mandi Arrival (Tola)', titlePa: 'ਮੰਡੀ ਆਮਦ (ਤੋਲ)', icon: Scale },
+    { id: 'daily-purchase', titleEn: '3. Daily Purchase', titlePa: 'ਰੋਜ਼ਾਨਾ ਖਰੀਦ', icon: ShoppingBag },
+    { id: 'lefting', titleEn: '4. Lefting / Dispatch', titlePa: 'ਲਿਫਟਿੰਗ ਰਿਪੋਰਟ', icon: Truck },
+    { id: 'bardana', titleEn: '5. Bardana Report', titlePa: 'ਬਾਰਦਾਨਾ ਰਿਪੋਰਟ', icon: Boxes },
+    { id: 'stock-balance', titleEn: '6. Stock Balance Ledger', titlePa: 'ਸਟਾਕ ਬੈਲੈਂਸ ਚਾਰਟ', icon: Calculator },
+    { id: 'farmer-register', titleEn: '7. Farmer Master Register', titlePa: 'ਕਿਸਾਨ ਰਜਿਸਟਰ', icon: Users },
+    { id: 'advance-interest', titleEn: '8. Advance & Interest', titlePa: 'ਅਡਵਾਂਸ ਤੇ ਵਿਆਜ', icon: CreditCard },
+    { id: 'payment-adjustment', titleEn: '9. Payment Adjustment', titlePa: 'ਪੇਮੈਂਟ ਐਡਜਸਟਮੈਂਟ', icon: ArrowLeftRight },
+    { id: 'bag-transfer', titleEn: '10. Bag Transfer', titlePa: 'ਬੋਰੀ ਟ੍ਰਾਂਸਫਰ', icon: PackageCheck }
+  ];
+
   return (
-    <div className="space-y-4">
-      {/* Header Banner */}
-      <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 print:hidden">
-        <div className="flex items-center gap-2.5">
-          <div className="p-2 bg-rose-600 rounded-lg text-white">
-            <FileSpreadsheet className="w-5 h-5" />
+    <div id="mandi-reports-container" className="space-y-6 print:m-0 print:p-0 print:bg-white print:text-black">
+      {/* Top Banner & Combined PDF Button */}
+      <div id="mandi-reports-header" className="bg-white dark:bg-slate-800 rounded-xl p-5 border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4 print:hidden">
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 rounded-lg bg-emerald-700 text-white flex items-center justify-center font-bold text-xl shadow-sm">
+            <FileText className="w-6 h-6" />
           </div>
           <div>
-            <h2 className="text-sm sm:text-base font-black text-slate-900">
-              ਮੰਡੀ ਰਿਪੋਰਟਾਂ ਤੇ ਤੁਲਾਈ ਰਜਿਸਟਰ (Mandi Reports & Registers)
-            </h2>
-            <p className="text-[11px] text-slate-500">
-              ਬੋਰੀਆਂ ਤੁਲਾਈ ਰਜਿਸਟਰ, ਮਾਰਕੀਟ ਕਮੇਟੀ ਰਿਪੋਰਟ, ਕਿਸਾਨ ਸੂਚੀ, ਪਿੰਡ-ਵਾਰ ਰਿਪੋਰਟ ਅਤੇ PDF/CSV ਡਾਊਨਲੋਡ
+            <h1 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <span>ਮੰਡੀ ਰਿਪੋਰਟਾਂ ਅਤੇ ਰਜਿਸਟਰ</span>
+              <span className="text-slate-400 font-normal">|</span>
+              <span className="text-base font-semibold text-slate-600 dark:text-slate-300">Reports & Registers</span>
+            </h1>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              Dedicated A4 PDF & Print for Every Single Report • ਪੰਜਾਬ ਮੰਡੀ ਬੋਰਡ ਅਕਾਊਂਟਿੰਗ ਫਾਰਮੈਟ
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          {activeTab === 'market-committee' ? (
-            <>
-              <button
-                onClick={exportMarketCommitteeCsv}
-                className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 shadow-2xs transition"
-              >
-                <Download className="w-3.5 h-3.5" />
-                <span>ਕਮੇਟੀ CSV ਐਕਸਪੋਰਟ</span>
-              </button>
-              <button
-                onClick={() =>
-                  exportDailyPurchaseRegisterPDF(
-                    filteredPurchases,
-                    settings,
-                    mcAgencyFilter === 'ALL' ? 'All Agencies' : mcAgencyFilter,
-                    mcDateFilter || 'All Dates',
-                    dailyPurchaseRecords
-                  )
-                }
-                className="bg-slate-900 hover:bg-slate-800 text-white font-bold px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 shadow-2xs transition"
-              >
-                <Download className="w-3.5 h-3.5 text-emerald-400" />
-                <span>ਕਮੇਟੀ PDF ਰਿਪੋਰਟ</span>
-              </button>
-            </>
-          ) : (
-            <>
-              <button
-                onClick={exportToCsv}
-                className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 shadow-2xs transition"
-              >
-                <Download className="w-3.5 h-3.5" />
-                <span>CSV ਐਕਸਪੋਰਟ (Export CSV)</span>
-              </button>
-              <button
-                onClick={handlePrint}
-                className="bg-slate-900 hover:bg-slate-800 text-white font-bold px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 shadow-2xs transition"
-              >
-                <Printer className="w-3.5 h-3.5 text-emerald-400" />
-                <span>ਪ੍ਰਿੰਟ ਰਜਿਸਟਰ (Print)</span>
-              </button>
-            </>
-          )}
+        <div className="flex flex-wrap items-center gap-2.5">
+          {/* Combined PDF Button (Only when explicitly wanted) */}
+          <button
+            id="combined-all-reports-pdf-btn"
+            type="button"
+            onClick={() => setShowCombinedModal(true)}
+            className="flex items-center gap-2 px-3.5 py-2 rounded-lg border border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 text-xs font-semibold shadow-sm transition-colors"
+            title="Export all 10 reports combined into one master PDF book"
+          >
+            <Layers className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+            <span>Combined PDF / ਸਾਰੀਆਂ ਰਿਪੋਰਟਾਂ ਇੱਕ PDF</span>
+          </button>
+
+          {/* Quick Print Active View */}
+          <button
+            id="print-active-report-btn"
+            type="button"
+            onClick={handlePrint}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-600 text-xs font-semibold shadow-sm transition-colors"
+          >
+            <Printer className="w-4 h-4" />
+            <span>Print Current / ਪ੍ਰਿੰਟ</span>
+          </button>
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex items-center gap-1 border-b border-slate-200 bg-white px-3 pt-2 rounded-t-xl print:hidden text-xs font-bold overflow-x-auto">
-        <button
-          onClick={() => setActiveTab('daily-totals')}
-          className={`px-3 py-2 border-b-2 transition whitespace-nowrap flex items-center gap-1.5 ${
-            activeTab === 'daily-totals'
-              ? 'border-indigo-600 text-indigo-700 font-black'
-              : 'border-transparent text-slate-600 hover:text-slate-900'
-          }`}
-        >
-          <Calendar className="w-3.5 h-3.5 text-indigo-600" />
-          <span>ਰੋਜ਼ਾਨਾ ਕੁੱਲ (Daily Totals)</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('weighment')}
-          className={`px-3 py-2 border-b-2 transition whitespace-nowrap ${
-            activeTab === 'weighment'
-              ? 'border-rose-600 text-rose-600 font-black'
-              : 'border-transparent text-slate-600 hover:text-slate-900'
-          }`}
-        >
-          ਤੁਲਾਈ ਰਜਿਸਟਰ (Weighment Register)
-        </button>
-
-        <button
-          onClick={() => setActiveTab('market-committee')}
-          className={`px-3 py-2 border-b-2 transition whitespace-nowrap flex items-center gap-1.5 ${
-            activeTab === 'market-committee'
-              ? 'border-emerald-600 text-emerald-700 font-black'
-              : 'border-transparent text-slate-600 hover:text-slate-900'
-          }`}
-        >
-          <Building2 className="w-3.5 h-3.5 text-emerald-600" />
-          <span>ਮਾਰਕੀਟ ਕਮੇਟੀ ਰੋਜ਼ਾਨਾ ਖਰੀਦ ਰਿਪੋਰਟ (Market Committee Report)</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('farmer-master')}
-          className={`px-3 py-2 border-b-2 transition whitespace-nowrap ${
-            activeTab === 'farmer-master'
-              ? 'border-rose-600 text-rose-600 font-black'
-              : 'border-transparent text-slate-600 hover:text-slate-900'
-          }`}
-        >
-          ਕਿਸਾਨ ਮਾਸਟਰ ਸੂਚੀ (Farmer Directory)
-        </button>
-        <button
-          onClick={() => setActiveTab('village-summary')}
-          className={`px-3 py-2 border-b-2 transition whitespace-nowrap ${
-            activeTab === 'village-summary'
-              ? 'border-rose-600 text-rose-600 font-black'
-              : 'border-transparent text-slate-600 hover:text-slate-900'
-          }`}
-        >
-          ਪਿੰਡ-ਵਾਰ ਰਿਪੋਰਟ (Village Summary)
-        </button>
-        <button
-          onClick={() => setActiveTab('bardana-summary')}
-          className={`px-3 py-2 border-b-2 transition whitespace-nowrap ${
-            activeTab === 'bardana-summary'
-              ? 'border-rose-600 text-rose-600 font-black'
-              : 'border-transparent text-slate-600 hover:text-slate-900'
-          }`}
-        >
-          ਬਾਰਦਾਨਾ ਰਿਪੋਰਟ (Old/New Bardana)
-        </button>
+      {/* Tabs Navigation */}
+      <div id="reports-tab-bar" className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-1.5 print:hidden">
+        <div className="flex items-center gap-1 overflow-x-auto scrollbar-thin scrollbar-thumb-slate-300 pb-1">
+          {tabsConfig.map((tab) => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                id={`tab-${tab.id}`}
+                type="button"
+                onClick={() => handleTabChange(tab.id)}
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
+                  isActive
+                    ? 'bg-emerald-700 text-white shadow-sm'
+                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/60'
+                }`}
+              >
+                <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-white' : 'text-slate-400'}`} />
+                <span>{tab.titleEn}</span>
+                <span className="text-[11px] opacity-80">({tab.titlePa})</span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
-      {/* TAB: DAILY TOTALS (ਰੋਜ਼ਾਨਾ ਕੁੱਲ) */}
-      {activeTab === 'daily-totals' && (
-        <div className="space-y-4">
-          <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xs space-y-4">
-            <div className="border-b border-slate-100 pb-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <div>
-                <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
-                  <Calendar className="w-4 h-4 text-indigo-600" />
-                  <span>ਰੋਜ਼ਾਨਾ ਕੁੱਲ (Daily Totals - Date-wise Farmer Breakdown)</span>
-                </h3>
-                <p className="text-[11px] text-slate-500">
-                  ਮਿਤੀ-ਵਾਰ ਕਿਸਾਨ ਸੂਚੀ, ਬੋਰੀਆਂ, ਕੁਇੰਟਲ, ਕੁੱਲ ਰਕਮ ਅਤੇ ਮੁੱਖ ਕਿਸਾਨ ਬੈਲੇਂਸ
-                </p>
-              </div>
-              <div className="text-xs text-slate-600 font-mono">
-                ਕੁੱਲ ਮਿਤੀਆਂ: <strong className="text-slate-900 font-black">{dailyTotalsData.length}</strong>
-              </div>
-            </div>
-
-            {dailyTotalsData.length === 0 ? (
-              <div className="p-8 text-center text-slate-400 bg-slate-50 border border-slate-200 rounded-xl">
-                ਕੋਈ ਰਿਕਾਰਡ ਨਹੀਂ ਮਿਲਿਆ (No records found)
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {dailyTotalsData.map((dGroup) => {
-                  const isExpanded = !!expandedDailyDates[dGroup.date];
-
-                  return (
-                    <div
-                      key={dGroup.date}
-                      className="border border-slate-200 rounded-xl overflow-hidden shadow-2xs bg-white"
-                    >
-                      {/* Date Header Bar */}
-                      <div
-                        onClick={() => toggleDailyDate(dGroup.date)}
-                        className="p-3 bg-gradient-to-r from-slate-50 to-indigo-50/40 hover:bg-slate-100/80 cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="p-2 bg-indigo-600 text-white rounded-lg shadow-2xs">
-                            <Calendar className="w-4 h-4" />
-                          </div>
-                          <div>
-                            <div className="text-xs font-black text-slate-900 flex items-center gap-2">
-                              <span className="font-mono text-sm">{dGroup.date}</span>
-                              <span className="bg-indigo-100 text-indigo-900 px-2 py-0.5 rounded-full text-[10px] font-bold">
-                                {dGroup.uniqueFarmers.size} ਕਿਸਾਨ (Farmers)
-                              </span>
-                            </div>
-                            <div className="text-[11px] text-slate-600 mt-0.5">
-                              ਆਮਦ: {dGroup.arrivals.length} ਐਂਟਰੀਆਂ • ਖਰੀਦ: {dGroup.purchases.length} ਐਂਟਰੀਆਂ
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Summary Badges & Chevron */}
-                        <div className="flex flex-wrap items-center gap-2">
-                          <div className="bg-white border border-slate-200 px-2.5 py-1 rounded-lg text-xs">
-                            <span className="text-slate-500 font-bold">ਆਮਦ ਬੋਰੀਆਂ: </span>
-                            <span className="font-mono font-black text-rose-950">
-                              {dGroup.totalArrivalBags.toLocaleString('en-IN')}
-                            </span>
-                          </div>
-                          <div className="bg-white border border-slate-200 px-2.5 py-1 rounded-lg text-xs">
-                            <span className="text-slate-500 font-bold">ਖਰੀਦ ਬੋਰੀਆਂ: </span>
-                            <span className="font-mono font-black text-emerald-950">
-                              {dGroup.totalPurchasedBags.toLocaleString('en-IN')}
-                            </span>
-                          </div>
-                          <div className="bg-white border border-slate-200 px-2.5 py-1 rounded-lg text-xs">
-                            <span className="text-slate-500 font-bold">ਕੁੱਲ ਵਜ਼ਨ: </span>
-                            <span className="font-mono font-black text-indigo-950">
-                              {((dGroup.totalPurchasedKg || dGroup.totalArrivalKg) / 100).toFixed(2)} Qtl
-                            </span>
-                          </div>
-                          <div className="bg-white border border-slate-200 px-2.5 py-1 rounded-lg text-xs">
-                            <span className="text-slate-500 font-bold">ਰਕਮ: </span>
-                            <span className="font-mono font-black text-slate-900">
-                              ₹{(dGroup.totalPurchasedAmount || dGroup.totalArrivalAmount).toLocaleString('en-IN')}
-                            </span>
-                          </div>
-                          <div className="p-1 text-slate-400">
-                            {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Expanded Farmer Breakdown */}
-                      {isExpanded && (
-                        <div className="border-t border-slate-200 p-3 space-y-3 bg-white">
-                          <div className="text-xs font-bold text-slate-800">
-                            ਮਿਤੀ {dGroup.date} ਦੇ ਸਾਰੇ ਕਿਸਾਨਾਂ ਦਾ ਵੇਰਵਾ (Farmer-wise Breakdown):
-                          </div>
-
-                          <div className="overflow-x-auto border border-slate-200 rounded-lg">
-                            <table className="w-full text-left text-xs">
-                              <thead className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
-                                <tr>
-                                  <th className="py-2 px-3 w-10 text-center">#</th>
-                                  <th className="py-2 px-3 min-w-[180px]">ਕਿਸਾਨ ਦਾ ਨਾਂ (Farmer Name)</th>
-                                  <th className="py-2 px-3 min-w-[130px]">ਪਿਤਾ ਦਾ ਨਾਂ (Father Name)</th>
-                                  <th className="py-2 px-3 min-w-[100px]">ਪਿੰਡ (Village)</th>
-                                  <th className="py-2 px-3 min-w-[110px]">ਕਿਸਮ (Type)</th>
-                                  <th className="py-2 px-3 text-center bg-emerald-50 text-emerald-950 font-black">
-                                    ਬੋਰੀਆਂ (Bags)
-                                  </th>
-                                  <th className="py-2 px-3 text-right bg-indigo-50 text-indigo-950 font-black">
-                                    ਕੁਇੰਟਲ ਤੇ ਕਿਲੋ
-                                  </th>
-                                  <th className="py-2 px-3 text-right font-black text-slate-900">
-                                    ਰਕਮ (₹)
-                                  </th>
-                                  <th className="py-2 px-3 min-w-[200px]">
-                                    ਮੁੱਖ ਕਿਸਾਨ ਬੈਲੇਂਸ ਸਥਿਤੀ (Main Farmer Balance Status)
-                                  </th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-slate-100 font-medium">
-                                {/* Arrivals */}
-                                {dGroup.arrivals.map((arr, idx) => {
-                                  const sum = getFarmerPurchaseSummary(arr.farmerId);
-                                  return (
-                                    <tr key={`arr_${arr.id}`} className="hover:bg-slate-50/70">
-                                      <td className="py-2 px-3 text-center font-mono text-slate-500">
-                                        {idx + 1}
-                                      </td>
-                                      <td className="py-2 px-3">
-                                        <div className="font-bold text-slate-900">{arr.farmerName}</div>
-                                        {arr.farmerNamePa && (
-                                          <div className="text-[10px] text-emerald-800 font-semibold">{arr.farmerNamePa}</div>
-                                        )}
-                                      </td>
-                                      <td className="py-2 px-3 text-slate-700">{arr.farmerFatherName || '—'}</td>
-                                      <td className="py-2 px-3 text-slate-800">{arr.farmerVillage}</td>
-                                      <td className="py-2 px-3">
-                                        <span className="text-[10px] font-bold bg-rose-50 text-rose-700 px-1.5 py-0.5 rounded border border-rose-200">
-                                          ਮੰਡੀ ਆਮਦ
-                                        </span>
-                                      </td>
-                                      <td className="py-2 px-3 text-center font-mono font-black text-emerald-950 bg-emerald-50/30">
-                                        {arr.bags}
-                                      </td>
-                                      <td className="py-2 px-3 text-right font-mono font-bold text-indigo-950 bg-indigo-50/30">
-                                        {arr.grandTotalDisplay}
-                                      </td>
-                                      <td className="py-2 px-3 text-right font-mono font-black text-slate-900">
-                                        ₹{arr.totalAmount.toLocaleString('en-IN')}
-                                      </td>
-                                      <td className="py-2 px-3 text-[11px]">
-                                        {sum.isLinkedFarmer ? (
-                                          <div className="text-emerald-900">
-                                            <span className="font-bold">ਲਿੰਕਡ ਮੁੱਖ ਕਿਸਾਨ: </span>
-                                            <span>{sum.linkedToMainFarmerName}</span>
-                                            <div className="text-[10px] text-emerald-800 font-black">
-                                              ਬਾਕੀ ਸਟਾਕ: {sum.remainingBags} ਬੋਰੀਆਂ
-                                            </div>
-                                          </div>
-                                        ) : (
-                                          <div className="text-slate-800">
-                                            <span>ਮੰਡੀ ਆਮਦ: {sum.mandiArrivalBags}</span>
-                                            <span className="mx-1">•</span>
-                                            <span>ਖਰੀਦ: {sum.alreadyPurchasedBags}</span>
-                                            <div className="text-[10px] text-emerald-950 font-black">
-                                              ਬਾਕੀ ਸਟਾਕ: {sum.remainingBags} ਬੋਰੀਆਂ
-                                            </div>
-                                          </div>
-                                        )}
-                                      </td>
-                                    </tr>
-                                  );
-                                })}
-
-                                {/* Purchases */}
-                                {dGroup.purchases.map((pur, idx) => {
-                                  const sum = getFarmerPurchaseSummary(pur.farmerId);
-                                  return (
-                                    <tr key={`pur_${pur.id}`} className="hover:bg-slate-50/70">
-                                      <td className="py-2 px-3 text-center font-mono text-slate-500">
-                                        {dGroup.arrivals.length + idx + 1}
-                                      </td>
-                                      <td className="py-2 px-3">
-                                        <div className="font-bold text-slate-900">{pur.farmerName}</div>
-                                        {pur.farmerNamePa && (
-                                          <div className="text-[10px] text-emerald-800 font-semibold">{pur.farmerNamePa}</div>
-                                        )}
-                                      </td>
-                                      <td className="py-2 px-3 text-slate-700">{pur.fatherName || '—'}</td>
-                                      <td className="py-2 px-3 text-slate-800">{pur.village}</td>
-                                      <td className="py-2 px-3">
-                                        <span className="text-[10px] font-bold bg-emerald-50 text-emerald-800 px-1.5 py-0.5 rounded border border-emerald-200">
-                                          ਖਰੀਦ ({pur.agency})
-                                        </span>
-                                      </td>
-                                      <td className="py-2 px-3 text-center font-mono font-black text-emerald-950 bg-emerald-50/30">
-                                        {pur.bags}
-                                      </td>
-                                      <td className="py-2 px-3 text-right font-mono font-bold text-indigo-950 bg-indigo-50/30">
-                                        {pur.qul} Qtl {pur.kg > 0 ? `${pur.kg} Kg` : ''}
-                                      </td>
-                                      <td className="py-2 px-3 text-right font-mono font-black text-slate-900">
-                                        ₹{pur.totalAmount.toLocaleString('en-IN')}
-                                      </td>
-                                      <td className="py-2 px-3 text-[11px]">
-                                        {sum.isLinkedFarmer ? (
-                                          <div className="text-emerald-900">
-                                            <span className="font-bold">ਲਿੰਕਡ ਮੁੱਖ ਕਿਸਾਨ: </span>
-                                            <span>{sum.linkedToMainFarmerName}</span>
-                                            <div className="text-[10px] text-emerald-800 font-black">
-                                              ਬਾਕੀ ਸਟਾਕ: {sum.remainingBags} ਬੋਰੀਆਂ
-                                            </div>
-                                          </div>
-                                        ) : (
-                                          <div className="text-slate-800">
-                                            <span>ਮੰਡੀ ਆਮਦ: {sum.mandiArrivalBags}</span>
-                                            <span className="mx-1">•</span>
-                                            <span>ਖਰੀਦ: {sum.alreadyPurchasedBags}</span>
-                                            <div className="text-[10px] text-emerald-950 font-black">
-                                              ਬਾਕੀ ਸਟਾਕ: {sum.remainingBags} ਬੋਰੀਆਂ
-                                            </div>
-                                          </div>
-                                        )}
-                                      </td>
-                                    </tr>
-                                  );
-                                })}
-                              </tbody>
-
-                              {/* Date Grand Totals Footer */}
-                              <tfoot className="bg-slate-100 font-black text-slate-900 border-t border-slate-200">
-                                <tr>
-                                  <td colSpan={5} className="py-2.5 px-3 text-right">
-                                    ਮਿਤੀ {dGroup.date} ਕੁੱਲ ਜੋੜ (Date Grand Total):
-                                  </td>
-                                  <td className="py-2.5 px-3 text-center font-mono text-emerald-950 bg-emerald-100/60">
-                                    {(dGroup.totalPurchasedBags || dGroup.totalArrivalBags).toLocaleString('en-IN')} ਬੋਰੀਆਂ
-                                  </td>
-                                  <td className="py-2.5 px-3 text-right font-mono text-indigo-950 bg-indigo-100/60">
-                                    {((dGroup.totalPurchasedKg || dGroup.totalArrivalKg) / 100).toFixed(2)} Qtl
-                                  </td>
-                                  <td className="py-2.5 px-3 text-right font-mono text-slate-950">
-                                    ₹{(dGroup.totalPurchasedAmount || dGroup.totalArrivalAmount).toLocaleString('en-IN')}
-                                  </td>
-                                  <td></td>
-                                </tr>
-                              </tfoot>
-                            </table>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* TAB: MARKET COMMITTEE DAILY PURCHASE REPORT */}
-      {activeTab === 'market-committee' && (
-        <div className="space-y-4">
-          {/* Market Committee Filters */}
-          <div className="bg-slate-50 border border-slate-200 p-3 rounded-xl flex flex-wrap items-center justify-between gap-3 text-xs print:hidden">
-            <div className="flex flex-wrap items-center gap-2.5">
-              <div className="flex items-center gap-1">
-                <Filter className="w-3.5 h-3.5 text-slate-500" />
-                <span className="font-bold text-slate-700">ਕਮੇਟੀ ਫਿਲਟਰ:</span>
-              </div>
-
-              {/* Agency Filter */}
-              <div className="w-52">
-                <SearchableSelect
-                  id="mc-agency-filter"
-                  value={mcAgencyFilter}
-                  onChange={(val) => setMcAgencyFilter(val)}
-                  options={reportAgencyFilterOptions}
-                  placeholder={isEn ? "All Agencies" : "ਸਾਰੀਆਂ ਏਜੰਸੀਆਂ"}
-                  size="xs"
-                />
-              </div>
-
-              {/* Village Filter */}
-              <div className="w-48">
-                <SearchableSelect
-                  id="mc-village-filter"
-                  value={mcVillageFilter}
-                  onChange={(val) => setMcVillageFilter(val)}
-                  options={reportVillageFilterOptions}
-                  placeholder={isEn ? "All Villages" : "ਸਾਰੇ ਪਿੰਡ"}
-                  size="xs"
-                />
-              </div>
-
-              {/* Date Filter */}
-              <input
-                type="text"
-                placeholder="ਮਿਤੀ: DD/MM/YYYY"
-                value={mcDateFilter}
-                onChange={(e) => setMcDateFilter(e.target.value)}
-                className="bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-xs text-slate-800 font-mono focus:outline-none"
-              />
-
-              {/* Search Query */}
-              <input
-                type="text"
-                placeholder="ਕਿਸਾਨ, ਪਿੰਡ, ID ਜਾਂ ਵਾਊਚਰ ਖੋਜੋ..."
-                value={mcSearchQuery}
-                onChange={(e) => setMcSearchQuery(e.target.value)}
-                className="bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-xs text-slate-800 focus:outline-none"
-              />
-            </div>
-
-            <div className="text-[11px] text-slate-600 font-mono">
-              ਕੁੱਲ ਖਰੀਦ ਐਂਟਰੀਆਂ: <strong className="text-emerald-950 font-black">{filteredPurchases.length}</strong>
-            </div>
-          </div>
-
-          {/* Committee KPI Ribbon */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
-            <div className="bg-white border border-slate-200 p-3 rounded-xl shadow-2xs">
-              <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">
-                ਕੁੱਲ ਖਰੀਦ ਬੋਰੀਆਂ
-              </span>
-              <strong className="font-mono text-base font-black text-slate-900 block mt-0.5">
-                {mcTotalBags.toLocaleString('en-IN')}
-              </strong>
-              <span className="text-[10px] text-slate-400">@ 37.50 KG / Bag</span>
-            </div>
-
-            <div className="bg-white border border-slate-200 p-3 rounded-xl shadow-2xs">
-              <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">
-                ਕੁੱਲ ਵਜ਼ਨ (Weight)
-              </span>
-              <strong className="font-mono text-xs sm:text-sm font-black text-emerald-950 block mt-0.5">
-                {(mcTotalWeightKg / 100).toFixed(2)} ਕੁਇੰਟਲ
-              </strong>
-              <span className="text-[10px] text-slate-400 font-mono">{mcTotalWeightKg.toFixed(2)} KG</span>
-            </div>
-
-            <div className="bg-white border border-slate-200 p-3 rounded-xl shadow-2xs">
-              <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider block">
-                ਸਰਕਾਰੀ MSP ਰੇਟ
-              </span>
-              <strong className="font-mono text-xs sm:text-sm font-black text-slate-900 block mt-0.5">
-                ₹{settings.fixedRatePerQtl} / Qtl
-              </strong>
-              <span className="text-[10px] text-slate-400">Govt. Procurement Rate</span>
-            </div>
-
-            <div className="bg-white border border-emerald-300 p-3 rounded-xl shadow-2xs">
-              <span className="text-[10px] text-emerald-800 font-bold uppercase tracking-wider block">
-                ਕੁੱਲ ਖਰੀਦ ਰਕਮ (Payable)
-              </span>
-              <strong className="font-mono text-sm sm:text-base font-black text-emerald-950 block mt-0.5">
-                ₹{mcTotalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-              </strong>
-              <span className="text-[10px] text-emerald-700">Market Committee Total</span>
-            </div>
-          </div>
-
-          {/* Committee Table */}
-          <div className="bg-white border border-slate-200 rounded-xl shadow-2xs overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-slate-900 text-white font-bold border-b border-slate-200">
-                  <tr>
-                    <th className="py-2.5 px-3">ਮਿਤੀ (Date)</th>
-                    <th className="py-2.5 px-3">ਵਾਊਚਰ ID</th>
-                    <th className="py-2.5 px-3">ਏਜੰਸੀ (Agency)</th>
-                    <th className="py-2.5 px-3">ਕਿਸਾਨ ਦਾ ਨਾਂ (Farmer)</th>
-                    <th className="py-2.5 px-3">ਪਿੰਡ (Village)</th>
-                    <th className="py-2.5 px-3 text-center">ਬੋਰੀਆਂ</th>
-                    <th className="py-2.5 px-3 text-right">ਵਜ਼ਨ (Qul-Kg)</th>
-                    <th className="py-2.5 px-3 text-right">ਭਾਅ (₹/Qtl)</th>
-                    <th className="py-2.5 px-3 text-right font-black">ਕੁੱਲ ਰਕਮ (₹)</th>
-                    <th className="py-2.5 px-3 text-center">ਲਾਟ / ਗੇਟ ਪਾਸ</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 font-medium">
-                  {filteredPurchases.length === 0 ? (
-                    <tr>
-                      <td colSpan={10} className="py-8 text-center text-slate-500 text-xs bg-slate-50/50">
-                        <ShoppingBag className="w-7 h-7 mx-auto text-slate-300 mb-1" />
-                        <span className="font-bold text-slate-700 block">ਕੋਈ ਖਰੀਦ ਰਿਕਾਰਡ ਨਹੀਂ ਹੈ</span>
-                        <span className="text-[11px] text-slate-400">ਰੋਜ਼ਾਨਾ ਖਰੀਦ ਮਾਡਿਊਲ ਵਿੱਚ ਨਵੀਂ ਖਰੀਦ ਐਂਟਰੀ ਸ਼ਾਮਲ ਕਰੋ।</span>
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredPurchases.map((rec) => (
-                      <tr key={rec.id} className="hover:bg-slate-50">
-                        <td className="py-2 px-3 font-mono font-bold text-slate-900 whitespace-nowrap">{rec.date}</td>
-                        <td className="py-2 px-3 font-mono font-black text-emerald-950 whitespace-nowrap">{rec.id}</td>
-                        <td className="py-2 px-3 font-bold text-slate-800 whitespace-nowrap">
-                          <span className="flex items-center gap-1">
-                            <Building2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                            {rec.agency}
-                          </span>
-                        </td>
-                        <td className="py-2 px-3 whitespace-nowrap">
-                          <div className="font-bold text-slate-900">{rec.farmerNamePa || rec.farmerName}</div>
-                          <div className="text-[10px] text-slate-400 font-mono">{rec.farmerId}</div>
-                        </td>
-                        <td className="py-2 px-3 text-slate-700 whitespace-nowrap">{rec.village}</td>
-                        <td className="py-2 px-3 text-center font-mono font-black text-slate-900 whitespace-nowrap">{rec.bags}</td>
-                        <td className="py-2 px-3 text-right font-mono font-bold text-emerald-900 whitespace-nowrap">
-                          {rec.qul} Q {rec.kg} Kg
-                        </td>
-                        <td className="py-2 px-3 text-right font-mono text-slate-700 whitespace-nowrap">
-                          ₹{rec.rate.toFixed(2)}
-                        </td>
-                        <td className="py-2 px-3 text-right font-mono font-black text-slate-950 whitespace-nowrap">
-                          ₹{rec.totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                        </td>
-                        <td className="py-2 px-3 text-center text-slate-600 font-mono text-[10px] whitespace-nowrap">
-                          {rec.boliNumber || rec.gatePassNumber ? `${rec.boliNumber || '-'}${rec.gatePassNumber ? ` / ${rec.gatePassNumber}` : ''}` : '—'}
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Filter Bar (Only for Weighment tab) */}
-      {activeTab === 'weighment' && (
-        <div className="bg-slate-50 border border-slate-200 p-3 rounded-xl flex flex-wrap items-center justify-between gap-3 text-xs print:hidden">
-          <div className="flex flex-wrap items-center gap-2.5">
-            <div className="flex items-center gap-1">
-              <Filter className="w-3.5 h-3.5 text-slate-500" />
-              <span className="font-bold text-slate-700">ਫਿਲਟਰ:</span>
-            </div>
-
-            {/* Village Filter */}
-            <div className="w-48">
-              <SearchableSelect
-                id="weighment-village-filter"
-                value={filterVillage}
-                onChange={(val) => setFilterVillage(val)}
-                options={reportVillageFilterOptions}
-                placeholder={isEn ? "All Villages" : "ਸਾਰੇ ਪਿੰਡ"}
-                size="xs"
-              />
-            </div>
-
-            {/* Bardana Filter */}
-            <div className="w-44">
-              <SearchableSelect
-                id="weighment-bardana-filter"
-                value={filterBardana}
-                onChange={(val) => setFilterBardana(val)}
-                options={reportBardanaFilterOptions}
-                placeholder={isEn ? "All Bardana" : "ਸਾਰਾ ਬਾਰਦਾਨਾ"}
-                size="xs"
-              />
-            </div>
-
-            {/* Farmer Search */}
+      {/* Unified Filter Bar (Adaptive per tab) */}
+      <div id="reports-filter-bar" className="bg-white dark:bg-slate-800 rounded-xl p-4 border border-slate-200 dark:border-slate-700 shadow-sm print:hidden">
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Search Box */}
+          <div className="flex-1 min-w-[200px] relative">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
+              id="report-search-input"
               type="text"
-              placeholder="ਕਿਸਾਨ ਜਾਂ ਰਸੀਦ ਨੰਬਰ ਖੋਜੋ..."
-              value={searchFarmer}
-              onChange={(e) => setSearchFarmer(e.target.value)}
-              className="bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-xs text-slate-800 focus:outline-none"
+              placeholder="Search farmer, voucher, truck, village... / ਖੋਜੋ"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-9 pr-3 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
             />
           </div>
 
-          <div className="text-[11px] text-slate-600 font-mono">
-            ਕੁੱਲ ਰਿਕਾਰਡ: <strong className="text-slate-900">{filteredBagsEntries.length}</strong>
-          </div>
-        </div>
-      )}
+          {/* Date Filter (for arrival, purchase, lefting, bardana, advance) */}
+          {(activeTab === 'mandi-arrival' ||
+            activeTab === 'daily-purchase' ||
+            activeTab === 'lefting' ||
+            activeTab === 'bardana' ||
+            activeTab === 'advance-interest' ||
+            activeTab === 'payment-adjustment' ||
+            activeTab === 'bag-transfer') && (
+            <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5">
+              <Calendar className="w-3.5 h-3.5 text-slate-400" />
+              <label htmlFor="report-filter-date" className="text-[11px] text-slate-500">Date:</label>
+              <input
+                id="report-filter-date"
+                type="date"
+                value={filterDate}
+                onChange={(e) => setFilterDate(e.target.value)}
+                className="text-xs bg-transparent text-slate-800 dark:text-slate-200 focus:outline-none cursor-pointer"
+              />
+              {filterDate && (
+                <button
+                  type="button"
+                  onClick={() => setFilterDate('')}
+                  className="text-[11px] text-red-500 hover:underline ml-1"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+          )}
 
-      {/* Summary KPI Ribbon for Filtered Results (For Weighment Tab) */}
-      {activeTab === 'weighment' && (
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
-          <div className="bg-white border border-slate-200 p-2.5 rounded-lg">
-            <div className="text-[10px] text-slate-500 font-semibold">ਕੁੱਲ ਬੋਰੀਆਂ</div>
-            <div className="text-base font-black font-mono text-slate-900 mt-0.5">{totalBags}</div>
-            <div className="text-[9px] text-slate-400">@ 37.50 KG / Bag</div>
-          </div>
-          <div className="bg-white border border-slate-200 p-2.5 rounded-lg">
-            <div className="text-[10px] text-slate-500 font-semibold">ਬੋਰੀਆਂ ਦਾ ਵਜ਼ਨ</div>
-            <div className="text-xs sm:text-sm font-black font-mono text-slate-900 mt-0.5 truncate">
-              {bagsWeightBreakdown.displayEn}
+          {/* Farmer Filter (for farmer account, arrival, purchase, advance, adjustment, bag transfer) */}
+          {(activeTab === 'farmer-account' ||
+            activeTab === 'mandi-arrival' ||
+            activeTab === 'daily-purchase' ||
+            activeTab === 'advance-interest' ||
+            activeTab === 'payment-adjustment' ||
+            activeTab === 'bag-transfer') && (
+            <div className="min-w-[190px]">
+              <select
+                id="report-filter-farmer"
+                value={filterFarmerId}
+                onChange={(e) => setFilterFarmerId(e.target.value)}
+                className="w-full text-xs py-2 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              >
+                <option value="ALL">All Farmers / ਸਾਰੇ ਕਿਸਾਨ ({farmers.length})</option>
+                {farmers.map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.farmerName} ({f.fatherName || f.village}) - {f.id}
+                  </option>
+                ))}
+              </select>
             </div>
-            <div className="text-[9px] text-slate-400 truncate">{bagsWeightBreakdown.displayPa}</div>
-          </div>
-          <div className="bg-white border border-slate-200 p-2.5 rounded-lg">
-            <div className="text-[10px] text-slate-500 font-semibold">ਵੱਖਰਾ ਟੋਟਾ</div>
-            <div className="text-base font-black font-mono text-amber-800 mt-0.5">{totalTotaKg} Kg</div>
-            <div className="text-[9px] text-slate-400">Separate Tota</div>
-          </div>
-          <div className="bg-white border border-slate-200 p-2.5 rounded-lg">
-            <div className="text-[10px] text-slate-500 font-semibold">ਗ੍ਰੈਂਡ ਟੋਟਲ ਵਜ਼ਨ</div>
-            <div className="text-xs sm:text-sm font-black font-mono text-emerald-900 mt-0.5 truncate">
-              {grandTotalBreakdown.displayEn}
-            </div>
-            <div className="text-[9px] text-slate-400 truncate">Bags + Tota</div>
-          </div>
-          <div className="bg-white border border-slate-200 p-2.5 rounded-lg">
-            <div className="text-[10px] text-slate-500 font-semibold">ਕੁੱਲ ਰਕਮ (@ ₹2,461)</div>
-            <div className="text-xs sm:text-sm font-black font-mono text-slate-950 mt-0.5 truncate">
-              {formatCurrency(totalAmount)}
-            </div>
-            <div className="text-[9px] text-slate-400">₹2,461 / Qul</div>
-          </div>
-        </div>
-      )}
+          )}
 
-      {/* Main Content by Tab */}
-      {activeTab === 'weighment' && (
-        <div className="bg-white border border-slate-200 rounded-xl shadow-2xs overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
-                <tr>
-                  <th className="py-2.5 px-3">ਰਸੀਦ / ਮਿਤੀ</th>
-                  <th className="py-2.5 px-3">ਕਿਸਾਨ ਆਈ.ਡੀ</th>
-                  <th className="py-2.5 px-3">ਕਿਸਾਨ ਦਾ ਨਾਂ ਤੇ ਪਿੰਡ</th>
-                  <th className="py-2.5 px-3 text-center">ਬੋਰੀਆਂ</th>
-                  <th className="py-2.5 px-3 text-right">ਬੋਰੀ ਵਜ਼ਨ (Qul+Kg)</th>
-                  <th className="py-2.5 px-3 text-right">ਟੋਟਾ (Kg)</th>
-                  <th className="py-2.5 px-3 text-right font-black">ਕੁੱਲ ਵਜ਼ਨ (Grand)</th>
-                  <th className="py-2.5 px-3 text-center">ਬਾਰਦਾਨਾ</th>
-                  <th className="py-2.5 px-3 text-right">ਕੁੱਲ ਰਕਮ (@ ₹2,461)</th>
-                  <th className="py-2.5 px-3 text-right print:hidden">ਰਸੀਦ</th>
+          {/* Agency Filter (for purchase, lefting, bardana, stock) */}
+          {(activeTab === 'daily-purchase' || activeTab === 'lefting' || activeTab === 'bardana' || activeTab === 'stock-balance') && (
+            <div className="min-w-[170px]">
+              <select
+                id="report-filter-agency"
+                value={filterAgency}
+                onChange={(e) => setFilterAgency(e.target.value)}
+                className="w-full text-xs py-2 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              >
+                <option value="ALL">All Agencies / ਸਾਰੀਆਂ ਏਜੰਸੀਆਂ</option>
+                {agencies.map((ag) => (
+                  <option key={ag.id} value={ag.nameEn}>
+                    {ag.nameEn} ({ag.code || ag.namePa})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Village Filter (for farmer register, farmer account, arrivals) */}
+          {(activeTab === 'farmer-register' || activeTab === 'farmer-account' || activeTab === 'mandi-arrival') && (
+            <div className="min-w-[160px]">
+              <select
+                id="report-filter-village"
+                value={filterVillage}
+                onChange={(e) => setFilterVillage(e.target.value)}
+                className="w-full text-xs py-2 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              >
+                <option value="ALL">All Villages / ਸਾਰੇ ਪਿੰਡ</option>
+                {uniqueVillages.map((v) => (
+                  <option key={v} value={v}>{v}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Reset All Filters */}
+          <button
+            type="button"
+            onClick={() => {
+              setFilterDate('');
+              setFilterFarmerId('ALL');
+              setFilterAgency('ALL');
+              setFilterVillage('ALL');
+              setSearchQuery('');
+            }}
+            className="text-xs text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 px-2 py-1 underline"
+          >
+            Reset Filters
+          </button>
+        </div>
+      </div>
+
+      {/* ========================================================================= */}
+      {/* 1. FARMER ACCOUNT / ਕਿਸਾਨ ਖਾਤਾ */}
+      {/* ========================================================================= */}
+      {activeTab === 'farmer-account' && (
+        <div id="report-view-farmer-account" className="space-y-4">
+          <div className="bg-white dark:bg-slate-800 rounded-xl p-4 border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <span>1. Farmer Account / ਕਿਸਾਨ ਖਾਤਾ</span>
+                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                  {filteredFarmerSummaries.length} Accounts
+                </span>
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                {selectedFarmer
+                  ? `Active Farmer: ${selectedFarmer.farmerName} (${selectedFarmer.id}) • Dedicated Single Farmer Account Statement`
+                  : 'Multi-Farmer Summary Ledger with Crop Amount, Advances, Interest, and Final Balance'}
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 print:hidden">
+              {/* Simple Summary PDF */}
+              <button
+                id="btn-farmer-account-simple-pdf"
+                type="button"
+                disabled={isExporting}
+                onClick={() =>
+                  runExport(async () => {
+                    await exportFarmerAccountSummaryListPDF(
+                      filteredFarmerSummaries,
+                      settings,
+                      selectedFarmer ? `${selectedFarmer.farmerName} (${selectedFarmer.id})` : 'All Farmers'
+                    );
+                  })
+                }
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold shadow-sm transition-colors"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Simple PDF / ਸਧਾਰਨ PDF</span>
+              </button>
+
+              {/* Full Details PDF */}
+              <button
+                id="btn-farmer-account-full-pdf"
+                type="button"
+                disabled={isExporting}
+                onClick={() =>
+                  runExport(async () => {
+                    await exportFarmerAccountFullDetailsSingleOrAllPDF(
+                      filteredFarmerSummaries,
+                      settings,
+                      filterFarmerId !== 'ALL' ? filterFarmerId : undefined
+                    );
+                  })
+                }
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-slate-900 hover:bg-black text-white text-xs font-semibold shadow-sm transition-colors"
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>Full Details PDF / ਪੂਰੀ ਜਾਣਕਾਰੀ PDF</span>
+              </button>
+
+              {/* Print */}
+              <button
+                type="button"
+                onClick={handlePrint}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold hover:bg-slate-50"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                <span>Print / ਪ੍ਰਿੰਟ</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Table */}
+          <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="bg-slate-900 text-white uppercase text-[11px] tracking-wider border-b border-slate-700">
+                  <th className="py-3 px-3 text-center">Sr</th>
+                  <th className="py-3 px-3">Farmer ID</th>
+                  <th className="py-3 px-3">Farmer Name</th>
+                  <th className="py-3 px-3">Father Name</th>
+                  <th className="py-3 px-3">Village</th>
+                  <th className="py-3 px-3 text-right">Bags</th>
+                  <th className="py-3 px-3 text-right">Weight (Qtl Kg)</th>
+                  <th className="py-3 px-3 text-right">Crop Amount (₹)</th>
+                  <th className="py-3 px-3 text-right">Advance+Int (₹)</th>
+                  <th className="py-3 px-3 text-right">Net Balance (₹)</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 font-medium">
-                {filteredBagsEntries.length === 0 ? (
-                  <tr>
-                    <td colSpan={10} className="py-8 text-center text-slate-500 text-xs">
-                      ਕੋਈ ਰਿਕਾਰਡ ਉਪਲਬਧ ਨਹੀਂ ਹੈ (No Data Available)
-                    </td>
-                  </tr>
-                ) : (
-                  filteredBagsEntries.map((entry) => (
-                    <tr key={entry.id} className="hover:bg-slate-50">
-                      <td className="py-2 px-3 font-mono font-bold text-slate-900">
-                        {entry.entryNumber}
-                        <span className="block text-[10px] text-slate-400 font-normal">{entry.date}</span>
+              <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+                {filteredFarmerSummaries.map((s, idx) => {
+                  const f = s.farmer;
+                  const bags = s.totalArrivalBags || s.totalPurchasedBags || 0;
+                  const wtKg = s.totalArrivalKg || s.totalPurchasedKg || 0;
+                  const cropAmt = s.netPayableAmount || s.grossAmount || 0;
+                  const advInt = s.totalAdvanceAmount || 0;
+                  const balance = s.finalBalance !== undefined ? s.finalBalance : cropAmt - advInt;
+                  const wtF = formatKgToQulKg(wtKg);
+
+                  return (
+                    <tr key={f.id} className="hover:bg-slate-50 dark:hover:bg-slate-750 transition-colors">
+                      <td className="py-2.5 px-3 text-center text-slate-500">{idx + 1}</td>
+                      <td className="py-2.5 px-3 font-mono text-[11px] font-semibold text-slate-600 dark:text-slate-300">{f.id}</td>
+                      <td className="py-2.5 px-3 font-semibold text-slate-900 dark:text-white">
+                        {f.farmerName} {f.farmerNamePa && <span className="text-slate-400 font-normal">({f.farmerNamePa})</span>}
                       </td>
-                      <td className="py-2 px-3 font-mono font-bold text-emerald-800">{entry.farmerId}</td>
-                      <td className="py-2 px-3">
-                        <div className="font-bold text-slate-900">
-                          {entry.farmerNamePa} ({entry.farmerName})
-                        </div>
-                        <div className="text-[10px] text-slate-500">
-                          {entry.farmerVillagePa || entry.farmerVillage} • Mob: {entry.farmerMobile}
-                        </div>
+                      <td className="py-2.5 px-3 text-slate-600 dark:text-slate-300">{f.fatherName || '-'}</td>
+                      <td className="py-2.5 px-3 text-slate-600 dark:text-slate-300">{f.village}</td>
+                      <td className="py-2.5 px-3 text-right font-medium">{bags}</td>
+                      <td className="py-2.5 px-3 text-right font-medium">{wtF.qtl} Q {wtF.kg} K</td>
+                      <td className="py-2.5 px-3 text-right font-medium">{formatCurrency(cropAmt)}</td>
+                      <td className="py-2.5 px-3 text-right font-medium text-amber-600 dark:text-amber-400">{formatCurrency(advInt)}</td>
+                      <td className={`py-2.5 px-3 text-right font-bold ${balance >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                        {formatCurrency(balance)}
                       </td>
-                      <td className="py-2 px-3 text-center font-bold">{entry.bags}</td>
-                      <td className="py-2 px-3 text-right font-mono">{entry.totalBagsWeightDisplay}</td>
-                      <td className="py-2 px-3 text-right font-mono text-amber-800 font-bold">
-                        {entry.totaKg} Kg
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 2. MANDI ARRIVAL / ਮੰਡੀ ਆਮਦ ਰਿਪੋਰਟ (Tola) */}
+      {/* ========================================================================= */}
+      {activeTab === 'mandi-arrival' && (
+        <div id="report-view-mandi-arrival" className="space-y-4">
+          <div className="bg-white dark:bg-slate-800 rounded-xl p-4 border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <span>2. Mandi Arrival (Tola) / ਮੰਡੀ ਆਮਦ ਰਿਪੋਰਟ</span>
+                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                  {filteredArrivals.length} Weighments
+                </span>
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                Weighment slips with 37.5 KG standard bags, tota loose kg, bardana type, and total value
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 print:hidden">
+              {/* Date-wise PDF */}
+              <button
+                id="btn-arrival-datewise-pdf"
+                type="button"
+                disabled={isExporting}
+                onClick={() =>
+                  runExport(async () => {
+                    await exportMandiArrivalReportPDF(filteredArrivals, settings, 'DATE_WISE', filterDate || 'All Dates');
+                  })
+                }
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold shadow-sm transition-colors"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Date-wise PDF / ਮਿਤੀ-ਵਾਰ PDF</span>
+              </button>
+
+              {/* Full Season PDF */}
+              <button
+                id="btn-arrival-full-season-pdf"
+                type="button"
+                disabled={isExporting}
+                onClick={() =>
+                  runExport(async () => {
+                    await exportMandiArrivalReportPDF(bagsEntries, settings, 'FULL_SEASON');
+                  })
+                }
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-slate-900 hover:bg-black text-white text-xs font-semibold shadow-sm transition-colors"
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>Full Season PDF / ਪੂਰੇ ਸੀਜ਼ਨ ਦਾ PDF</span>
+              </button>
+
+              {/* Print */}
+              <button
+                type="button"
+                onClick={handlePrint}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold hover:bg-slate-50"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                <span>Print / ਪ੍ਰਿੰਟ</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Table */}
+          <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="bg-slate-900 text-white uppercase text-[11px] tracking-wider border-b border-slate-700">
+                  <th className="py-3 px-3 text-center">Slip No</th>
+                  <th className="py-3 px-3 text-center">Date</th>
+                  <th className="py-3 px-3">Farmer</th>
+                  <th className="py-3 px-3">Village</th>
+                  <th className="py-3 px-3 text-right">Bags</th>
+                  <th className="py-3 px-3 text-right">Weight (Qtl Kg)</th>
+                  <th className="py-3 px-3 text-right">Tota (Kg)</th>
+                  <th className="py-3 px-3 text-center">Bardana</th>
+                  <th className="py-3 px-3 text-right">Total Amount (₹)</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+                {filteredArrivals.map((b) => {
+                  const wtF = formatKgToQulKg(b.grandTotalKg);
+                  return (
+                    <tr key={b.id} className="hover:bg-slate-50 dark:hover:bg-slate-750 transition-colors">
+                      <td className="py-2.5 px-3 text-center font-mono font-semibold text-slate-700 dark:text-slate-300">{b.entryNumber}</td>
+                      <td className="py-2.5 px-3 text-center text-slate-600 dark:text-slate-400">{b.date}</td>
+                      <td className="py-2.5 px-3 font-semibold text-slate-900 dark:text-white">
+                        {b.farmerName} {b.farmerFatherName && <span className="text-slate-400 font-normal">({b.farmerFatherName})</span>}
                       </td>
-                      <td className="py-2 px-3 text-right font-mono font-black text-emerald-950">
-                        {entry.grandTotalDisplay}
-                      </td>
-                      <td className="py-2 px-3 text-center">
-                        <span
-                          className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${
-                            entry.bardana === 'OLD'
-                              ? 'bg-amber-50 text-amber-800 border-amber-200'
-                              : 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                          }`}
-                        >
-                          {entry.bardana === 'OLD' ? 'ਪੁਰਾਣਾ' : 'ਨਵਾਂ'}
+                      <td className="py-2.5 px-3 text-slate-600 dark:text-slate-300">{b.farmerVillage}</td>
+                      <td className="py-2.5 px-3 text-right font-medium">{b.bags}</td>
+                      <td className="py-2.5 px-3 text-right font-medium">{wtF.qtl} Q {wtF.kg} K</td>
+                      <td className="py-2.5 px-3 text-right text-slate-500">{b.totaKg.toFixed(1)}</td>
+                      <td className="py-2.5 px-3 text-center">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${b.bardana === 'NEW' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
+                          {b.bardana}
                         </span>
                       </td>
-                      <td className="py-2 px-3 text-right font-mono font-black text-slate-950">
-                        {formatCurrency(entry.totalAmount)}
+                      <td className="py-2.5 px-3 text-right font-bold text-slate-900 dark:text-white">{formatCurrency(b.totalAmount)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 3. DAILY PURCHASE / ਰੋਜ਼ਾਨਾ ਖਰੀਦ ਰਿਪੋਰਟ */}
+      {/* ========================================================================= */}
+      {activeTab === 'daily-purchase' && (
+        <div id="report-view-daily-purchase" className="space-y-4">
+          <div className="bg-white dark:bg-slate-800 rounded-xl p-4 border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <span>3. Daily Purchase / ਰੋਜ਼ਾਨਾ ਖਰੀਦ ਰਿਪੋਰਟ</span>
+                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                  {filteredPurchases.length} Records
+                </span>
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                Government agency procurement, voucher details, rate per quintal, and Market Committee billing
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 print:hidden">
+              {/* Date-wise PDF */}
+              <button
+                id="btn-purchase-datewise-pdf"
+                type="button"
+                disabled={isExporting}
+                onClick={() =>
+                  runExport(async () => {
+                    await exportDailyPurchaseReportPDF(filteredPurchases, settings, 'DATE_WISE', filterDate || 'All Dates', filterAgency);
+                  })
+                }
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold shadow-sm transition-colors"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Date-wise PDF / ਮਿਤੀ-ਵਾਰ PDF</span>
+              </button>
+
+              {/* Full Register PDF */}
+              <button
+                id="btn-purchase-full-register-pdf"
+                type="button"
+                disabled={isExporting}
+                onClick={() =>
+                  runExport(async () => {
+                    await exportDailyPurchaseReportPDF(dailyPurchaseRecords, settings, 'FULL_REGISTER');
+                  })
+                }
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-slate-900 hover:bg-black text-white text-xs font-semibold shadow-sm transition-colors"
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>Full Register PDF / ਪੂਰਾ ਰਜਿਸਟਰ PDF</span>
+              </button>
+
+              {/* Print */}
+              <button
+                type="button"
+                onClick={handlePrint}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold hover:bg-slate-50"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                <span>Print / ਪ੍ਰਿੰਟ</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Table */}
+          <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="bg-slate-900 text-white uppercase text-[11px] tracking-wider border-b border-slate-700">
+                  <th className="py-3 px-3 text-center">Voucher</th>
+                  <th className="py-3 px-3 text-center">Date</th>
+                  <th className="py-3 px-3">Agency</th>
+                  <th className="py-3 px-3">Farmer</th>
+                  <th className="py-3 px-3">Village</th>
+                  <th className="py-3 px-3 text-right">Bags</th>
+                  <th className="py-3 px-3 text-right">Weight (Qtl Kg)</th>
+                  <th className="py-3 px-3 text-right">Rate (₹)</th>
+                  <th className="py-3 px-3 text-right">Amount (₹)</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+                {filteredPurchases.map((p) => {
+                  const wtF = formatKgToQulKg(Number(p.totalWeightKg) || 0);
+                  return (
+                    <tr key={p.id} className="hover:bg-slate-50 dark:hover:bg-slate-750 transition-colors">
+                      <td className="py-2.5 px-3 text-center font-mono font-semibold text-slate-700 dark:text-slate-300">{p.id}</td>
+                      <td className="py-2.5 px-3 text-center text-slate-600 dark:text-slate-400">{p.date}</td>
+                      <td className="py-2.5 px-3 font-semibold text-emerald-700 dark:text-emerald-400">{p.agency}</td>
+                      <td className="py-2.5 px-3 font-medium text-slate-900 dark:text-white">{p.farmerName}</td>
+                      <td className="py-2.5 px-3 text-slate-600 dark:text-slate-300">{p.village}</td>
+                      <td className="py-2.5 px-3 text-right font-medium">{p.bags}</td>
+                      <td className="py-2.5 px-3 text-right font-medium">{wtF.qtl} Q {wtF.kg} K</td>
+                      <td className="py-2.5 px-3 text-right">{p.rate || 0}</td>
+                      <td className="py-2.5 px-3 text-right font-bold text-slate-900 dark:text-white">{formatCurrency(p.totalAmount || 0)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 4. LEFTING / ਲਿਫਟਿੰਗ ਰਿਪੋਰਟ */}
+      {/* ========================================================================= */}
+      {activeTab === 'lefting' && (
+        <div id="report-view-lefting" className="space-y-4">
+          <div className="bg-white dark:bg-slate-800 rounded-xl p-4 border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <span>4. Lefting / ਲਿਫਟਿੰਗ ਰਿਪੋਰਟ</span>
+                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                  {filteredLeftings.length} Dispatches
+                </span>
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                Sheller dispatches, truck numbers, driver info, and gate pass verification
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 print:hidden">
+              {/* Date-wise PDF */}
+              <button
+                id="btn-lefting-datewise-pdf"
+                type="button"
+                disabled={isExporting}
+                onClick={() =>
+                  runExport(async () => {
+                    await exportLeftingReportPDF(filteredLeftings, settings, 'DATE_WISE', filterDate || 'All Dates', filterAgency);
+                  })
+                }
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold shadow-sm transition-colors"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Date-wise PDF / ਮਿਤੀ-ਵਾਰ PDF</span>
+              </button>
+
+              {/* Full Register PDF */}
+              <button
+                id="btn-lefting-full-register-pdf"
+                type="button"
+                disabled={isExporting}
+                onClick={() =>
+                  runExport(async () => {
+                    await exportLeftingReportPDF(leftingRecords, settings, 'FULL_REGISTER');
+                  })
+                }
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-slate-900 hover:bg-black text-white text-xs font-semibold shadow-sm transition-colors"
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>Full Lefting Register PDF / ਪੂਰਾ ਰਜਿਸਟਰ PDF</span>
+              </button>
+
+              {/* Print */}
+              <button
+                type="button"
+                onClick={handlePrint}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold hover:bg-slate-50"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                <span>Print / ਪ੍ਰਿੰਟ</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Table */}
+          <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="bg-slate-900 text-white uppercase text-[11px] tracking-wider border-b border-slate-700">
+                  <th className="py-3 px-3 text-center">Dispatch ID</th>
+                  <th className="py-3 px-3 text-center">Date</th>
+                  <th className="py-3 px-3">Agency</th>
+                  <th className="py-3 px-3">Destination / Sheller</th>
+                  <th className="py-3 px-3 text-center">Truck No</th>
+                  <th className="py-3 px-3">Driver Name</th>
+                  <th className="py-3 px-3 text-right">Bags</th>
+                  <th className="py-3 px-3 text-right">Total Weight / ਕੁੱਲ ਵਜ਼ਨ</th>
+                  <th className="py-3 px-3 text-center">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+                {filteredLeftings.map((l) => {
+                  const bCount = Number(l.bags) || 0;
+                  const wtKg = Number(l.totalWeightKg) || bCount * 37.5;
+                  const wtF = formatKgToQulKg(wtKg);
+
+                  return (
+                    <tr key={l.id} className="hover:bg-slate-50 dark:hover:bg-slate-750 transition-colors">
+                      <td className="py-2.5 px-3 text-center font-mono font-semibold text-slate-700 dark:text-slate-300">{l.id}</td>
+                      <td className="py-2.5 px-3 text-center text-slate-600 dark:text-slate-400">{l.date || (l as any).dispatchDate}</td>
+                      <td className="py-2.5 px-3 font-semibold text-emerald-700 dark:text-emerald-400">{l.agency || (l as any).sellerOrAgency || '-'}</td>
+                      <td className="py-2.5 px-3 font-medium text-slate-900 dark:text-white">{l.sellerName || (l as any).destination || '-'}</td>
+                      <td className="py-2.5 px-3 text-center font-mono font-semibold text-slate-800 dark:text-slate-200">{(l as any).truckNo || (l as any).truckNumber || '-'}</td>
+                      <td className="py-2.5 px-3 text-slate-600 dark:text-slate-300">{l.driverName || '-'}</td>
+                      <td className="py-2.5 px-3 text-right font-medium">{bCount}</td>
+                      <td className="py-2.5 px-3 text-right font-bold text-slate-900 dark:text-white">{wtF.qtl} Qtl {wtF.kg} Kg</td>
+                      <td className="py-2.5 px-3 text-center">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${l.status === 'DELIVERED' ? 'bg-emerald-100 text-emerald-800' : 'bg-blue-100 text-blue-800'}`}>
+                          {l.status}
+                        </span>
                       </td>
-                      <td className="py-2 px-3 text-right print:hidden">
-                        <div className="flex items-center justify-end gap-1">
-                          <button
-                            onClick={() => setActiveBagsEntryToEdit(entry)}
-                            className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold p-1 rounded-md transition cursor-pointer shadow-2xs"
-                            title="ਸੋਧੋ (Edit Entry)"
-                          >
-                            <Edit className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => setActiveReceipt(entry)}
-                            className="bg-slate-900 hover:bg-slate-800 text-white font-bold p-1 rounded-md transition cursor-pointer"
-                            title="ਪ੍ਰਿੰਟ ਰਸੀਦ"
-                          >
-                            <Printer className="w-3.5 h-3.5 text-emerald-400" />
-                          </button>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 5. BARDANA / ਬਾਰਦਾਨਾ ਰਿਪੋਰਟ */}
+      {/* ========================================================================= */}
+      {activeTab === 'bardana' && (
+        <div id="report-view-bardana" className="space-y-4">
+          <div className="bg-white dark:bg-slate-800 rounded-xl p-4 border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <span>5. Bardana / ਬਾਰਦਾਨਾ ਰਿਪੋਰਟ</span>
+                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                  {filteredBardana.length} Entries
+                </span>
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                Separate registers for New Bardana, Old Bardana, or Combined Juth stock
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 print:hidden">
+              {/* New Bardana PDF */}
+              <button
+                id="btn-bardana-new-pdf"
+                type="button"
+                disabled={isExporting}
+                onClick={() =>
+                  runExport(async () => {
+                    await exportBardanaCategorizedPDF(filteredBardana, settings, 'NEW', filterDate);
+                  })
+                }
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold shadow-sm transition-colors"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>New Bardana PDF / ਨਵਾਂ ਬਾਰਦਾਨਾ</span>
+              </button>
+
+              {/* Old Bardana PDF */}
+              <button
+                id="btn-bardana-old-pdf"
+                type="button"
+                disabled={isExporting}
+                onClick={() =>
+                  runExport(async () => {
+                    await exportBardanaCategorizedPDF(filteredBardana, settings, 'OLD', filterDate);
+                  })
+                }
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-amber-700 hover:bg-amber-800 text-white text-xs font-semibold shadow-sm transition-colors"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Old Bardana PDF / ਪੁਰਾਣਾ ਬਾਰਦਾਨਾ</span>
+              </button>
+
+              {/* Combined Bardana PDF */}
+              <button
+                id="btn-bardana-combined-pdf"
+                type="button"
+                disabled={isExporting}
+                onClick={() =>
+                  runExport(async () => {
+                    await exportBardanaCategorizedPDF(filteredBardana, settings, 'COMBINED', filterDate);
+                  })
+                }
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-slate-900 hover:bg-black text-white text-xs font-semibold shadow-sm transition-colors"
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>Combined Bardana PDF / ਕੁੱਲ ਬਾਰਦਾਨਾ</span>
+              </button>
+
+              {/* Print */}
+              <button
+                type="button"
+                onClick={handlePrint}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold hover:bg-slate-50"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                <span>Print / ਪ੍ਰਿੰਟ</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Table */}
+          <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="bg-slate-900 text-white uppercase text-[11px] tracking-wider border-b border-slate-700">
+                  <th className="py-3 px-3 text-center">Entry No</th>
+                  <th className="py-3 px-3 text-center">Date</th>
+                  <th className="py-3 px-3">Agency</th>
+                  <th className="py-3 px-3">Source Party</th>
+                  <th className="py-3 px-3 text-center">Action</th>
+                  <th className="py-3 px-3 text-right">New Juth (Bags)</th>
+                  <th className="py-3 px-3 text-right">Old Juth (Bags)</th>
+                  <th className="py-3 px-3 text-right">Total Bags</th>
+                  <th className="py-3 px-3">Remarks / Vehicle</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+                {filteredBardana.map((b) => {
+                  const newB = Number(b.newBags) || 0;
+                  const oldB = Number(b.oldBags) || 0;
+                  return (
+                    <tr key={b.id} className="hover:bg-slate-50 dark:hover:bg-slate-750 transition-colors">
+                      <td className="py-2.5 px-3 text-center font-mono font-semibold text-slate-700 dark:text-slate-300">{b.id}</td>
+                      <td className="py-2.5 px-3 text-center text-slate-600 dark:text-slate-400">{b.date}</td>
+                      <td className="py-2.5 px-3 font-semibold text-emerald-700 dark:text-emerald-400">{b.agency}</td>
+                      <td className="py-2.5 px-3 font-medium text-slate-900 dark:text-white">{b.sourceName || '-'}</td>
+                      <td className="py-2.5 px-3 text-center">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${b.actionType === 'GIVE' ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}`}>
+                          {b.actionType === 'GIVE' ? 'Issued' : 'Received'}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-medium">{newB}</td>
+                      <td className="py-2.5 px-3 text-right font-medium">{oldB}</td>
+                      <td className="py-2.5 px-3 text-right font-bold text-slate-900 dark:text-white">{newB + oldB}</td>
+                      <td className="py-2.5 px-3 text-slate-500">{(b as any).vehicleNumber || (b as any).remarks || '-'}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 6. STOCK BALANCE / ਸਟਾਕ ਬੈਲੈਂਸ ਰਿਪੋਰਟ */}
+      {/* ========================================================================= */}
+      {activeTab === 'stock-balance' && (
+        <div id="report-view-stock-balance" className="space-y-4">
+          <div className="bg-white dark:bg-slate-800 rounded-xl p-4 border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <span>6. Stock Balance Ledger / ਸਟਾਕ ਬੈਲੈਂਸ ਰਿਪੋਰਟ</span>
+                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                  4 Ledger Categories
+                </span>
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                Independent stock balances for Tola, Purchase, Lefting, and Bardana without combining
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 print:hidden">
+              {/* Tola Balance PDF */}
+              <button
+                id="btn-stock-tola-pdf"
+                type="button"
+                disabled={isExporting}
+                onClick={() =>
+                  runExport(async () => {
+                    await exportStockBalanceCategoryPDF('TOLA', stockBalanceData);
+                  })
+                }
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold shadow-sm transition-colors"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Tola Balance PDF / ਤੋਲ ਬੈਲੈਂਸ</span>
+              </button>
+
+              {/* Purchase Balance PDF */}
+              <button
+                id="btn-stock-purchase-pdf"
+                type="button"
+                disabled={isExporting}
+                onClick={() =>
+                  runExport(async () => {
+                    await exportStockBalanceCategoryPDF('PURCHASE', stockBalanceData);
+                  })
+                }
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-blue-700 hover:bg-blue-800 text-white text-xs font-semibold shadow-sm transition-colors"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Purchase Balance PDF / ਖਰੀਦ ਬੈਲੈਂਸ</span>
+              </button>
+
+              {/* Lefting Balance PDF */}
+              <button
+                id="btn-stock-lefting-pdf"
+                type="button"
+                disabled={isExporting}
+                onClick={() =>
+                  runExport(async () => {
+                    await exportStockBalanceCategoryPDF('LEFTING', stockBalanceData);
+                  })
+                }
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-purple-700 hover:bg-purple-800 text-white text-xs font-semibold shadow-sm transition-colors"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Lefting Balance PDF / ਲਿਫਟਿੰਗ ਬੈਲੈਂਸ</span>
+              </button>
+
+              {/* Bardana Balance PDF */}
+              <button
+                id="btn-stock-bardana-pdf"
+                type="button"
+                disabled={isExporting}
+                onClick={() =>
+                  runExport(async () => {
+                    await exportStockBalanceCategoryPDF('BARDANA', stockBalanceData);
+                  })
+                }
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-amber-700 hover:bg-amber-800 text-white text-xs font-semibold shadow-sm transition-colors"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Bardana Balance PDF / ਬਾਰਦਾਨਾ ਬੈਲੈਂਸ</span>
+              </button>
+
+              {/* Full Stock Balance PDF */}
+              <button
+                id="btn-stock-full-pdf"
+                type="button"
+                disabled={isExporting}
+                onClick={() =>
+                  runExport(async () => {
+                    await exportStockBalanceCategoryPDF('FULL', stockBalanceData);
+                  })
+                }
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-slate-900 hover:bg-black text-white text-xs font-semibold shadow-sm transition-colors"
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>Full Stock Balance PDF / ਪੂਰਾ ਸਟਾਕ ਬੈਲੈਂਸ</span>
+              </button>
+
+              {/* Print */}
+              <button
+                type="button"
+                onClick={handlePrint}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold hover:bg-slate-50"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                <span>Print / ਪ੍ਰਿੰਟ</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Cards for each category */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {stockBalanceData.sections.map((sec, idx) => (
+              <div key={idx} className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4 shadow-sm space-y-3">
+                <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-700 pb-2">
+                  <h3 className="font-bold text-slate-900 dark:text-white text-sm">{sec.categoryTitleEn}</h3>
+                  <span className="text-xs font-bold px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-800 dark:text-slate-200 font-mono">
+                    Total: {sec.totalStockStr}
+                  </span>
+                </div>
+
+                <div className="divide-y divide-slate-100 dark:divide-slate-700">
+                  {sec.rows.map((r, rIdx) => (
+                    <div key={rIdx} className="py-2 flex items-center justify-between text-xs">
+                      <div>
+                        <div className="font-semibold text-slate-800 dark:text-slate-200">
+                          {r.sourceType} vs {r.usedType}
                         </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+                        <div className="text-[11px] text-slate-500">
+                          Total ({r.totalQtyStr}) − Deducted ({r.usedQtyStr})
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className={`font-bold font-mono text-sm ${r.balance >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                          {r.balanceStr}
+                        </div>
+                        <div className="text-[10px] text-slate-400">{r.statusDesc}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}
 
-      {/* Tab: Farmer Master Register */}
-      {activeTab === 'farmer-master' && (
-        <div className="bg-white border border-slate-200 rounded-xl shadow-2xs overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
-                <tr>
-                  <th className="py-2.5 px-3">ਕਿਸਾਨ ਆਈ.ਡੀ</th>
-                  <th className="py-2.5 px-3">ਕਿਸਾਨ ਦਾ ਨਾਂ (English / ਪੰਜਾਬੀ)</th>
-                  <th className="py-2.5 px-3">ਪਿਤਾ ਦਾ ਨਾਂ</th>
-                  <th className="py-2.5 px-3">ਪਿੰਡ ਤੇ ਪਿੰਨ ਕੋਡ</th>
-                  <th className="py-2.5 px-3">ਮੋਬਾਈਲ ਨੰਬਰ</th>
-                  <th className="py-2.5 px-3">ਆਧਾਰ ਨੰਬਰ</th>
-                  <th className="py-2.5 px-3">ਬੈਂਕ ਵੇਰਵੇ</th>
+      {/* ========================================================================= */}
+      {/* 7. FARMER REGISTER / ਕਿਸਾਨ ਰਜਿਸਟਰ */}
+      {/* ========================================================================= */}
+      {activeTab === 'farmer-register' && (
+        <div id="report-view-farmer-register" className="space-y-4">
+          <div className="bg-white dark:bg-slate-800 rounded-xl p-4 border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <span>7. Farmer Register / ਕਿਸਾਨ ਰਜਿਸਟਰ</span>
+                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                  {filteredFarmers.length} Farmers
+                </span>
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                Official Punjab Mandi Farmer Master Book with Aadhaar, mobile, and bank account credentials
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 print:hidden">
+              {/* Complete Farmer List PDF */}
+              <button
+                id="btn-farmer-register-pdf"
+                type="button"
+                disabled={isExporting}
+                onClick={() =>
+                  runExport(async () => {
+                    await exportFarmerRegisterPDF(filteredFarmers, settings, filterVillage);
+                  })
+                }
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold shadow-sm transition-colors"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Complete Farmer List PDF / ਪੂਰੀ ਸੂਚੀ PDF</span>
+              </button>
+
+              {/* Print */}
+              <button
+                type="button"
+                onClick={handlePrint}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold hover:bg-slate-50"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                <span>Print / ਪ੍ਰਿੰਟ</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Table */}
+          <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="bg-slate-900 text-white uppercase text-[11px] tracking-wider border-b border-slate-700">
+                  <th className="py-3 px-3 text-center">Sr</th>
+                  <th className="py-3 px-3">Farmer ID</th>
+                  <th className="py-3 px-3">Farmer Name</th>
+                  <th className="py-3 px-3">Father Name</th>
+                  <th className="py-3 px-3">Village</th>
+                  <th className="py-3 px-3 text-center">Mobile</th>
+                  <th className="py-3 px-3 text-center">Aadhaar</th>
+                  <th className="py-3 px-3">Bank Account</th>
+                  <th className="py-3 px-3">IFSC & Bank</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 font-medium">
-                {farmers.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="py-8 text-center text-slate-500 text-xs">
-                      ਕੋਈ ਕਿਸਾਨ ਰਜਿਸਟਰਡ ਨਹੀਂ ਹੈ (No Data Available)
+              <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+                {filteredFarmers.map((f, idx) => (
+                  <tr key={f.id} className="hover:bg-slate-50 dark:hover:bg-slate-750 transition-colors">
+                    <td className="py-2.5 px-3 text-center text-slate-500">{idx + 1}</td>
+                    <td className="py-2.5 px-3 font-mono font-semibold text-slate-700 dark:text-slate-300">{f.id}</td>
+                    <td className="py-2.5 px-3 font-semibold text-slate-900 dark:text-white">
+                      {f.farmerName} {f.farmerNamePa && <span className="text-slate-400 font-normal">({f.farmerNamePa})</span>}
+                    </td>
+                    <td className="py-2.5 px-3 text-slate-600 dark:text-slate-300">{f.fatherName || '-'}</td>
+                    <td className="py-2.5 px-3 text-slate-600 dark:text-slate-300">{f.village}</td>
+                    <td className="py-2.5 px-3 text-center font-mono">{f.mobile}</td>
+                    <td className="py-2.5 px-3 text-center font-mono text-slate-500">{f.aadhaar ? `•••• ${f.aadhaar.slice(-4)}` : '-'}</td>
+                    <td className="py-2.5 px-3 font-mono">{f.bankDetails?.accountNumber || '-'}</td>
+                    <td className="py-2.5 px-3 text-slate-600 dark:text-slate-300">
+                      {f.bankDetails?.ifscCode || '-'} {f.bankDetails?.bankName && `(${f.bankDetails.bankName})`}
                     </td>
                   </tr>
-                ) : (
-                  farmers.map((f) => (
-                    <tr key={f.id} className="hover:bg-slate-50">
-                      <td className="py-2 px-3 font-mono font-bold text-emerald-800">{f.id}</td>
-                      <td className="py-2 px-3 font-bold text-slate-900">
-                        {f.farmerNamePa} ({f.farmerName})
-                      </td>
-                      <td className="py-2 px-3 text-slate-700">{f.fatherNamePa || f.fatherName || '—'}</td>
-                      <td className="py-2 px-3">
-                        {f.villagePa || f.village} ({f.pinCode})
-                      </td>
-                      <td className="py-2 px-3 font-mono">{f.mobile}</td>
-                      <td className="py-2 px-3 font-mono">{f.aadhaar}</td>
-                      <td className="py-2 px-3 text-[11px]">
-                        {f.bankDetails?.accountNumber ? (
-                          <div className="text-slate-900 leading-tight space-y-0.5">
-                            <span className="font-bold block text-slate-900 break-words">{f.bankDetails.bankName}</span>
-                            <span className="text-[10px] text-purple-900 font-mono block">
-                              A/C: {f.bankDetails.accountNumber} • IFSC: {f.bankDetails.ifscCode}
-                            </span>
-                            {(f.bankDetails.branchName || f.bankDetails.branchAddress) && (
-                              <span className="text-[10px] text-slate-500 block break-words">
-                                {f.bankDetails.branchName ? `${f.bankDetails.branchName}` : ''}
-                                {f.bankDetails.branchAddress ? ` (${f.bankDetails.branchAddress})` : ''}
-                              </span>
-                            )}
-                          </div>
-                        ) : (
-                          <span className="text-slate-400">ਦਰਜ ਨਹੀਂ</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))
-                )}
+                ))}
               </tbody>
             </table>
           </div>
         </div>
       )}
 
-      {/* Tab: Village Summary */}
-      {activeTab === 'village-summary' && (
-        <div className="bg-white border border-slate-200 rounded-xl shadow-2xs overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
-                <tr>
-                  <th className="py-2.5 px-3">ਪਿੰਡ ਦਾ ਨਾਂ (Village)</th>
-                  <th className="py-2.5 px-3 text-center">ਰਜਿਸਟਰਡ ਕਿਸਾਨ</th>
-                  <th className="py-2.5 px-3 text-center">ਕੁੱਲ ਬੋਰੀਆਂ</th>
-                  <th className="py-2.5 px-3 text-right">ਕੁੱਲ ਵਜ਼ਨ (Grand Total)</th>
-                  <th className="py-2.5 px-3 text-right">ਕੁੱਲ ਰਕਮ (@ ₹2,461)</th>
+      {/* ========================================================================= */}
+      {/* 8. ADVANCE PAYMENT & INTEREST / ਅਡਵਾਂਸ ਪੇਮੈਂਟ ਅਤੇ ਵਿਆਜ */}
+      {/* ========================================================================= */}
+      {activeTab === 'advance-interest' && (
+        <div id="report-view-advance-interest" className="space-y-4">
+          <div className="bg-white dark:bg-slate-800 rounded-xl p-4 border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <span>8. Advance Payment & Interest / ਅਡਵਾਂਸ ਪੇਮੈਂਟ ਅਤੇ ਵਿਆਜ</span>
+                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                  {filteredAdvances.length} Advances
+                </span>
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                Principal loans, monthly interest rates, elapsed days/months, and total interest calculation
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 print:hidden">
+              {/* Farmer-wise PDF */}
+              <button
+                id="btn-advance-farmerwise-pdf"
+                type="button"
+                disabled={isExporting}
+                onClick={() =>
+                  runExport(async () => {
+                    await exportAdvanceInterestPDF(
+                      filteredAdvances,
+                      settings,
+                      'FARMER_WISE',
+                      selectedFarmer ? `${selectedFarmer.farmerName} (${selectedFarmer.id})` : 'All Farmers'
+                    );
+                  })
+                }
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold shadow-sm transition-colors"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Farmer-wise PDF / ਕਿਸਾਨ-ਵਾਰ</span>
+              </button>
+
+              {/* Date-wise PDF */}
+              <button
+                id="btn-advance-datewise-pdf"
+                type="button"
+                disabled={isExporting}
+                onClick={() =>
+                  runExport(async () => {
+                    await exportAdvanceInterestPDF(filteredAdvances, settings, 'DATE_WISE', filterDate || 'All Dates');
+                  })
+                }
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-blue-700 hover:bg-blue-800 text-white text-xs font-semibold shadow-sm transition-colors"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Date-wise PDF / ਮਿਤੀ-ਵਾਰ</span>
+              </button>
+
+              {/* Full Register PDF */}
+              <button
+                id="btn-advance-full-register-pdf"
+                type="button"
+                disabled={isExporting}
+                onClick={() =>
+                  runExport(async () => {
+                    await exportAdvanceInterestPDF(farmerAdvances, settings, 'FULL_REGISTER');
+                  })
+                }
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-slate-900 hover:bg-black text-white text-xs font-semibold shadow-sm transition-colors"
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>Full Register PDF / ਪੂਰਾ ਰਜਿਸਟਰ</span>
+              </button>
+
+              {/* Print */}
+              <button
+                type="button"
+                onClick={handlePrint}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold hover:bg-slate-50"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                <span>Print / ਪ੍ਰਿੰਟ</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Table */}
+          <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="bg-slate-900 text-white uppercase text-[11px] tracking-wider border-b border-slate-700">
+                  <th className="py-3 px-3 text-center">Adv ID</th>
+                  <th className="py-3 px-3 text-center">Adv Date</th>
+                  <th className="py-3 px-3">Farmer Name</th>
+                  <th className="py-3 px-3 text-right">Principal (₹)</th>
+                  <th className="py-3 px-3 text-center">Int Till Date</th>
+                  <th className="py-3 px-3 text-center">Duration</th>
+                  <th className="py-3 px-3 text-right">Rate (%/mo)</th>
+                  <th className="py-3 px-3 text-right">Interest (₹)</th>
+                  <th className="py-3 px-3 text-right">Total Payable (₹)</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 font-medium">
-                {villageSummary.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="py-8 text-center text-slate-500 text-xs">
-                      ਕੋਈ ਪਿੰਡ ਡਾਟਾ ਉਪਲਬਧ ਨਹੀਂ ਹੈ (No Data Available)
-                    </td>
-                  </tr>
-                ) : (
-                  villageSummary.map((vs) => (
-                    <tr key={vs.village} className="hover:bg-slate-50">
-                      <td className="py-2.5 px-3 font-bold text-slate-900">
-                        {vs.villagePa} ({vs.village})
+              <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+                {filteredAdvances.map((adv) => {
+                  const principal = Number(adv.amount) || 0;
+                  const interest = Number(adv.interestAmount) || 0;
+                  const payable = Number(adv.totalPayableWithInterest) || principal + interest;
+
+                  return (
+                    <tr key={adv.id} className="hover:bg-slate-50 dark:hover:bg-slate-750 transition-colors">
+                      <td className="py-2.5 px-3 text-center font-mono font-semibold text-slate-700 dark:text-slate-300">{adv.id}</td>
+                      <td className="py-2.5 px-3 text-center text-slate-600 dark:text-slate-400">{adv.date}</td>
+                      <td className="py-2.5 px-3 font-semibold text-slate-900 dark:text-white">{adv.farmerName || adv.farmerId}</td>
+                      <td className="py-2.5 px-3 text-right font-medium">{formatCurrency(principal)}</td>
+                      <td className="py-2.5 px-3 text-center text-slate-500">{adv.interestTillDate || '-'}</td>
+                      <td className="py-2.5 px-3 text-center font-mono text-[11px]">
+                        {adv.totalDays || 0} D ({adv.monthsElapsed || 0}M {adv.daysElapsed || 0}D)
                       </td>
-                      <td className="py-2.5 px-3 text-center font-bold font-mono">{vs.farmerCount}</td>
-                      <td className="py-2.5 px-3 text-center font-bold font-mono">{vs.bags}</td>
-                      <td className="py-2.5 px-3 text-right font-mono font-black text-emerald-950">
-                        {vs.weightBreakdown.displayEn}
-                      </td>
-                      <td className="py-2.5 px-3 text-right font-mono font-black text-slate-900">
-                        {formatCurrency(vs.amount)}
-                      </td>
+                      <td className="py-2.5 px-3 text-right">{adv.monthlyInterestRate}%</td>
+                      <td className="py-2.5 px-3 text-right font-medium text-amber-600 dark:text-amber-400">{formatCurrency(interest)}</td>
+                      <td className="py-2.5 px-3 text-right font-bold text-slate-900 dark:text-white">{formatCurrency(payable)}</td>
                     </tr>
-                  ))
-                )}
+                  );
+                })}
               </tbody>
             </table>
           </div>
         </div>
       )}
 
-      {/* Tab: Bardana Summary */}
-      {activeTab === 'bardana-summary' && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="bg-white border border-emerald-300 rounded-xl p-4 shadow-2xs space-y-3">
-            <h3 className="font-black text-emerald-900 text-xs sm:text-sm flex items-center justify-between">
-              <span>ਨਵਾਂ ਬਾਰਦਾਨਾ (New Juth Summary)</span>
-              <span className="text-[10px] bg-emerald-100 text-emerald-900 px-2 py-0.5 rounded font-bold">
-                NEW
-              </span>
-            </h3>
-            {(() => {
-              const newEntries = bagsEntries.filter((b) => b.bardana === 'NEW');
-              const newBags = newEntries.reduce((s, b) => s + b.bags, 0);
-              const newWeight = newEntries.reduce((s, b) => s + b.grandTotalKg, 0);
-              const newAmount = newEntries.reduce((s, b) => s + b.totalAmount, 0);
-              return (
-                <div className="space-y-2 text-xs">
-                  <div className="flex justify-between py-1 border-b border-slate-100">
-                    <span className="text-slate-600">ਕੁੱਲ ਐਂਟਰੀਆਂ:</span>
-                    <strong className="font-mono">{newEntries.length}</strong>
-                  </div>
-                  <div className="flex justify-between py-1 border-b border-slate-100">
-                    <span className="text-slate-600">ਕੁੱਲ ਬੋਰੀਆਂ (Bags):</span>
-                    <strong className="font-mono text-base font-black">{newBags}</strong>
-                  </div>
-                  <div className="flex justify-between py-1 border-b border-slate-100">
-                    <span className="text-slate-600">ਕੁੱਲ ਵਜ਼ਨ:</span>
-                    <strong className="font-mono font-bold text-emerald-900">
-                      {formatKgToQulKg(newWeight).displayEn}
-                    </strong>
-                  </div>
-                  <div className="flex justify-between py-1">
-                    <span className="text-slate-600">ਕੁੱਲ ਰਕਮ:</span>
-                    <strong className="font-mono font-black text-slate-900">
-                      {formatCurrency(newAmount)}
-                    </strong>
-                  </div>
-                </div>
-              );
-            })()}
+      {/* ========================================================================= */}
+      {/* 9. PAYMENT ADJUSTMENT / ਪੇਮੈਂਟ ਐਡਜਸਟਮੈਂਟ */}
+      {/* ========================================================================= */}
+      {activeTab === 'payment-adjustment' && (
+        <div id="report-view-payment-adjustment" className="space-y-4">
+          <div className="bg-white dark:bg-slate-800 rounded-xl p-4 border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <span>9. Payment Adjustment / ਪੇਮੈਂਟ ਐਡਜਸਟਮੈਂਟ</span>
+                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                  {filteredPaymentTransfers.length} Transfers
+                </span>
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                Inter-farmer payment deductions & credits and internal ledger re-allocations
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 print:hidden">
+              {/* Farmer-wise PDF */}
+              <button
+                id="btn-adjustment-farmerwise-pdf"
+                type="button"
+                disabled={isExporting}
+                onClick={() =>
+                  runExport(async () => {
+                    await exportPaymentAdjustmentPDF(
+                      paymentTransfers,
+                      sameAdjustments,
+                      settings,
+                      'FARMER_WISE',
+                      filterFarmerId !== 'ALL' ? filterFarmerId : undefined,
+                      selectedFarmer?.farmerName
+                    );
+                  })
+                }
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold shadow-sm transition-colors"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Farmer-wise PDF / ਕਿਸਾਨ-ਵਾਰ</span>
+              </button>
+
+              {/* Full Register PDF */}
+              <button
+                id="btn-adjustment-full-register-pdf"
+                type="button"
+                disabled={isExporting}
+                onClick={() =>
+                  runExport(async () => {
+                    await exportPaymentAdjustmentPDF(paymentTransfers, sameAdjustments, settings, 'FULL_REGISTER');
+                  })
+                }
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-slate-900 hover:bg-black text-white text-xs font-semibold shadow-sm transition-colors"
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>Full Register PDF / ਪੂਰਾ ਰਜਿਸਟਰ</span>
+              </button>
+
+              {/* Print */}
+              <button
+                type="button"
+                onClick={handlePrint}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold hover:bg-slate-50"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                <span>Print / ਪ੍ਰਿੰਟ</span>
+              </button>
+            </div>
           </div>
 
-          <div className="bg-white border border-amber-300 rounded-xl p-4 shadow-2xs space-y-3">
-            <h3 className="font-black text-amber-900 text-xs sm:text-sm flex items-center justify-between">
-              <span>ਪੁਰਾਣਾ ਬਾਰਦਾਨਾ (Old Juth Summary)</span>
-              <span className="text-[10px] bg-amber-100 text-amber-900 px-2 py-0.5 rounded font-bold">
-                OLD
-              </span>
-            </h3>
-            {(() => {
-              const oldEntries = bagsEntries.filter((b) => b.bardana === 'OLD');
-              const oldBags = oldEntries.reduce((s, b) => s + b.bags, 0);
-              const oldWeight = oldEntries.reduce((s, b) => s + b.grandTotalKg, 0);
-              const oldAmount = oldEntries.reduce((s, b) => s + b.totalAmount, 0);
-              return (
-                <div className="space-y-2 text-xs">
-                  <div className="flex justify-between py-1 border-b border-slate-100">
-                    <span className="text-slate-600">ਕੁੱਲ ਐਂਟਰੀਆਂ:</span>
-                    <strong className="font-mono">{oldEntries.length}</strong>
-                  </div>
-                  <div className="flex justify-between py-1 border-b border-slate-100">
-                    <span className="text-slate-600">ਕੁੱਲ ਬੋਰੀਆਂ (Bags):</span>
-                    <strong className="font-mono text-base font-black">{oldBags}</strong>
-                  </div>
-                  <div className="flex justify-between py-1 border-b border-slate-100">
-                    <span className="text-slate-600">ਕੁੱਲ ਵਜ਼ਨ:</span>
-                    <strong className="font-mono font-bold text-amber-900">
-                      {formatKgToQulKg(oldWeight).displayEn}
-                    </strong>
-                  </div>
-                  <div className="flex justify-between py-1">
-                    <span className="text-slate-600">ਕੁੱਲ ਰਕਮ:</span>
-                    <strong className="font-mono font-black text-slate-900">
-                      {formatCurrency(oldAmount)}
-                    </strong>
-                  </div>
-                </div>
-              );
-            })()}
+          {/* Table */}
+          <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="bg-slate-900 text-white uppercase text-[11px] tracking-wider border-b border-slate-700">
+                  <th className="py-3 px-3 text-center">Transfer ID</th>
+                  <th className="py-3 px-3 text-center">Date</th>
+                  <th className="py-3 px-3">From Farmer (Deduction −)</th>
+                  <th className="py-3 px-3">To Farmer (Credit +)</th>
+                  <th className="py-3 px-3 text-right">Transfer Amount (₹)</th>
+                  <th className="py-3 px-3">Reason / Details</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+                {filteredPaymentTransfers.map((t) => (
+                  <tr key={t.id} className="hover:bg-slate-50 dark:hover:bg-slate-750 transition-colors">
+                    <td className="py-2.5 px-3 text-center font-mono font-semibold text-slate-700 dark:text-slate-300">{t.id}</td>
+                    <td className="py-2.5 px-3 text-center text-slate-600 dark:text-slate-400">{t.date}</td>
+                    <td className="py-2.5 px-3 font-medium text-red-600 dark:text-red-400">{t.fromFarmerName}</td>
+                    <td className="py-2.5 px-3 font-medium text-emerald-600 dark:text-emerald-400">{t.toFarmerName}</td>
+                    <td className="py-2.5 px-3 text-right font-bold text-slate-900 dark:text-white">{formatCurrency(t.amount)}</td>
+                    <td className="py-2.5 px-3 text-slate-500">{t.reason || '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 10. BAG TRANSFER / ਬੋਰੀ ਟ੍ਰਾਂਸਫਰ */}
+      {/* ========================================================================= */}
+      {activeTab === 'bag-transfer' && (
+        <div id="report-view-bag-transfer" className="space-y-4">
+          <div className="bg-white dark:bg-slate-800 rounded-xl p-4 border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <span>10. Bag Transfer / ਬੋਰੀ ਟ੍ਰਾਂਸਫਰ</span>
+                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                  {filteredBagTransfers.length} Transfers
+                </span>
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                Transfer of remaining paddy bags quota from one farmer account to another
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 print:hidden">
+              {/* Farmer-wise PDF */}
+              <button
+                id="btn-bag-transfer-farmerwise-pdf"
+                type="button"
+                disabled={isExporting}
+                onClick={() =>
+                  runExport(async () => {
+                    await exportBagTransferPDF(
+                      bagTransfers,
+                      settings,
+                      'FARMER_WISE',
+                      filterFarmerId !== 'ALL' ? filterFarmerId : undefined,
+                      selectedFarmer?.farmerName
+                    );
+                  })
+                }
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold shadow-sm transition-colors"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Farmer-wise PDF / ਕਿਸਾਨ-ਵਾਰ</span>
+              </button>
+
+              {/* Full Register PDF */}
+              <button
+                id="btn-bag-transfer-full-register-pdf"
+                type="button"
+                disabled={isExporting}
+                onClick={() =>
+                  runExport(async () => {
+                    await exportBagTransferPDF(bagTransfers, settings, 'FULL_REGISTER');
+                  })
+                }
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-slate-900 hover:bg-black text-white text-xs font-semibold shadow-sm transition-colors"
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>Full Register PDF / ਪੂਰਾ ਰਜਿਸਟਰ</span>
+              </button>
+
+              {/* Print */}
+              <button
+                type="button"
+                onClick={handlePrint}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold hover:bg-slate-50"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                <span>Print / ਪ੍ਰਿੰਟ</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Table */}
+          <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="bg-slate-900 text-white uppercase text-[11px] tracking-wider border-b border-slate-700">
+                  <th className="py-3 px-3 text-center">Transfer ID</th>
+                  <th className="py-3 px-3 text-center">Date</th>
+                  <th className="py-3 px-3">From Farmer (Deduction −)</th>
+                  <th className="py-3 px-3">To Farmer (Credit +)</th>
+                  <th className="py-3 px-3 text-right">Bags Transferred</th>
+                  <th className="py-3 px-3">Reason / Details</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+                {filteredBagTransfers.map((b) => (
+                  <tr key={b.id} className="hover:bg-slate-50 dark:hover:bg-slate-750 transition-colors">
+                    <td className="py-2.5 px-3 text-center font-mono font-semibold text-slate-700 dark:text-slate-300">{b.id}</td>
+                    <td className="py-2.5 px-3 text-center text-slate-600 dark:text-slate-400">{b.date}</td>
+                    <td className="py-2.5 px-3 font-medium text-red-600 dark:text-red-400">{b.fromFarmerName}</td>
+                    <td className="py-2.5 px-3 font-medium text-emerald-600 dark:text-emerald-400">{b.toFarmerName}</td>
+                    <td className="py-2.5 px-3 text-right font-bold text-slate-900 dark:text-white">{b.bags} Bags</td>
+                    <td className="py-2.5 px-3 text-slate-500">{b.reason || '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL: COMBINED PDF CONFIRMATION */}
+      {/* ========================================================================= */}
+      {showCombinedModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-700 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 flex items-center justify-center">
+                <Layers className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                  Combined PDF / ਸਾਰੀਆਂ ਰਿਪੋਰਟਾਂ ਇੱਕ PDF
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Generate All 10 Reports into One Unified Master Book
+                </p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+              ਇਹ ਵਿਕਲਪ ਸਾਰੀਆਂ 10 ਮੰਡੀ ਰਿਪੋਰਟਾਂ (ਕਿਸਾਨ ਖਾਤਾ, ਮੰਡੀ ਆਮਦ, ਖਰੀਦ, ਲਿਫਟਿੰਗ, ਬਾਰਦਾਨਾ, ਸਟਾਕ ਬੈਲੈਂਸ, ਕਿਸਾਨ ਰਜਿਸਟਰ, ਅਡਵਾਂਸ ਤੇ ਵਿਆਜ, ਪੇਮੈਂਟ ਐਡਜਸਟਮੈਂਟ ਅਤੇ ਬੋਰੀ ਟ੍ਰਾਂਸਫਰ) ਦਾ ਇੱਕ ਸਾਂਝਾ A4 PDF ਮਾਸਟਰ ਲੈੱਜਰ ਤਿਆਰ ਕਰੇਗਾ।
+            </p>
+
+            <div className="p-3 bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 text-[11px] text-slate-600 dark:text-slate-300 space-y-1">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                <span>ਕਿਸੇ ਵੀ ਇੱਕ ਰਿਪੋਰਟ ਲਈ ਉਸਦੇ ਅੰਦਰਲੇ ਡੈਡੀਕੇਟਿਡ ਬਟਨ ਵਰਤੋ।</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                <span>ਸਿਰਫ਼ ਜਦੋਂ ਸਾਰੀਆਂ ਰਿਪੋਰਟਾਂ ਇਕੱਠੀਆਂ ਚਾਹੀਦੀਆਂ ਹੋਣ, ਤਦ ਹੀ ਇਹ ਡਾਊਨਲੋਡ ਕਰੋ।</span>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowCombinedModal(false)}
+                className="px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700"
+              >
+                Cancel / ਰੱਦ ਕਰੋ
+              </button>
+              <button
+                type="button"
+                onClick={handleExportCombinedMasterPDF}
+                disabled={isExporting}
+                className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-sm flex items-center gap-2"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>{isExporting ? 'Generating...' : 'Download Combined PDF'}</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

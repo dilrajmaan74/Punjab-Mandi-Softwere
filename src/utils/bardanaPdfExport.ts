@@ -2,6 +2,7 @@ import { jsPDF } from 'jspdf';
 import { BardanaReceivedRecord, BardanaInventorySummary, MandiSettings } from '../types/mandi';
 import { cleanPdfText } from './translations';
 import { renderStandardPdfHeader } from './pdfHeaderHelper';
+import { registerGurmukhiFont } from './gurmukhiPdfFont';
 
 function cleanText(text: string | number | null | undefined): string {
   return cleanPdfText(text);
@@ -19,6 +20,8 @@ export async function exportBardanaReceivedVoucherPDF(
     unit: 'mm',
     format: 'a4'
   });
+  registerGurmukhiFont(doc);
+  const fontName = (doc as any).__gurmukhiFontRegistered ? 'NotoSansGurmukhi' : 'helvetica';
 
   const pageWidth = doc.internal.pageSize.getWidth();
   const margin = 14;
@@ -74,30 +77,33 @@ export async function exportBardanaReceivedVoucherPDF(
     rowY
   );
   rowY += 9;
-  const totalBagsCount = Number((record as any).totalBags ?? record.bags ?? ((record.newBags || 0) + (record.oldBags || 0))) || 0;
-  const boxesCount = Number(record.boxes ?? ((record.newBoxCount || 0) + (record.oldBoxCount || 0))) || 0;
-  const capacityPerBox = Number((record as any).capacityPerBox || (record.bardanaType === 'NEW' ? 500 : 50)) || 500;
+  const newJuthBags = record.newBags !== undefined ? record.newBags : (record.bardanaType === 'NEW' ? record.bags : 0);
+  const oldJuthBags = record.oldBags !== undefined ? record.oldBags : (record.bardanaType === 'OLD' ? record.bags : 0);
+  const totalBagsCount = Number((record as any).totalBags ?? record.bags ?? (newJuthBags + oldJuthBags)) || 0;
+  const sellerInfo = record.sellerId ? `${cleanText(record.sourceName)} (ID: ${record.sellerId})` : cleanText(record.sourceName);
 
   drawRow(
     record.receivedFrom === 'SELLER' ? 'Seller Name:' : 'Agency / Source Name:',
-    cleanText(record.sourceName),
+    sellerInfo,
     rowY,
     true
   );
   rowY += 9;
   drawRow(
-    'Bardana Type:',
-    record.bardanaType === 'NEW'
-      ? 'New Juth (1 Box = 500 Bags)'
-      : 'Old Juth (1 Box = 50 Bags)',
+    'New Juth (ਨਵੀਂ ਜੂਥ):',
+    `${newJuthBags.toLocaleString('en-IN')} Bags (${Math.floor(newJuthBags / 500)} Boxes, ${newJuthBags % 500} Loose)`,
     rowY
   );
   rowY += 9;
-  drawRow('Number of Boxes:', `${boxesCount} Boxes`, rowY);
+  drawRow(
+    'Old Juth (ਪੁਰਾਣੀ ਜੂਥ):',
+    `${oldJuthBags.toLocaleString('en-IN')} Bags (${Math.floor(oldJuthBags / 50)} Boxes, ${oldJuthBags % 50} Loose)`,
+    rowY
+  );
   rowY += 9;
   drawRow(
     'Total Bags Received:',
-    `${totalBagsCount.toLocaleString('en-IN')} Bags (${record.bardanaType === 'NEW' ? 'New Juth' : 'Old Juth'})`,
+    `${totalBagsCount.toLocaleString('en-IN')} Bags`,
     rowY,
     true
   );
@@ -115,10 +121,10 @@ export async function exportBardanaReceivedVoucherPDF(
   doc.setTextColor(146, 64, 14);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8.5);
-  doc.text('SPECIFICATION & CALCULATION:', margin + 6, currentY + 6);
+  doc.text('CALCULATION BREAKDOWN:', margin + 6, currentY + 6);
   doc.setFont('helvetica', 'normal');
   doc.text(
-    `Formula: ${boxesCount} Boxes x ${capacityPerBox} Bags/Box = ${totalBagsCount.toLocaleString('en-IN')} Total Bags Added to ${record.bardanaType} Stock.`,
+    `Formula: New Juth (${newJuthBags} Bags) + Old Juth (${oldJuthBags} Bags) = ${totalBagsCount.toLocaleString('en-IN')} Total Bags Added to Stock.`,
     margin + 6,
     currentY + 12
   );
@@ -175,6 +181,8 @@ export async function exportBardanaRegisterPDF(
     unit: 'mm',
     format: 'a4'
   });
+  registerGurmukhiFont(doc);
+  const fontName = (doc as any).__gurmukhiFontRegistered ? 'NotoSansGurmukhi' : 'helvetica';
 
   const pageWidth = doc.internal.pageSize.getWidth();
   const margin = 12;
@@ -236,14 +244,13 @@ export async function exportBardanaRegisterPDF(
 
   // Table Headers
   const columns = [
-    { header: 'ID', width: 22 },
-    { header: 'Date', width: 24 },
-    { header: 'Agency', width: 48 },
-    { header: 'Source Type', width: 26 },
-    { header: 'Seller / Agency Name', width: 52 },
-    { header: 'Type', width: 20 },
-    { header: 'Boxes', width: 18 },
-    { header: 'Bags Recv', width: 25 },
+    { header: 'ID', width: 20 },
+    { header: 'Date', width: 22 },
+    { header: 'Agency', width: 40 },
+    { header: 'Source / Seller', width: 52 },
+    { header: 'New Juth', width: 26 },
+    { header: 'Old Juth', width: 26 },
+    { header: 'Total Bags', width: 28 },
     { header: 'Remarks', width: 38 }
   ];
 
@@ -295,39 +302,33 @@ export async function exportBardanaRegisterPDF(
 
       // Agency
       const agencyStr = cleanText(rec.agency);
-      doc.text(agencyStr.length > 25 ? agencyStr.substring(0, 24) + '...' : agencyStr, rowX, currentY + 4.8);
+      doc.text(agencyStr.length > 22 ? agencyStr.substring(0, 21) + '...' : agencyStr, rowX, currentY + 4.8);
       rowX += columns[2].width;
 
-      // Source Type
-      doc.text(rec.receivedFrom === 'SELLER' ? 'Seller' : 'Agency', rowX, currentY + 4.8);
+      // Source / Seller Name
+      const sourceStr = rec.sellerId ? `${cleanText(rec.sourceName)} (ID: ${rec.sellerId})` : cleanText(rec.sourceName);
+      doc.text(sourceStr.length > 25 ? sourceStr.substring(0, 24) + '...' : sourceStr, rowX, currentY + 4.8);
       rowX += columns[3].width;
 
-      // Source Name
-      const sourceStr = cleanText(rec.sourceName);
-      doc.text(sourceStr.length > 25 ? sourceStr.substring(0, 24) + '...' : sourceStr, rowX, currentY + 4.8);
+      // New Juth Bags
+      const rowNewBags = rec.newBags !== undefined ? rec.newBags : (rec.bardanaType === 'NEW' ? rec.bags : 0);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(5, 150, 105);
+      doc.text(rowNewBags > 0 ? rowNewBags.toLocaleString('en-IN') : '0', rowX, currentY + 4.8);
       rowX += columns[4].width;
 
-      // Type
-      doc.setFont('helvetica', 'bold');
-      if (rec.bardanaType === 'NEW') {
-        doc.setTextColor(5, 150, 105);
-      } else {
-        doc.setTextColor(217, 119, 6);
-      }
-      doc.text(rec.bardanaType, rowX, currentY + 4.8);
+      // Old Juth Bags
+      const rowOldBags = rec.oldBags !== undefined ? rec.oldBags : (rec.bardanaType === 'OLD' ? rec.bags : 0);
+      doc.setTextColor(217, 119, 6);
+      doc.text(rowOldBags > 0 ? rowOldBags.toLocaleString('en-IN') : '0', rowX, currentY + 4.8);
       rowX += columns[5].width;
 
-      // Boxes
-      const rowBoxes = Number(rec.boxes ?? ((rec.newBoxCount || 0) + (rec.oldBoxCount || 0))) || 0;
-      doc.setTextColor(15, 23, 42);
-      doc.text(String(rowBoxes), rowX, currentY + 4.8);
-      rowX += columns[6].width;
-
-      // Bags
-      const rowBags = Number((rec as any).totalBags ?? rec.bags ?? ((rec.newBags || 0) + (rec.oldBags || 0))) || 0;
+      // Total Bags
+      const rowBags = Number((rec as any).totalBags ?? rec.bags ?? (rowNewBags + rowOldBags)) || 0;
       doc.setFont('helvetica', 'bold');
+      doc.setTextColor(15, 23, 42);
       doc.text(rowBags.toLocaleString('en-IN'), rowX, currentY + 4.8);
-      rowX += columns[7].width;
+      rowX += columns[6].width;
 
       // Remarks
       doc.setFont('helvetica', 'normal');

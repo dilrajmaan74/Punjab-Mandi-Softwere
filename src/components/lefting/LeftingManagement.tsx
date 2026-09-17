@@ -30,7 +30,7 @@ import {
   ShieldCheck,
   Maximize2
 } from 'lucide-react';
-import { formatCurrencyINR, autoFormatDate, FIXED_BAG_WEIGHT_KG } from '../../utils/calculations';
+import { formatCurrencyINR, autoFormatDate, FIXED_BAG_WEIGHT_KG, formatLeftingWeightQtlKg } from '../../utils/calculations';
 import { exportLeftingVoucherPDF } from '../../utils/leftingPdfExport';
 import { SellerMasterModal } from '../seller/SellerMasterModal';
 import { TruckMasterModal } from '../truck/TruckMasterModal';
@@ -394,7 +394,8 @@ export const LeftingManagement: React.FC = () => {
         { labelEn: 'Gate Pass', labelPa: 'ਗੇਟ ਪਾਸ', value: rec.gatePassNo || rec.id },
         { labelEn: 'Truck No', labelPa: 'ਟਰੱਕ ਨੰਬਰ', value: rec.truckNo },
         { labelEn: 'Destination', labelPa: 'ਸ਼ੈਲਰ', value: rec.destination },
-        { labelEn: 'Bags', labelPa: 'ਬੋਰੀਆਂ', value: `${rec.bags} Bags (${rec.totalWeightKg} Kg)` }
+        { labelEn: 'Bags', labelPa: 'ਬੋਰੀਆਂ', value: `${rec.bags} Bags` },
+        { labelEn: 'Total Weight / ਕੁੱਲ ਵਜ਼ਨ', labelPa: 'Total Weight / ਕੁੱਲ ਵਜ਼ਨ', value: formatLeftingWeightQtlKg(rec.totalWeightKg ?? (rec.qul * 100 + rec.kg)) }
       ],
       onConfirm: () => {
         deleteLeftingRecord(rec.id);
@@ -497,7 +498,7 @@ export const LeftingManagement: React.FC = () => {
           <div className="text-xl font-black text-slate-900 mt-1">
             {totalDispatchedBags.toLocaleString('en-IN')} Bags
           </div>
-          <div className="text-[10px] text-slate-500 mt-0.5">{(totalDispatchedKg / 100).toFixed(1)} {isEn ? 'Qtl Weight' : 'ਕੁਇੰਟਲ ਵਜ਼ਨ'}</div>
+          <div className="text-[11px] font-mono font-bold text-slate-600 mt-0.5">{formatLeftingWeightQtlKg(totalDispatchedKg)}</div>
         </div>
 
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
@@ -853,17 +854,39 @@ export const LeftingManagement: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  ਕੁੱਲ ਵਜ਼ਨ ਕਿਲੋ ਵਿੱਚ (Total Weight Kg)
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={customWeightKg || ''}
-                  onChange={(e) => setCustomWeightKg(e.target.value)}
-                  placeholder="37.50 KG ਪ੍ਰਤੀ ਬੋਰੀ"
-                  className="w-full px-3 py-2 text-xs font-bold text-slate-900 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-slate-900 focus:outline-none"
-                />
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-bold text-slate-700">
+                    Total Weight / ਕੁੱਲ ਵਜ਼ਨ
+                  </label>
+                  <span className="text-[10px] text-slate-400 font-medium">
+                    1 Qtl = 100 Kg
+                  </span>
+                </div>
+                <div className="relative">
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={customWeightKg || ''}
+                    onChange={(e) => setCustomWeightKg(e.target.value)}
+                    placeholder="e.g. 15000"
+                    className="w-full px-3 py-2 text-xs font-bold text-slate-900 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-slate-900 focus:outline-none pr-10"
+                  />
+                  <span className="absolute right-3 top-2 text-xs font-bold text-slate-400">
+                    Kg
+                  </span>
+                </div>
+                <div className="mt-1.5 px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between shadow-2xs">
+                  <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wide">
+                    {isEn ? 'Display (Qtl + Kg):' : 'ਵਜ਼ਨ ਪ੍ਰਦਰਸ਼ਨ:'}
+                  </span>
+                  <span className="text-xs font-black font-mono text-emerald-950">
+                    {formatLeftingWeightQtlKg(
+                      customWeightKg
+                        ? parseFloat(customWeightKg)
+                        : (parseInt(bags, 10) ? parseInt(bags, 10) * FIXED_BAG_WEIGHT_KG : 0)
+                    )}
+                  </span>
+                </div>
               </div>
             </div>
 
@@ -1023,7 +1046,7 @@ export const LeftingManagement: React.FC = () => {
                     <th className="p-3">ਟਰੱਕ ਤੇ ਡਰਾਈਵਰ</th>
                     <th className="p-3">ਸੈਲਰ / ਸ਼ੈਲਰ (Seller / Sheller)</th>
                     <th className="p-3">ਖਰੀਦ ਏਜੰਸੀ (Agency)</th>
-                    <th className="p-3">ਬੋਰੀਆਂ ਤੇ ਵਜ਼ਨ</th>
+                    <th className="p-3">ਬੋਰੀਆਂ ਤੇ Total Weight / ਕੁੱਲ ਵਜ਼ਨ</th>
                     <th className="p-3">ਸਥਿਤੀ (Status)</th>
                     <th className="p-3 text-center print:hidden">ਕਾਰਵਾਈ (Action)</th>
                   </tr>
@@ -1054,8 +1077,8 @@ export const LeftingManagement: React.FC = () => {
                       </td>
                       <td className="p-3">
                         <div className="font-black text-slate-900">{rec.bags} Bags</div>
-                        <div className="text-[10px] text-slate-500">
-                          {rec.qul} Qul {rec.kg} Kg
+                        <div className="text-[11px] font-mono font-bold text-emerald-800">
+                          {formatLeftingWeightQtlKg(rec.totalWeightKg ?? (rec.qul * 100 + rec.kg))}
                         </div>
                       </td>
                       <td className="p-3">
@@ -1107,6 +1130,29 @@ export const LeftingManagement: React.FC = () => {
                     </tr>
                   ))}
                 </tbody>
+                {filteredRecords.length > 0 && (
+                  <tfoot className="bg-slate-50 border-t-2 border-slate-200 font-bold text-slate-900 text-xs">
+                    <tr>
+                      <td colSpan={5} className="p-3 text-right uppercase tracking-wider text-[11px] font-black text-slate-600">
+                        ਕੁੱਲ ਜੋੜ (Total):
+                      </td>
+                      <td className="p-3 font-mono font-black text-slate-950">
+                        <div>
+                          {filteredRecords.reduce((s, r) => s + (Number(r.bags) || 0), 0).toLocaleString('en-IN')} Bags
+                        </div>
+                        <div className="text-[11px] text-emerald-800 font-mono">
+                          {formatLeftingWeightQtlKg(
+                            filteredRecords.reduce(
+                              (s, r) => s + (Number(r.totalWeightKg) || (Number(r.qul || 0) * 100 + Number(r.kg || 0))),
+                              0
+                            )
+                          )}
+                        </div>
+                      </td>
+                      <td colSpan={2}></td>
+                    </tr>
+                  </tfoot>
+                )}
               </table>
             </div>
           )}
@@ -1163,9 +1209,15 @@ export const LeftingManagement: React.FC = () => {
                   <strong className="text-slate-900">{viewRecord.destination}</strong>
                 </div>
                 <div>
-                  <span className="text-slate-400">ਬੋਰੀਆਂ:</span>{' '}
+                  <span className="text-slate-400">ਬੋਰੀਆਂ (Bags):</span>{' '}
                   <strong className="text-slate-900">
-                    {viewRecord.bags} ਬੋਰੇ ({viewRecord.totalWeightKg} Kg)
+                    {viewRecord.bags} Bags / ਬੋਰੇ
+                  </strong>
+                </div>
+                <div className="pt-2 flex items-center justify-between border-t border-slate-200 mt-2 bg-emerald-50 px-3 py-2 rounded-xl border border-emerald-200">
+                  <span className="text-emerald-800 font-bold">Total Weight / ਕੁੱਲ ਵਜ਼ਨ:</span>{' '}
+                  <strong className="text-emerald-950 font-black font-mono text-sm">
+                    {formatLeftingWeightQtlKg(viewRecord.totalWeightKg ?? (viewRecord.qul * 100 + viewRecord.kg))}
                   </strong>
                 </div>
               </div>
@@ -1239,6 +1291,20 @@ export const LeftingManagement: React.FC = () => {
               <button onClick={() => setEditRecord(null)} className="p-1 hover:bg-slate-100 rounded-lg">
                 <X className="w-4 h-4 text-slate-500" />
               </button>
+            </div>
+
+            {/* Dispatch Record Summary */}
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-1">
+              <div className="flex justify-between font-bold text-slate-800">
+                <span>ਗੇਟ ਪਾਸ: {editRecord.gatePassNo || editRecord.id}</span>
+                <span>ਟਰੱਕ: {editRecord.truckNo}</span>
+              </div>
+              <div className="flex justify-between items-center text-slate-600">
+                <span>ਬੋਰੀਆਂ: {editRecord.bags} Bags</span>
+                <span className="font-mono font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                  Total Weight / ਕੁੱਲ ਵਜ਼ਨ: {formatLeftingWeightQtlKg(editRecord.totalWeightKg ?? (editRecord.qul * 100 + editRecord.kg))}
+                </span>
+              </div>
             </div>
 
             <form onSubmit={handleSaveEdit} className="space-y-4 text-xs">

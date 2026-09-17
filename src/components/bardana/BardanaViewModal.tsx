@@ -114,72 +114,80 @@ export const BardanaViewModal: React.FC<BardanaViewModalProps> = ({
               <span className="text-[11px] font-bold text-slate-500 block">
                 {record.receivedFrom === 'SELLER' ? 'ਸੈਲਰ ਦਾ ਨਾਂ (Seller Name)' : 'ਏਜੰਸੀ / ਸਰੋਤ ਦਾ ਨਾਂ (Agency Source)'}
               </span>
-              <div className="text-sm font-black text-slate-900">
-                {record.sourceName}
+              <div className="text-sm font-black text-slate-900 flex items-center gap-2">
+                <span>{record.sourceName}</span>
+                {record.sellerId && (
+                  <span className="text-[10px] bg-blue-100 text-blue-800 font-mono font-bold px-1.5 py-0.5 rounded">
+                    ID: {record.sellerId}
+                  </span>
+                )}
               </div>
             </div>
           </div>
 
           {/* Section 3: Quantity & Type Details */}
-          <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3 shadow-2xs">
-            <h4 className="font-black text-xs text-slate-700 uppercase tracking-wide border-b border-slate-100 pb-2 flex items-center justify-between">
-              <span>ਸਟਾਕ ਤੇ ਗਿਣਤੀ ਵੇਰਵੇ (Quantity & Capacity)</span>
-              <span className="text-[11px] text-slate-500 flex items-center gap-1">
-                <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                <span>ਮਿਤੀ (Date): <strong className="text-slate-900">{record.date}</strong></span>
-              </span>
-            </h4>
+          {(() => {
+            const newJuthBags = record.newBags !== undefined ? record.newBags : (record.bardanaType === 'NEW' ? record.bags : 0);
+            const oldJuthBags = record.oldBags !== undefined ? record.oldBags : (record.bardanaType === 'OLD' ? record.bags : 0);
+            const totalBagsCount = Number((record as any).totalBags ?? record.bags ?? (newJuthBags + oldJuthBags)) || 0;
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {/* Type */}
-              <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
-                <span className="text-[10px] uppercase font-bold text-slate-500 block">ਬਾਰਦਾਨਾ ਕਿਸਮ</span>
-                <span
-                  className={`inline-block mt-1 px-2 py-0.5 rounded text-xs font-black ${
-                    record.bardanaType === 'NEW'
-                      ? 'bg-emerald-100 text-emerald-800'
-                      : 'bg-amber-100 text-amber-800'
-                  }`}
-                >
-                  {record.bardanaType === 'NEW' ? 'New Juth / ਨਵਾਂ ਬੋਰਾ' : 'Old Juth / ਪੁਰਾਣਾ ਬੋਰਾ'}
-                </span>
-                <p className="text-[10px] text-slate-500 mt-1">
-                  {record.bardanaType === 'NEW' ? '1 Box = 500 Bags' : '1 Box = 50 Bags'}
-                </p>
-              </div>
+            return (
+              <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3 shadow-2xs">
+                <h4 className="font-black text-xs text-slate-700 uppercase tracking-wide border-b border-slate-100 pb-2 flex items-center justify-between">
+                  <span>ਸਟਾਕ ਤੇ ਗਿਣਤੀ ਵੇਰਵੇ (Quantity & Capacity Details)</span>
+                  <span className="text-[11px] text-slate-500 flex items-center gap-1">
+                    <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                    <span>ਮਿਤੀ (Date): <strong className="text-slate-900">{record.date}</strong></span>
+                  </span>
+                </h4>
 
-              {/* Boxes */}
-              <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
-                <span className="text-[10px] uppercase font-bold text-slate-500 block">ਬਕਸਿਆਂ ਦੀ ਗਿਣਤੀ (Boxes)</span>
-                <div className="text-xl font-mono font-black text-slate-900 mt-0.5">
-                  {record.boxes} <span className="text-xs font-normal text-slate-500">ਬਕਸੇ</span>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {/* New Juth */}
+                  <div className="p-3 bg-emerald-50 rounded-lg border border-emerald-200">
+                    <span className="text-[10px] uppercase font-bold text-emerald-800 block">ਨਵੀਂ ਜੂਥ (New Juth)</span>
+                    <div className="text-xl font-mono font-black text-emerald-950 mt-0.5">
+                      {newJuthBags.toLocaleString('en-IN')} <span className="text-xs font-normal text-emerald-700">Bags</span>
+                    </div>
+                    <p className="text-[10px] text-emerald-700 mt-1">
+                      {Math.floor(newJuthBags / 500)} ਬਕਸੇ ({newJuthBags % 500} ਖੁੱਲ੍ਹੇ)
+                    </p>
+                  </div>
+
+                  {/* Old Juth */}
+                  <div className="p-3 bg-amber-50 rounded-lg border border-amber-200">
+                    <span className="text-[10px] uppercase font-bold text-amber-800 block">ਪੁਰਾਣੀ ਜੂਥ (Old Juth)</span>
+                    <div className="text-xl font-mono font-black text-amber-950 mt-0.5">
+                      {oldJuthBags.toLocaleString('en-IN')} <span className="text-xs font-normal text-amber-700">Bags</span>
+                    </div>
+                    <p className="text-[10px] text-amber-700 mt-1">
+                      {Math.floor(oldJuthBags / 50)} ਬਕਸੇ ({oldJuthBags % 50} ਖੁੱਲ੍ਹੇ)
+                    </p>
+                  </div>
+
+                  {/* Total Bags */}
+                  <div className="p-3 bg-slate-900 text-white rounded-lg border border-slate-800 shadow-xs">
+                    <span className="text-[10px] uppercase font-bold text-emerald-400 block">ਕੁੱਲ ਬੋਰੇ (Total Bags)</span>
+                    <div className="text-xl font-mono font-black text-white mt-0.5">
+                      {totalBagsCount.toLocaleString('en-IN')} <span className="text-xs font-normal text-slate-300">Bags</span>
+                    </div>
+                    <p className="text-[10px] text-emerald-400 font-semibold mt-1">
+                      +{totalBagsCount} ਸਟਾਕ ਵਿੱਚ ਸ਼ਾਮਲ
+                    </p>
+                  </div>
                 </div>
-                <p className="text-[10px] text-slate-500 mt-1">
-                  ਕੁੱਲ ਬਕਸੇ
-                </p>
-              </div>
 
-              {/* Bags */}
-              <div className="p-3 bg-emerald-50 rounded-lg border border-emerald-300">
-                <span className="text-[10px] uppercase font-bold text-emerald-800 block">ਕੁੱਲ ਬੋਰੇ (Total Bags)</span>
-                <div className="text-xl font-mono font-black text-emerald-950 mt-0.5">
-                  {record.bags.toLocaleString('en-IN')} <span className="text-xs font-normal text-emerald-700">ਬੋਰੇ</span>
+                {/* Calculation Formula Display */}
+                <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-700 flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>
+                    ਫਾਰਮੂਲਾ (Formula): <strong>ਨਵੀਂ ਜੂਥ ({newJuthBags} Bags)</strong> +{' '}
+                    <strong>ਪੁਰਾਣੀ ਜੂਥ ({oldJuthBags} Bags)</strong> ={' '}
+                    <strong className="text-emerald-800 text-sm font-black">{totalBagsCount.toLocaleString('en-IN')} Total Bags</strong>
+                  </span>
                 </div>
-                <p className="text-[10px] text-emerald-700 font-semibold mt-1">
-                  +{record.bags} ਸਟਾਕ ਵਿੱਚ ਸ਼ਾਮਲ
-                </p>
               </div>
-            </div>
-
-            {/* Calculation Formula Display */}
-            <div className="p-2.5 bg-amber-50/70 border border-amber-200 rounded-lg text-xs text-amber-900 flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-amber-600 shrink-0" />
-              <span>
-                ਫਾਰਮੂਲਾ (Calculation): <strong>{record.boxes} ਬਕਸੇ</strong> × <strong>{record.capacityPerBox} ਬੋਰੇ/ਬਕਸਾ</strong> ={' '}
-                <strong>{record.bags.toLocaleString('en-IN')} ਬੋਰੇ</strong> ({record.bardanaType === 'NEW' ? 'New Juth Stock' : 'Old Juth Stock'})
-              </span>
-            </div>
-          </div>
+            );
+          })()}
 
           {/* Section 4: Remarks */}
           <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-1">

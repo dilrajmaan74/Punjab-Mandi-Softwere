@@ -218,16 +218,17 @@ export async function exportSimpleFarmerAccountPDF(
   y += boxHeight + 6;
 
   // Key Metrics Computation
-  const totalBagsBrought = account.mandiArrivalBags;
-  const ownPurchaseBags = account.directPurchasedBags;
-  const linkedPurchaseBags = account.linkedPurchasedBags;
+  const totalBagsBrought = account.mandiArrivalBags ?? (account as any).totalBagsArrived ?? 0;
+  const ownPurchaseBags = account.directPurchasedBags ?? (account as any).totalPurchasedBags ?? ((account.purchaseRecords || (account as any).purchaseEntries || []) as any[]).reduce((s, r) => s + (Number(r.bags) || 0), 0);
+  const linkedPurchaseBags = account.linkedPurchasedBags || 0;
   const totalPurchaseBags = ownPurchaseBags + linkedPurchaseBags;
   const balanceBeforeLabour = totalBagsBrought - totalPurchaseBags;
 
   const bagRate = labourInfo?.ratePerBag || 925;
-  const labourExp = labourInfo?.labourExpense ?? (account.totalLabourDeductions > 0 ? account.totalLabourDeductions : (totalBagsBrought * (settings.defaultPakkiLabourRate ?? 7)));
+  const labourExp = labourInfo?.labourExpense ?? ((account.totalLabourDeductions || (account as any).totalLabourCharges || 0) > 0 ? (account.totalLabourDeductions || (account as any).totalLabourCharges) : (totalBagsBrought * (settings.defaultPakkiLabourRate ?? 7)));
   const labourBags = labourInfo?.labourBagsAdjustment ?? Math.ceil(labourExp / bagRate);
   const finalBags = labourInfo?.finalBalanceBags ?? (balanceBeforeLabour - labourBags);
+  const arrivalDisplay = account.mandiArrivalDisplay || `${((totalBagsBrought * (settings.bagWeightStandard || 37.5)) / 100).toFixed(2)} Qtl`;
 
   // Table of 7 Key Metrics (Dual Language)
   doc.setFont('NotoSansGurmukhi', 'bold');
@@ -241,7 +242,7 @@ export async function exportSimpleFarmerAccountPDF(
       sr: '1',
       titleEn: 'Total Bags Brought to Mandi',
       titlePa: 'ਮੰਡੀ ਵਿੱਚ ਲਿਆਂਦੀਆਂ ਕੁੱਲ ਬੋਰੀਆਂ',
-      details: `${totalBagsBrought} Bags / ਬੋਰੀਆਂ (${account.mandiArrivalDisplay})`,
+      details: `${totalBagsBrought} Bags / ਬੋਰੀਆਂ (${arrivalDisplay})`,
       value: `${totalBagsBrought} Bags`,
       highlight: false
     },
@@ -249,7 +250,7 @@ export async function exportSimpleFarmerAccountPDF(
       sr: '2',
       titleEn: 'Own Farmer Purchase',
       titlePa: 'ਆਪਣੀ ਖਰੀਦ',
-      details: `${ownPurchaseBags} Bags / ਬੋਰੀਆਂ (${account.purchaseRecords.length} Entries)`,
+      details: `${ownPurchaseBags} Bags / ਬੋਰੀਆਂ (${(account.purchaseRecords || (account as any).purchaseEntries || []).length} Entries)`,
       value: `${ownPurchaseBags} Bags`,
       highlight: false
     },
@@ -438,14 +439,16 @@ export async function exportSimpleFarmerAccountPDF(
   doc.setFont('NotoSansGurmukhi', 'normal');
   doc.setFontSize(8.5);
   doc.setTextColor(30, 41, 59);
-  doc.text(`Net Amount / ਕੁੱਲ ਬਕਾਇਆ ਰਕਮ: Rs. ${account.netPayableAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`, margin + 4, y + 12.5);
+  const netPayable = account.netPayableAmount ?? (account as any).netPayableToFarmer ?? 0;
+  const finalNetSettlement = account.finalNetSettlementBalance ?? netPayable;
+  doc.text(`Net Amount / ਕੁੱਲ ਬਕਾਇਆ ਰਕਮ: Rs. ${netPayable.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`, margin + 4, y + 12.5);
 
-  const isNetPayable = account.finalNetSettlementBalance >= 0;
+  const isNetPayable = finalNetSettlement >= 0;
   doc.setFont('NotoSansGurmukhi', 'bold');
   doc.setTextColor(isNetPayable ? 20 : 185, isNetPayable ? 83 : 28, isNetPayable ? 45 : 28);
   const settlementText = isNetPayable
-    ? `Final Settlement / ਆਖਰੀ ਨਿਪਟਾਰਾ: Rs. ${account.finalNetSettlementBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`
-    : `Final Settlement / ਆਖਰੀ ਨਿਪਟਾਰਾ (ਵਾਪਸੀ): Rs. ${Math.abs(account.finalNetSettlementBalance).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
+    ? `Final Settlement / ਆਖਰੀ ਨਿਪਟਾਰਾ: Rs. ${finalNetSettlement.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`
+    : `Final Settlement / ਆਖਰੀ ਨਿਪਟਾਰਾ (ਵਾਪਸੀ): Rs. ${Math.abs(finalNetSettlement).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
   doc.text(settlementText, margin + contentWidth - 4, y + 12.5, { align: 'right' });
 
   y += 23;
@@ -516,8 +519,47 @@ export async function exportFarmerAccountPDF(
     }
   };
 
+  // Normalization for robust data handling across different report callers
+  const mandiArrivalEntries = (account.mandiArrivalEntries || (account as any).weighmentEntries || []) as any[];
+  const purchaseRecords = (account.purchaseRecords || (account as any).purchaseEntries || []) as any[];
+  const advances = (account.advances || (account as any).advanceEntries || []) as any[];
+  const transactions = (account.transactions || []) as any[];
+  const linkedPurchasesList = (account.linkedPurchasesList || []) as any[];
+  const agencyWisePurchases = (account.agencyWisePurchases || []) as any[];
+
+  const mandiArrivalBags = account.mandiArrivalBags ?? (account as any).totalBagsArrived ?? mandiArrivalEntries.reduce((s, r) => s + (Number(r.bags) || 0), 0);
+  const directPurchasedBags = account.directPurchasedBags ?? (account as any).totalPurchasedBags ?? purchaseRecords.reduce((s, r) => s + (Number(r.bags) || 0), 0);
+  const purchasedBags = account.purchasedBags ?? directPurchasedBags;
+  const remainingBags = account.remainingBags ?? Math.max(0, mandiArrivalBags - purchasedBags);
+  const directPurchasedAmount = account.directPurchasedAmount ?? (account as any).totalCropValue ?? purchaseRecords.reduce((s, r) => s + (Number(r.totalAmount) || 0), 0);
+  const purchasedAmount = account.purchasedAmount ?? directPurchasedAmount;
+  const linkedPurchasedBags = account.linkedPurchasedBags || 0;
+  const linkedPurchasedAmount = account.linkedPurchasedAmount || 0;
+  const paidAmount = account.paidAmount || 0;
+
+  const mandiArrivalDisplay = account.mandiArrivalDisplay || `${((account.mandiArrivalWeightKg || (mandiArrivalBags * (settings.bagWeightStandard || 37.5))) / 100).toFixed(2)} Qtl`;
+  const purchasedWeightDisplay = account.purchasedWeightDisplay || `${((account.purchasedWeightKg || (purchasedBags * (settings.bagWeightStandard || 37.5))) / 100).toFixed(2)} Qtl`;
+  const remainingWeightDisplay = account.remainingWeightDisplay || `${((remainingBags * (settings.bagWeightStandard || 37.5)) / 100).toFixed(2)} Qtl`;
+
+  const newBardanaUsed = account.newBardanaUsed || 0;
+  const oldBardanaUsed = account.oldBardanaUsed || 0;
+  const totalBardanaUsed = account.totalBardanaUsed || (newBardanaUsed + oldBardanaUsed);
+
+  const totalGrossAmount = account.totalGrossAmount ?? directPurchasedAmount;
+  const totalPakkiLabour = account.totalPakkiLabour ?? (account as any).totalLabourCharges ?? (account.totalLabourDeductions || 0);
+  const totalPakkaDoubleLabour = account.totalPakkaDoubleLabour || 0;
+  const totalSukhiLabour = account.totalSukhiLabour || 0;
+  const totalLabourDeductions = account.totalLabourDeductions ?? totalPakkiLabour;
+  const totalAgencyPurchasePayment = account.totalAgencyPurchasePayment ?? directPurchasedAmount;
+  const netPayableAmount = account.netPayableAmount ?? (account as any).netPayableToFarmer ?? (totalGrossAmount - totalLabourDeductions);
+
+  const totalAdvancePrincipal = account.totalAdvancePrincipal ?? (account as any).totalAdvancesPrincipal ?? 0;
+  const totalAdvanceInterest = account.totalAdvanceInterest ?? (account as any).totalAdvancesInterest ?? 0;
+  const totalAdvanceRecoverable = account.totalAdvanceRecoverable ?? (account as any).totalPayableAdvances ?? (totalAdvancePrincipal + totalAdvanceInterest);
+  const finalNetSettlementBalance = account.finalNetSettlementBalance ?? (netPayableAmount - totalAdvanceRecoverable - paidAmount);
+
   // Top Firm Header
-  const uniqueAgencies = Array.from(new Set(account.purchaseRecords.map(p => safeText(p.agency)).filter(Boolean)));
+  const uniqueAgencies = Array.from(new Set(purchaseRecords.map(p => safeText(p.agency)).filter(Boolean)));
   const primaryAgency = uniqueAgencies.length === 1 ? uniqueAgencies[0] : undefined;
 
   y = renderStandardPdfHeader({
@@ -634,10 +676,10 @@ export async function exportFarmerAccountPDF(
   doc.text('ਮੰਡੀ ਵਿੱਚ ਲਿਆਂਦੀਆਂ ਕੁੱਲ ਬੋਰੀਆਂ', margin + cardWidth / 2, y + 8, { align: 'center' });
   doc.setFontSize(9.5);
   doc.setTextColor(20, 83, 45);
-  doc.text(`${account.mandiArrivalBags} Bags / ਬੋਰੀਆਂ`, margin + cardWidth / 2, y + 14, { align: 'center' });
+  doc.text(`${mandiArrivalBags} Bags / ਬੋਰੀਆਂ`, margin + cardWidth / 2, y + 14, { align: 'center' });
   doc.setFontSize(7);
   doc.setFont('NotoSansGurmukhi', 'normal');
-  doc.text(safeText(account.mandiArrivalDisplay), margin + cardWidth / 2, y + 18.5, { align: 'center' });
+  doc.text(safeText(mandiArrivalDisplay), margin + cardWidth / 2, y + 18.5, { align: 'center' });
 
   // Card 2: Purchased Bags
   doc.setFillColor(239, 246, 255);
@@ -650,26 +692,26 @@ export async function exportFarmerAccountPDF(
   doc.text('ਕੁੱਲ ਖਰੀਦ', margin + (cardWidth + 3) + cardWidth / 2, y + 8, { align: 'center' });
   doc.setFontSize(9.5);
   doc.setTextColor(29, 78, 216);
-  doc.text(`${account.purchasedBags} Bags / ਬੋਰੀਆਂ`, margin + (cardWidth + 3) + cardWidth / 2, y + 14, { align: 'center' });
+  doc.text(`${purchasedBags} Bags / ਬੋਰੀਆਂ`, margin + (cardWidth + 3) + cardWidth / 2, y + 14, { align: 'center' });
   doc.setFontSize(7);
   doc.setFont('NotoSansGurmukhi', 'normal');
-  doc.text(safeText(account.purchasedWeightDisplay), margin + (cardWidth + 3) + cardWidth / 2, y + 18.5, { align: 'center' });
+  doc.text(safeText(purchasedWeightDisplay), margin + (cardWidth + 3) + cardWidth / 2, y + 18.5, { align: 'center' });
 
   // Card 3: Remaining Stock
-  doc.setFillColor(account.remainingBags > 0 ? 254 : 241, account.remainingBags > 0 ? 243 : 245, account.remainingBags > 0 ? 199 : 249);
+  doc.setFillColor(remainingBags > 0 ? 254 : 241, remainingBags > 0 ? 243 : 245, remainingBags > 0 ? 199 : 249);
   doc.roundedRect(margin + (cardWidth + 3) * 2, y, cardWidth, cardHeight, 1.5, 1.5, 'FD');
   doc.setFont('NotoSansGurmukhi', 'bold');
   doc.setFontSize(7);
-  doc.setTextColor(account.remainingBags > 0 ? 146 : 71, account.remainingBags > 0 ? 64 : 85, account.remainingBags > 0 ? 14 : 105);
+  doc.setTextColor(remainingBags > 0 ? 146 : 71, remainingBags > 0 ? 64 : 85, remainingBags > 0 ? 14 : 105);
   doc.text('BALANCE', margin + (cardWidth + 3) * 2 + cardWidth / 2, y + 4.5, { align: 'center' });
   doc.setFontSize(6.8);
   doc.text('ਬਾਕੀ ਬੋਰੀਆਂ', margin + (cardWidth + 3) * 2 + cardWidth / 2, y + 8, { align: 'center' });
   doc.setFontSize(9.5);
-  doc.setTextColor(account.remainingBags > 0 ? 180 : 100, account.remainingBags > 0 ? 83 : 116, account.remainingBags > 0 ? 9 : 139);
-  doc.text(`${account.remainingBags} Bags / ਬੋਰੀਆਂ`, margin + (cardWidth + 3) * 2 + cardWidth / 2, y + 14, { align: 'center' });
+  doc.setTextColor(remainingBags > 0 ? 180 : 100, remainingBags > 0 ? 83 : 116, remainingBags > 0 ? 9 : 139);
+  doc.text(`${remainingBags} Bags / ਬੋਰੀਆਂ`, margin + (cardWidth + 3) * 2 + cardWidth / 2, y + 14, { align: 'center' });
   doc.setFontSize(7);
   doc.setFont('NotoSansGurmukhi', 'normal');
-  doc.text(safeText(account.remainingWeightDisplay), margin + (cardWidth + 3) * 2 + cardWidth / 2, y + 18.5, { align: 'center' });
+  doc.text(safeText(remainingWeightDisplay), margin + (cardWidth + 3) * 2 + cardWidth / 2, y + 18.5, { align: 'center' });
 
   // Card 4: Total Value
   doc.setFillColor(254, 242, 242);
@@ -682,10 +724,10 @@ export async function exportFarmerAccountPDF(
   doc.text('ਰਕਮ', margin + (cardWidth + 3) * 3 + cardWidth / 2, y + 8, { align: 'center' });
   doc.setFontSize(9.2);
   doc.setTextColor(120, 53, 15);
-  doc.text(formatPdfCurrency(account.purchasedAmount), margin + (cardWidth + 3) * 3 + cardWidth / 2, y + 14, { align: 'center' });
+  doc.text(formatPdfCurrency(purchasedAmount), margin + (cardWidth + 3) * 3 + cardWidth / 2, y + 14, { align: 'center' });
   doc.setFontSize(7);
   doc.setFont('NotoSansGurmukhi', 'normal');
-  doc.text(`Paid / ਅਦਾਇਗੀ: ${formatPdfCurrency(account.paidAmount)}`, margin + (cardWidth + 3) * 3 + cardWidth / 2, y + 18.5, { align: 'center' });
+  doc.text(`Paid / ਅਦਾਇਗੀ: ${formatPdfCurrency(paidAmount)}`, margin + (cardWidth + 3) * 3 + cardWidth / 2, y + 18.5, { align: 'center' });
 
   y += cardHeight + 6;
 
@@ -719,14 +761,14 @@ export async function exportFarmerAccountPDF(
   doc.text('Amount / ਰਕਮ', pageWidth - margin - 3, y + 5.2, { align: 'right' });
   y += s1HeaderHeight;
 
-  if (account.mandiArrivalEntries.length === 0) {
+  if (mandiArrivalEntries.length === 0) {
     doc.setFont('NotoSansGurmukhi', 'normal');
     doc.setFontSize(8);
     doc.setTextColor(148, 163, 184);
     doc.text('No Mandi Arrival records found / ਕੋਈ ਆਮਦ ਰਿਕਾਰਡ ਨਹੀਂ ਮਿਲਿਆ।', margin + 3, y + 5);
     y += 8;
   } else {
-    account.mandiArrivalEntries.forEach((entry, idx) => {
+    mandiArrivalEntries.forEach((entry, idx) => {
       checkPageBreak(8);
       const rowH = 7;
       if (idx % 2 === 1) {
@@ -754,8 +796,8 @@ export async function exportFarmerAccountPDF(
     doc.setFontSize(8);
     doc.setTextColor(15, 23, 42);
     doc.text('Total Bags Brought to Mandi / ਮੰਡੀ ਵਿੱਚ ਲਿਆਂਦੀਆਂ ਕੁੱਲ ਬੋਰੀਆਂ:', margin + 2, y + 5);
-    doc.text(`${account.mandiArrivalBags} Bags / ਬੋਰੀਆਂ`, margin + 76, y + 5);
-    doc.text(safeText(account.mandiArrivalDisplay), margin + 112, y + 5);
+    doc.text(`${mandiArrivalBags} Bags / ਬੋਰੀਆਂ`, margin + 76, y + 5);
+    doc.text(safeText(mandiArrivalDisplay), margin + 112, y + 5);
     y += 8.5;
   }
 
@@ -789,14 +831,14 @@ export async function exportFarmerAccountPDF(
   doc.text('Amount / ਰਕਮ', pageWidth - margin - 3, y + 5.2, { align: 'right' });
   y += s2HeaderHeight;
 
-  if (account.purchaseRecords.length === 0) {
+  if (purchaseRecords.length === 0) {
     doc.setFont('NotoSansGurmukhi', 'normal');
     doc.setFontSize(8);
     doc.setTextColor(148, 163, 184);
     doc.text('No Daily Purchase records found / ਕੋਈ ਆਪਣੀ ਖਰੀਦ ਰਿਕਾਰਡ ਨਹੀਂ ਮਿਲਿਆ।', margin + 3, y + 5);
     y += 8;
   } else {
-    account.purchaseRecords.forEach((pur, idx) => {
+    purchaseRecords.forEach((pur, idx) => {
       checkPageBreak(8);
       const rowH = 7;
       if (idx % 2 === 1) {
@@ -824,15 +866,15 @@ export async function exportFarmerAccountPDF(
     doc.setFontSize(8);
     doc.setTextColor(15, 23, 42);
     doc.text('Total Own Farmer Purchase / ਕੁੱਲ ਆਪਣੀ ਖਰੀਦ:', margin + 2, y + 5);
-    doc.text(`${account.directPurchasedBags} Bags / ਬੋਰੀਆਂ`, margin + 79, y + 5);
-    doc.text(formatPdfCurrency(account.directPurchasedAmount || 0), pageWidth - margin - 3, y + 5, { align: 'right' });
+    doc.text(`${directPurchasedBags} Bags / ਬੋਰੀਆਂ`, margin + 79, y + 5);
+    doc.text(formatPdfCurrency(directPurchasedAmount || 0), pageWidth - margin - 3, y + 5, { align: 'right' });
     y += 8.5;
   }
 
   // ==========================================
   // SECTION 2B: LINKED FARMERS PURCHASES
   // ==========================================
-  if (account.linkedPurchasesList && account.linkedPurchasesList.length > 0) {
+  if (linkedPurchasesList && linkedPurchasesList.length > 0) {
     checkPageBreak(38);
     doc.setFont('NotoSansGurmukhi', 'bold');
     doc.setFontSize(9.5);
@@ -859,7 +901,7 @@ export async function exportFarmerAccountPDF(
     doc.text('Amount / ਰਕਮ', pageWidth - margin - 3, y + 5.2, { align: 'right' });
     y += s2bHeaderHeight;
 
-    account.linkedPurchasesList.forEach((lpur, idx) => {
+    linkedPurchasesList.forEach((lpur, idx) => {
       const lName = getBilingualDisplay(lpur.linkedFarmerName, lpur.linkedFarmerNamePa);
       const lNameLines = doc.splitTextToSize(lName, 44);
       const rowH = Math.max(lNameLines.length * 4.4 + 3, 7);
@@ -896,13 +938,13 @@ export async function exportFarmerAccountPDF(
     doc.setFontSize(8);
     doc.setTextColor(15, 23, 42);
     doc.text('Total Linked Farmers Purchase / ਕੁੱਲ ਲਿੰਕ ਕਿਸਾਨਾਂ ਦੀ ਖਰੀਦ:', margin + 2, y + 5);
-    doc.text(`${account.linkedPurchasedBags} Bags / ਬੋਰੀਆਂ`, margin + 96, y + 5);
-    doc.text(formatPdfCurrency(account.linkedPurchasedAmount || 0), pageWidth - margin - 3, y + 5, { align: 'right' });
+    doc.text(`${linkedPurchasedBags} Bags / ਬੋਰੀਆਂ`, margin + 96, y + 5);
+    doc.text(formatPdfCurrency(linkedPurchasedAmount || 0), pageWidth - margin - 3, y + 5, { align: 'right' });
     y += 8.5;
   }
 
   // Agency Breakdown Box
-  if (account.agencyWisePurchases && account.agencyWisePurchases.length > 0) {
+  if (agencyWisePurchases && agencyWisePurchases.length > 0) {
     checkPageBreak(22);
     doc.setFillColor(241, 245, 249);
     doc.roundedRect(margin, y, contentWidth, 15, 1.5, 1.5, 'F');
@@ -912,7 +954,7 @@ export async function exportFarmerAccountPDF(
     doc.text('AGENCY PROCUREMENT BREAKDOWN / ਏਜੰਸੀ ਖਰੀਦ ਵੰਡ:', margin + 4, y + 5);
 
     let agX = margin + 4;
-    account.agencyWisePurchases.forEach((ag) => {
+    agencyWisePurchases.forEach((ag) => {
       doc.setFont('NotoSansGurmukhi', 'bold');
       doc.setFontSize(8);
       doc.setTextColor(20, 83, 45);
@@ -942,18 +984,18 @@ export async function exportFarmerAccountPDF(
   doc.setTextColor(51, 65, 85);
   doc.text('New Bardana / ਨਵਾਂ ਬਾਰਦਾਨਾ:', margin + 6, y + 8.5);
   doc.setFont('NotoSansGurmukhi', 'bold');
-  doc.text(`${account.newBardanaUsed} Bags / ਬੋਰੀਆਂ`, margin + 46, y + 8.5);
+  doc.text(`${newBardanaUsed} Bags / ਬੋਰੀਆਂ`, margin + 46, y + 8.5);
 
   doc.setFont('NotoSansGurmukhi', 'normal');
   doc.text('Old Bardana / ਪੁਰਾਣਾ ਬਾਰਦਾਨਾ:', margin + 74, y + 8.5);
   doc.setFont('NotoSansGurmukhi', 'bold');
-  doc.text(`${account.oldBardanaUsed} Bags / ਬੋਰੀਆਂ`, margin + 114, y + 8.5);
+  doc.text(`${oldBardanaUsed} Bags / ਬੋਰੀਆਂ`, margin + 114, y + 8.5);
 
   doc.setFont('NotoSansGurmukhi', 'normal');
   doc.text('Total / ਕੁੱਲ ਬਾਰਦਾਨਾ:', margin + 140, y + 8.5);
   doc.setFont('NotoSansGurmukhi', 'bold');
   doc.setTextColor(20, 83, 45);
-  doc.text(`${account.totalBardanaUsed} Bags`, margin + 168, y + 8.5);
+  doc.text(`${totalBardanaUsed} Bags`, margin + 168, y + 8.5);
 
   y += 20;
 
@@ -979,26 +1021,26 @@ export async function exportFarmerAccountPDF(
   doc.text('Gross Crop Amount / ਕੁੱਲ ਫਸਲ ਰਕਮ:', margin + 6, crY);
   doc.setFont('NotoSansGurmukhi', 'bold');
   doc.setTextColor(15, 23, 42);
-  doc.text(formatPdfCurrency(account.totalGrossAmount), margin + 76, crY);
+  doc.text(formatPdfCurrency(totalGrossAmount), margin + 76, crY);
 
   crY += 6;
   doc.setFont('NotoSansGurmukhi', 'normal');
   doc.setTextColor(185, 28, 28);
   doc.text('Less: Pakki Labour / ਪੱਕੀ ਲੇਬਰ (Rs. 7/Qtl):', margin + 6, crY);
   doc.setFont('NotoSansGurmukhi', 'bold');
-  doc.text(`- ${formatPdfCurrency(account.totalPakkiLabour)}`, margin + 76, crY);
+  doc.text(`- ${formatPdfCurrency(totalPakkiLabour)}`, margin + 76, crY);
 
   crY += 6;
   doc.setFont('NotoSansGurmukhi', 'normal');
   doc.text('Less: Double Labour / ਡਬਲ ਲੇਬਰ (Rs. 14/Qtl):', margin + 6, crY);
   doc.setFont('NotoSansGurmukhi', 'bold');
-  doc.text(`- ${formatPdfCurrency(account.totalPakkaDoubleLabour)}`, margin + 76, crY);
+  doc.text(`- ${formatPdfCurrency(totalPakkaDoubleLabour)}`, margin + 76, crY);
 
   crY += 6;
   doc.setFont('NotoSansGurmukhi', 'normal');
   doc.text('Less: Sukhi Labour / ਸੁੱਕੀ ਲੇਬਰ (Rs. 5/Qtl):', margin + 6, crY);
   doc.setFont('NotoSansGurmukhi', 'bold');
-  doc.text(`- ${formatPdfCurrency(account.totalSukhiLabour)}`, margin + 76, crY);
+  doc.text(`- ${formatPdfCurrency(totalSukhiLabour)}`, margin + 76, crY);
 
   // Divider line
   doc.setDrawColor(203, 213, 225);
@@ -1009,7 +1051,7 @@ export async function exportFarmerAccountPDF(
   doc.setFontSize(8.5);
   doc.setTextColor(20, 83, 45);
   doc.text('Labour Expense / ਮਜ਼ਦੂਰੀ ਖਰਚ:', margin + 6, crY);
-  doc.text(`- ${formatPdfCurrency(account.totalLabourDeductions)}`, margin + 76, crY);
+  doc.text(`- ${formatPdfCurrency(totalLabourDeductions)}`, margin + 76, crY);
 
   // Right column: Agency Payments & Net Crop Payable
   const netColX = margin + (contentWidth * 0.54);
@@ -1020,7 +1062,7 @@ export async function exportFarmerAccountPDF(
   doc.text('Agency Payments / ਸਰਕਾਰੀ ਭੁਗਤਾਨ:', netColX, netY);
   doc.setFont('NotoSansGurmukhi', 'bold');
   doc.setTextColor(15, 23, 42);
-  doc.text(formatPdfCurrency(account.totalAgencyPurchasePayment), pageWidth - margin - 6, netY, { align: 'right' });
+  doc.text(formatPdfCurrency(totalAgencyPurchasePayment), pageWidth - margin - 6, netY, { align: 'right' });
 
   netY += 9.5;
   doc.setFillColor(240, 253, 244);
@@ -1033,7 +1075,7 @@ export async function exportFarmerAccountPDF(
   doc.setTextColor(20, 83, 45);
   doc.text('NET AMOUNT / ਕੁੱਲ ਬਕਾਇਆ ਰਕਮ', netColX + 4, netY + 4.5);
   doc.setFontSize(11);
-  doc.text(formatPdfCurrency(account.netPayableAmount), netColX + 4, netY + 13.5);
+  doc.text(formatPdfCurrency(netPayableAmount), netColX + 4, netY + 13.5);
 
   y += 44;
 
@@ -1063,14 +1105,14 @@ export async function exportFarmerAccountPDF(
   doc.text('Amount / ਰਕਮ', pageWidth - margin - 3, y + 5.2, { align: 'right' });
   y += s5HeaderHeight;
 
-  if (!account.advances || account.advances.length === 0) {
+  if (!advances || advances.length === 0) {
     doc.setFont('NotoSansGurmukhi', 'normal');
     doc.setFontSize(8);
     doc.setTextColor(148, 163, 184);
     doc.text('No separate advance records recorded / ਕੋਈ ਪੇਸ਼ਗੀ ਰਿਕਾਰਡ ਨਹੀਂ ਹੈ।', margin + 3, y + 5);
     y += 8;
   } else {
-    account.advances.forEach((adv, idx) => {
+    advances.forEach((adv, idx) => {
       checkPageBreak(8);
       const rowH = 7;
       if (idx % 2 === 1) {
@@ -1105,15 +1147,15 @@ export async function exportFarmerAccountPDF(
     doc.setFontSize(7.5);
     doc.setTextColor(15, 23, 42);
     doc.text('Total Principal / ਕੁੱਲ ਮੂਲ:', margin + 2, y + 5);
-    doc.text(formatPdfCurrency(account.totalAdvancePrincipal), margin + 33, y + 5);
+    doc.text(formatPdfCurrency(totalAdvancePrincipal), margin + 33, y + 5);
 
     doc.setTextColor(180, 83, 9);
     doc.text('Total Interest / ਕੁੱਲ ਵਿਆਜ:', margin + 71, y + 5);
-    doc.text(formatPdfCurrency(account.totalAdvanceInterest), margin + 103, y + 5);
+    doc.text(formatPdfCurrency(totalAdvanceInterest), margin + 103, y + 5);
 
     doc.setTextColor(159, 18, 57);
     doc.text('Total Recoverable / ਕੁੱਲ ਵਾਪਸੀ:', margin + 134, y + 5);
-    doc.text(formatPdfCurrency(account.totalAdvanceRecoverable), pageWidth - margin - 3, y + 5, { align: 'right' });
+    doc.text(formatPdfCurrency(totalAdvanceRecoverable), pageWidth - margin - 3, y + 5, { align: 'right' });
     y += 8.5;
   }
 
@@ -1121,7 +1163,7 @@ export async function exportFarmerAccountPDF(
   // SECTION 6: FINAL NET SETTLEMENT STATEMENT
   // ==========================================
   checkPageBreak(32);
-  const isPayable = account.finalNetSettlementBalance >= 0;
+  const isPayable = finalNetSettlementBalance >= 0;
   doc.setFillColor(isPayable ? 240 : 254, isPayable ? 253 : 242, isPayable ? 244 : 242);
   doc.roundedRect(margin, y, contentWidth, 26, 2, 2, 'F');
   doc.setDrawColor(isPayable ? 34 : 239, isPayable ? 197 : 68, isPayable ? 94 : 68);
@@ -1135,9 +1177,9 @@ export async function exportFarmerAccountPDF(
   doc.setFont('NotoSansGurmukhi', 'normal');
   doc.setFontSize(8);
   doc.setTextColor(51, 65, 85);
-  doc.text(`Net Amount / ਕੁੱਲ ਬਕਾਇਆ ਰਕਮ: ${formatPdfCurrency(account.netPayableAmount)}`, margin + 6, y + 13);
-  doc.text(`Less Advance / ਪੇਸ਼ਗੀ ਵਾਪਸੀ: - ${formatPdfCurrency(account.totalAdvanceRecoverable)}`, margin + 68, y + 13);
-  doc.text(`Direct Paid / ਸਿੱਧਾ ਭੁਗਤਾਨ: - ${formatPdfCurrency(account.paidAmount)}`, margin + 134, y + 13);
+  doc.text(`Net Amount / ਕੁੱਲ ਬਕਾਇਆ ਰਕਮ: ${formatPdfCurrency(netPayableAmount)}`, margin + 6, y + 13);
+  doc.text(`Less Advance / ਪੇਸ਼ਗੀ ਵਾਪਸੀ: - ${formatPdfCurrency(totalAdvanceRecoverable)}`, margin + 68, y + 13);
+  doc.text(`Direct Paid / ਸਿੱਧਾ ਭੁਗਤਾਨ: - ${formatPdfCurrency(paidAmount)}`, margin + 134, y + 13);
 
   doc.setFont('NotoSansGurmukhi', 'bold');
   doc.setFontSize(9);
@@ -1147,7 +1189,7 @@ export async function exportFarmerAccountPDF(
     : 'Final Settlement / ਆਖਰੀ ਨਿਪਟਾਰਾ (Recoverable from Farmer / ਕਿਸਾਨ ਤੋਂ ਵਸੂਲੀ ਯੋਗ):';
   doc.text(settlementLabel, margin + 6, y + 20.5);
   doc.setFontSize(11);
-  doc.text(formatPdfCurrency(Math.abs(account.finalNetSettlementBalance)), pageWidth - margin - 6, y + 20.5, { align: 'right' });
+  doc.text(formatPdfCurrency(Math.abs(finalNetSettlementBalance)), pageWidth - margin - 6, y + 20.5, { align: 'right' });
 
   y += 32;
 
@@ -1180,14 +1222,14 @@ export async function exportFarmerAccountPDF(
   doc.text('Amount / ਰਕਮ', pageWidth - margin - 3, y + 5.2, { align: 'right' });
   y += s7HeaderHeight;
 
-  if (!account.transactions || account.transactions.length === 0) {
+  if (!transactions || transactions.length === 0) {
     doc.setFont('NotoSansGurmukhi', 'normal');
     doc.setFontSize(8);
     doc.setTextColor(148, 163, 184);
     doc.text('No ledger transactions recorded yet / ਕੋਈ ਲੈਣ-ਦੇਣ ਰਿਕਾਰਡ ਨਹੀਂ ਹੈ।', margin + 3, y + 5);
     y += 8;
   } else {
-    account.transactions.forEach((tx, idx) => {
+    transactions.forEach((tx, idx) => {
       const typeDisplay = tx.typeLabelPa ? `${safeText(tx.typeLabelEn)} / ${safeText(tx.typeLabelPa)}` : safeText(tx.typeLabelEn);
       const typeLines = doc.splitTextToSize(typeDisplay, 34);
       const agencyRef = safeText(`${tx.agency || ''} ${tx.reference ? `(${tx.reference})` : ''}`);

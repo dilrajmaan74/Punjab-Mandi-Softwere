@@ -487,8 +487,8 @@ export function stripGurmukhi(text: string): string {
  * 1. Strips or translates Gurmukhi characters
  * 2. Replaces currency symbols like ₹ with Rs.
  * 3. Replaces non-ASCII punctuation (em-dash, ellipsis, bullets, curly quotes)
- * 4. Extracts clean English from bilingual labels
- * 5. Guarantees 100% clean ASCII text without garbled or broken glyphs
+ * 4. Preserves 100% full Unicode Gurmukhi (\u0A00-\u0A7F) and bilingual text
+ * 5. Guarantees clean rendering without corrupting or dropping Punjabi characters
  */
 export function cleanPdfText(text: string | number | null | undefined): string {
   if (text === null || text === undefined) return '';
@@ -500,53 +500,21 @@ export function cleanPdfText(text: string | number | null | undefined): string {
   // Standardise special punctuation
   str = str.replace(/[\u2014\u2013\u2015]/g, ' - '); // em-dash, en-dash
   str = str.replace(/[\u2026]/g, '...');              // ellipsis
-  str = str.replace(/[\u2022\u00B7\u25CF]/g, ' | ');  // bullets
+  str = str.replace(/[\u00B7\u25CF]/g, ' • ');        // middle dot, black circle to bullet
   str = str.replace(/[\u2018\u2019`]/g, "'");         // single quotes
   str = str.replace(/[\u201C\u201D]/g, '"');         // double quotes
   str = str.replace(/\u00A0/g, ' ');                 // non-breaking space
 
-  // Common bilingual patterns like "ਗਰੁੱਪ (Group)" or "ਕਿਸਾਨ (Farmer)" -> extract English
-  const parenMatch = str.match(/^([^(]+)\s*\(([^)]+)\)\s*(:?)$/);
-  if (parenMatch) {
-    const p1 = parenMatch[1].trim();
-    const p2 = parenMatch[2].trim();
-    const colon = parenMatch[3] || '';
-    if (/^[A-Za-z0-9\s.,\-_/:#]+$/.test(p1) && /[\u0A00-\u0A7F]/.test(p2)) {
-      str = p1 + colon;
-    } else if (/[\u0A00-\u0A7F]/.test(p1) && /[A-Za-z0-9]/.test(p2)) {
-      str = p2 + colon;
-    }
-  }
-
-  // Bilingual patterns with slash: "English / Punjabi" or "Punjabi / English"
-  if (str.includes('/')) {
-    const parts = str.split('/');
-    const enParts = parts.map(p => p.trim()).filter(p => /^[A-Za-z0-9\s.,\-_():#]+$/.test(p) && /[A-Za-z0-9]/.test(p));
-    if (enParts.length > 0 && enParts.length < parts.length) {
-      str = enParts.join(' / ');
-    }
-  }
-
-  // If Gurmukhi characters are present, check dictionary and strip remainder
-  if (/[\u0A00-\u0A7F]/.test(str)) {
-    for (const [pa, en] of Object.entries(GURMUKHI_TO_ENGLISH)) {
-      if (str.includes(pa)) {
-        str = str.split(pa).join(en);
-      }
-    }
-    str = str.replace(/[\u0A00-\u0A7F]/g, '');
-  }
-
   // Clean empty parens or brackets
   str = str.replace(/\s*\(\s*\)/g, '');
   str = str.replace(/\s*\[\s*\]/g, '');
-  str = str.replace(/\s*\/\s*$/, '');
-  str = str.replace(/^\s*\/\s*/, '');
-  str = str.replace(/\s*-\s*$/, '');
-  str = str.replace(/^\s*-\s*/, '');
 
-  // Strip non-ASCII characters
-  str = str.replace(/[^\x20-\x7E\r\n\t]/g, '');
+  // Strip non-printable / control characters while strictly retaining:
+  // - Unicode Gurmukhi (\u0A00-\u0A7F)
+  // - Standard ASCII printables (\x20-\x7E)
+  // - Bullet symbol (\u2022)
+  // - Carriage return, newline, tab (\r, \n, \t)
+  str = str.replace(/[^\x20-\x7E\r\n\t\u0A00-\u0A7F\u2022]/g, '');
 
   // Normalise multiple spaces
   str = str.replace(/\s{2,}/g, ' ').trim();

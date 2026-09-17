@@ -1,6 +1,7 @@
 import { MandiSettings } from '../types/mandi';
 import { cleanPdfText } from './translations';
 import { renderStandardPdfHeader } from './pdfHeaderHelper';
+import { registerGurmukhiFont } from './gurmukhiPdfFont';
 
 export interface FarmerBagBalanceItem {
   farmerId: string;
@@ -91,20 +92,122 @@ function cleanText(text: string | number | null | undefined): string {
 }
 
 export async function exportFarmerBagLabourPDF(
-  items: FarmerBagBalanceItem[],
+  rawItems: (FarmerBagBalanceItem | any)[],
   settings: MandiSettings,
-  options: {
+  rawOptions?: {
     dateFilterLabel?: string;
-    applicableBagRate: number;
-    totals: ReportGrandTotals;
+    applicableBagRate?: number;
+    totals?: Partial<ReportGrandTotals>;
   }
 ): Promise<void> {
+  const safeItems: FarmerBagBalanceItem[] = (rawItems || []).map((raw) => {
+    const farmerName = raw.farmerName || raw.farmer?.farmerName || 'Farmer';
+    const farmerNamePa = raw.farmerNamePa || raw.farmer?.farmerNamePa || farmerName;
+    const fatherName = raw.fatherName || raw.farmer?.fatherName || '-';
+    const fatherNamePa = raw.fatherNamePa || raw.farmer?.fatherNamePa;
+    const village = raw.village || raw.farmer?.village || '-';
+    const villagePa = raw.villagePa || raw.farmer?.villagePa;
+    const mobile = raw.mobile || raw.farmer?.mobile || '-';
+    const aadhaar = raw.aadhaar || raw.farmer?.aadhaar;
+    const linkedFarmers = raw.linkedFarmers || [];
+    
+    const totalBagsBrought = raw.totalBagsBrought ?? raw.totalBagsArrived ?? 0;
+    const totalWeightBroughtKg = raw.totalWeightBroughtKg ?? raw.totalWeightKgArrived ?? (totalBagsBrought * (settings.bagWeightStandard || 37.5));
+    const arrivalEntries = (raw.arrivalEntries || raw.weighmentEntries || []).map((arr: any) => ({
+      id: arr.id || '-',
+      entryNumber: arr.entryNumber || '-',
+      date: arr.date || '-',
+      newBags: arr.newBags || 0,
+      oldBags: arr.oldBags || 0,
+      bags: arr.bags || 0,
+      weightDisplay: arr.weightDisplay || arr.grandTotalDisplay || '-',
+      labourAmount: arr.labourAmount || arr.totalAmount || 0
+    }));
+
+    const ownPurchasedBags = raw.ownPurchasedBags ?? raw.directPurchasedBags ?? raw.totalPurchasedBags ?? (raw.purchaseEntries || []).reduce((s: number, p: any) => s + (Number(p.bags) || 0), 0);
+    const ownPurchasedWeightKg = raw.ownPurchasedWeightKg ?? (ownPurchasedBags * (settings.bagWeightStandard || 37.5));
+    const ownPurchases = (raw.ownPurchases || raw.purchaseEntries || []).map((pur: any) => ({
+      id: pur.id || '-',
+      date: pur.date || '-',
+      agency: pur.agency || '-',
+      bags: pur.bags || 0,
+      weightDisplay: pur.weightDisplay || pur.totalWeightDisplay || '-',
+      rate: pur.rate || 0,
+      totalAmount: pur.totalAmount || 0
+    }));
+
+    const linkedPurchasedBags = raw.linkedPurchasedBags || 0;
+    const linkedPurchasedWeightKg = raw.linkedPurchasedWeightKg || (linkedPurchasedBags * (settings.bagWeightStandard || 37.5));
+    const linkedFarmerPurchases = raw.linkedFarmerPurchases || [];
+
+    const totalPurchasedBags = raw.totalPurchasedBags ?? (ownPurchasedBags + linkedPurchasedBags);
+    const totalPurchasedWeightKg = raw.totalPurchasedWeightKg ?? (ownPurchasedWeightKg + linkedPurchasedWeightKg);
+    const totalPurchasedAmount = raw.totalPurchasedAmount ?? raw.totalCropValue ?? 0;
+
+    const balanceBeforeLabourBags = raw.balanceBeforeLabourBags ?? (totalBagsBrought - totalPurchasedBags);
+    const labourExpense = raw.labourExpense ?? raw.totalLabourCharges ?? 0;
+    const applicableBagRate = raw.applicableBagRate ?? rawOptions?.applicableBagRate ?? settings.labourRatePerBag ?? 14.5;
+    const rawLabourBags = raw.rawLabourBags ?? (applicableBagRate > 0 ? (labourExpense / applicableBagRate) : 0);
+    const labourBagsAdjustment = raw.labourBagsAdjustment ?? Math.ceil(rawLabourBags);
+    const finalBalanceBags = raw.finalBalanceBags ?? (balanceBeforeLabourBags - labourBagsAdjustment);
+
+    return {
+      farmerId: raw.farmerId || raw.farmer?.id || '-',
+      farmerName,
+      farmerNamePa,
+      fatherName,
+      fatherNamePa,
+      village,
+      villagePa,
+      mobile,
+      aadhaar,
+      linkedFarmers,
+      totalBagsBrought,
+      totalWeightBroughtKg,
+      arrivalEntries,
+      ownPurchasedBags,
+      ownPurchasedWeightKg,
+      ownPurchases,
+      linkedPurchasedBags,
+      linkedPurchasedWeightKg,
+      linkedFarmerPurchases,
+      totalPurchasedBags,
+      totalPurchasedWeightKg,
+      totalPurchasedAmount,
+      balanceBeforeLabourBags,
+      labourExpense,
+      applicableBagRate,
+      rawLabourBags,
+      labourBagsAdjustment,
+      finalBalanceBags
+    };
+  });
+
+  const applicableBagRate = rawOptions?.applicableBagRate ?? (settings.labourRatePerBag || 14.5);
+  const dateFilterLabel = rawOptions?.dateFilterLabel || 'ALL RECORDS';
+  const totals: ReportGrandTotals = {
+    totalBagsBrought: rawOptions?.totals?.totalBagsBrought ?? safeItems.reduce((acc, it) => acc + it.totalBagsBrought, 0),
+    totalOwnPurchase: rawOptions?.totals?.totalOwnPurchase ?? safeItems.reduce((acc, it) => acc + it.ownPurchasedBags, 0),
+    totalLinkedFarmerPurchase: rawOptions?.totals?.totalLinkedFarmerPurchase ?? safeItems.reduce((acc, it) => acc + it.linkedPurchasedBags, 0),
+    totalPurchase: rawOptions?.totals?.totalPurchase ?? safeItems.reduce((acc, it) => acc + it.totalPurchasedBags, 0),
+    totalLabourExpense: rawOptions?.totals?.totalLabourExpense ?? safeItems.reduce((acc, it) => acc + it.labourExpense, 0),
+    totalLabourBags: rawOptions?.totals?.totalLabourBags ?? safeItems.reduce((acc, it) => acc + it.labourBagsAdjustment, 0),
+    finalBalanceBags: rawOptions?.totals?.finalBalanceBags ?? safeItems.reduce((acc, it) => acc + it.finalBalanceBags, 0)
+  };
+  const options = {
+    dateFilterLabel,
+    applicableBagRate,
+    totals
+  };
+  const items = safeItems;
   const { jsPDF } = await import('jspdf');
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'mm',
     format: 'a4'
   });
+  registerGurmukhiFont(doc);
+  const fontName = (doc as any).__gurmukhiFontRegistered ? 'NotoSansGurmukhi' : 'helvetica';
 
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
@@ -125,11 +228,11 @@ export async function exportFarmerBagLabourPDF(
         startY: 6
       });
     } else {
-      doc.setFont('helvetica', 'bold');
+      doc.setFont(fontName, 'bold');
       doc.setFontSize(9);
       doc.setTextColor(0, 0, 0);
       doc.text(cleanText(settings.firmNameEn || 'PUNJAB MANDI'), margin, curY + 4);
-      doc.setFont('helvetica', 'normal');
+      doc.setFont(fontName, 'normal');
       doc.setFontSize(7.5);
       doc.text('FARMER BAG BALANCE & LABOUR REPORT (Continued)', margin + 70, curY + 4);
       doc.text(`Bag Rate: Rs. ${options.applicableBagRate}`, pageWidth - margin, curY + 4, { align: 'right' });
