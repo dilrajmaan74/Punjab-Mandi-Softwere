@@ -16,9 +16,13 @@ import {
   Truck,
   CreditCard,
   CheckCircle2,
-  Clock
+  Clock,
+  FileText,
+  ShieldAlert
 } from 'lucide-react';
 import { RecycleBinItem } from '../../types/mandi';
+import { FarmerAuditLogModal } from './FarmerAuditLogModal';
+import { FarmerPermanentDeleteModal } from './FarmerPermanentDeleteModal';
 
 const TYPE_CONFIG: Record<
   RecycleBinItem['type'],
@@ -89,6 +93,8 @@ export const RecycleBin: React.FC = () => {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<string>('ALL');
+  const [isAuditLogOpen, setIsAuditLogOpen] = useState(false);
+  const [farmerToPermanentlyDelete, setFarmerToPermanentlyDelete] = useState<RecycleBinItem | null>(null);
 
   const filterTypeOptions: SearchableSelectOption[] = useMemo(() => [
     { value: 'ALL', label: isEn ? 'All Types' : 'ਸਾਰੀਆਂ ਕਿਸਮਾਂ (All Types)' },
@@ -106,15 +112,27 @@ export const RecycleBin: React.FC = () => {
     const success = restoreRecycleBinItem(item.id);
     if (success) {
       notifySaveSuccess({
-        titlePa: 'ਰਿਕਾਰਡ ਸਫਲਤਾਪੂਰਵਕ ਮੁੜ ਬਹਾਲ ਹੋ ਗਿਆ',
-        titleEn: 'Record Restored Successfully',
-        messagePa: `${item.titlePa} ਮੁੜ ਬਹਾਲ ਹੋ ਗਿਆ ਅਤੇ ਸਟਾਕ/ਖਾਤਾ ਰਿਕਾਰਡ ਅੱਪਡੇਟ ਹੋ ਗਏ ਹਨ।`
+        titlePa: item.type === 'FARMER'
+          ? 'ਕਿਸਾਨ ਸਫਲਤਾਪੂਰਵਕ ਮੁੜ ਬਹਾਲ ਹੋ ਗਿਆ'
+          : 'ਰਿਕਾਰਡ ਸਫਲਤਾਪੂਰਵਕ ਮੁੜ ਬਹਾਲ ਹੋ ਗਿਆ',
+        titleEn: item.type === 'FARMER'
+          ? `Farmer Restored with ID #${item.originalId}`
+          : 'Record Restored Successfully',
+        messagePa: item.type === 'FARMER'
+          ? `ਕਿਸਾਨ ${item.titlePa} (#${item.originalId}) ਮੁੜ ਐਕਟਿਵ ਰਜਿਸਟਰ ਵਿੱਚ ਸ਼ਾਮਲ ਹੋ ਗਿਆ ਹੈ। ਉਸਦੀ ਪੁਰਾਣੀ ID ਬਰਕਰਾਰ ਹੈ।`
+          : `${item.titlePa} ਮੁੜ ਬਹਾਲ ਹੋ ਗਿਆ ਅਤੇ ਸਟਾਕ/ਖਾਤਾ ਰਿਕਾਰਡ ਅੱਪਡੇਟ ਹੋ ਗਏ ਹਨ।`
       });
     }
   };
 
   // Handle Permanent Delete Item
   const handlePermanentDelete = (item: RecycleBinItem) => {
+    if (item.type === 'FARMER') {
+      // Require Admin/Owner authorization modal for farmers
+      setFarmerToPermanentlyDelete(item);
+      return;
+    }
+
     confirmDelete({
       recordNameEn: item.titleEn,
       recordNamePa: item.titlePa,
@@ -132,6 +150,15 @@ export const RecycleBin: React.FC = () => {
           messagePa: 'ਇਹ ਰਿਕਾਰਡ ਸਿਸਟਮ ਵਿੱਚੋਂ ਹਮੇਸ਼ਾ ਲਈ ਹਟਾ ਦਿੱਤਾ ਗਿਆ ਹੈ।'
         });
       }
+    });
+  };
+
+  const handleConfirmPermanentDeleteFarmer = async (item: RecycleBinItem, operator: string) => {
+    permanentlyDeleteRecycleBinItem(item.id, operator);
+    notifyDeleteSuccess({
+      titlePa: 'ਕਿਸਾਨ ਰਿਕਾਰਡ ਪੱਕੇ ਤੌਰ ਤੇ ਮਿਟਾ ਦਿੱਤਾ ਗਿਆ',
+      titleEn: 'Farmer Permanently Deleted',
+      messagePa: `ਕਿਸਾਨ ${item.titlePa} (#${item.originalId}) ਰੀਸਾਈਕਲ ਬਿਨ ਵਿੱਚੋਂ ਹਟਾ ਦਿੱਤਾ ਗਿਆ ਹੈ। ਇਤਿਹਾਸਕ ਰਿਕਾਰਡ ਸੁਰੱਖਿਅਤ ਹਨ।`
     });
   };
 
@@ -187,15 +214,26 @@ export const RecycleBin: React.FC = () => {
           </div>
         </div>
 
-        {recycleBinItems.length > 0 && (
+        <div className="flex items-center gap-2.5 flex-wrap">
           <button
-            onClick={handleEmptyBin}
-            className="px-4 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold flex items-center gap-1.5 transition"
+            onClick={() => setIsAuditLogOpen(true)}
+            className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shadow-xs"
+            title="View Farmer Audit Log"
           >
-            <Trash2 className="w-4 h-4" />
-            <span>ਸਾਰਾ ਕੂੜਾਦਾਨ ਸਾਫ਼ ਕਰੋ (Empty Bin)</span>
+            <FileText className="w-4 h-4 text-amber-400" />
+            <span>ਕਿਸਾਨ ਆਡਿਟ ਲੌਗ (Audit Log)</span>
           </button>
-        )}
+
+          {recycleBinItems.length > 0 && (
+            <button
+              onClick={handleEmptyBin}
+              className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
+            >
+              <Trash2 className="w-4 h-4" />
+              <span>ਸਾਰਾ ਕੂੜਾਦਾਨ ਸਾਫ਼ ਕਰੋ (Empty Bin)</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Filter & Search Bar */}
@@ -304,6 +342,19 @@ export const RecycleBin: React.FC = () => {
           })}
         </div>
       )}
+      {/* Farmer Audit Log Modal */}
+      <FarmerAuditLogModal
+        isOpen={isAuditLogOpen}
+        onClose={() => setIsAuditLogOpen(false)}
+      />
+
+      {/* Admin/Owner Farmer Permanent Delete Modal */}
+      <FarmerPermanentDeleteModal
+        isOpen={!!farmerToPermanentlyDelete}
+        item={farmerToPermanentlyDelete}
+        onClose={() => setFarmerToPermanentlyDelete(null)}
+        onConfirmPermanentDelete={handleConfirmPermanentDeleteFarmer}
+      />
     </div>
   );
 };

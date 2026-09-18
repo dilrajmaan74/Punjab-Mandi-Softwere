@@ -228,7 +228,8 @@ export async function exportSimpleFarmerAccountPDF(
   const labourExp = labourInfo?.labourExpense ?? ((account.totalLabourDeductions || (account as any).totalLabourCharges || 0) > 0 ? (account.totalLabourDeductions || (account as any).totalLabourCharges) : (totalBagsBrought * (settings.defaultPakkiLabourRate ?? 7)));
   const labourBags = labourInfo?.labourBagsAdjustment ?? Math.ceil(labourExp / bagRate);
   const finalBags = labourInfo?.finalBalanceBags ?? (balanceBeforeLabour - labourBags);
-  const arrivalDisplay = account.mandiArrivalDisplay || `${((totalBagsBrought * (settings.bagWeightStandard || 37.5)) / 100).toFixed(2)} Qtl`;
+  const bagWeight = settings.fixedBagWeightKg || settings.bagWeightStandard || 37.5;
+  const arrivalDisplay = account.mandiArrivalDisplay || `${((totalBagsBrought * bagWeight) / 100).toFixed(2)} Qtl`;
 
   // Table of 7 Key Metrics (Dual Language)
   doc.setFont('NotoSansGurmukhi', 'bold');
@@ -537,9 +538,10 @@ export async function exportFarmerAccountPDF(
   const linkedPurchasedAmount = account.linkedPurchasedAmount || 0;
   const paidAmount = account.paidAmount || 0;
 
-  const mandiArrivalDisplay = account.mandiArrivalDisplay || `${((account.mandiArrivalWeightKg || (mandiArrivalBags * (settings.bagWeightStandard || 37.5))) / 100).toFixed(2)} Qtl`;
-  const purchasedWeightDisplay = account.purchasedWeightDisplay || `${((account.purchasedWeightKg || (purchasedBags * (settings.bagWeightStandard || 37.5))) / 100).toFixed(2)} Qtl`;
-  const remainingWeightDisplay = account.remainingWeightDisplay || `${((remainingBags * (settings.bagWeightStandard || 37.5)) / 100).toFixed(2)} Qtl`;
+  const stdBagWeight = settings.fixedBagWeightKg || settings.bagWeightStandard || 37.5;
+  const mandiArrivalDisplay = account.mandiArrivalDisplay || `${((account.mandiArrivalWeightKg || (mandiArrivalBags * stdBagWeight)) / 100).toFixed(2)} Qtl`;
+  const purchasedWeightDisplay = account.purchasedWeightDisplay || `${((account.purchasedWeightKg || (purchasedBags * stdBagWeight)) / 100).toFixed(2)} Qtl`;
+  const remainingWeightDisplay = account.remainingWeightDisplay || `${((remainingBags * stdBagWeight) / 100).toFixed(2)} Qtl`;
 
   const newBardanaUsed = account.newBardanaUsed || 0;
   const oldBardanaUsed = account.oldBardanaUsed || 0;

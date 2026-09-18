@@ -37,6 +37,9 @@ export interface Farmer {
   firmId?: string;
   createdAt: string;
   updatedAt?: string;
+  isDeleted?: boolean;
+  deletedAt?: string;
+  deletedBy?: string;
 }
 
 export interface FarmerAdvanceRecord {
@@ -147,6 +150,8 @@ export interface BardanaReceivedRecord {
   capacityPerBox?: number;
   bags: number; // total bags (newBags + oldBags)
   totalBags?: number;
+  parchiUrl?: string; // Uploaded parchi photo (Base64) or PDF
+  parchiName?: string; // Attachment name e.g. "parchi.jpg"
   remarks?: string;
   firmId?: string;
   fiscalYear?: string;
@@ -598,6 +603,9 @@ export interface MandiSettings {
   firmGstin?: string;
   fixedRatePerQtl: number; // 2461
   fixedBagWeightKg: number; // 37.50
+  bagWeightStandard?: number; // legacy alias
+  standardBagWeightKg?: number; // legacy alias
+  labourRatePerBag?: number; // legacy alias
   agencies?: ProcurementAgency[];
   
   // Lefting agency purchase validation rule (ON = Lefting cannot exceed available purchase, OFF = no restriction)
@@ -674,6 +682,11 @@ export interface RecycleBinItem {
   titlePa: string;
   subtitle?: string;
   deletedAt: string;
+  deletedBy?: string;
+  restoredAt?: string;
+  restoredBy?: string;
+  permanentlyDeletedAt?: string;
+  permanentlyDeletedBy?: string;
   recordData: any;
 }
 

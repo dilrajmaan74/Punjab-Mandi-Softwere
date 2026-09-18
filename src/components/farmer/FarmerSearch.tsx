@@ -61,9 +61,10 @@ export const FarmerSearch: React.FC = () => {
       onConfirm: () => {
         deleteFarmer(f.id);
         notifyDeleteSuccess({
-          titlePa: 'ਕਿਸਾਨ ਸਫਲਤਾਪੂਰਵਕ ਹਟਾ ਦਿੱਤਾ ਗਿਆ ਹੈ।',
-          titleEn: 'Farmer Deleted Successfully',
-          messagePa: `ਕਿਸਾਨ ${f.farmerNamePa} (${f.id}) ਦਾ ਰਿਕਾਰਡ ਹਟਾ ਦਿੱਤਾ ਗਿਆ ਹੈ।`
+          titlePa: 'ਕਿਸਾਨ ਰੀਸਾਈਕਲ ਬਿਨ ਵਿੱਚ ਭੇਜ ਦਿੱਤਾ ਗਿਆ ਹੈ। ਪੁਰਾਣੇ ਰਿਕਾਰਡ ਸੁਰੱਖਿਅਤ ਹਨ।',
+          titleEn: 'Farmer moved to Recycle Bin safely. Historical records remain intact.',
+          messagePa: `ਕਿਸਾਨ ${f.farmerNamePa} (#${f.id}) ਰੀਸਾਈਕਲ ਬਿਨ ਵਿੱਚ ਭੇਜ ਦਿੱਤਾ ਗਿਆ ਹੈ।`,
+          messageEn: `Farmer ${f.farmerName} (#${f.id}) was moved to Recycle Bin.`
         });
       }
     });

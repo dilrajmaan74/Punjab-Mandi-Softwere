@@ -218,7 +218,8 @@ export const SameDateMultiFarmerEntry: React.FC = () => {
               grandTotal.totalKg,
               gross,
               r.labourDeductions,
-              settings
+              settings,
+              totalB
             );
           }
           return updatedRow;
@@ -253,7 +254,8 @@ export const SameDateMultiFarmerEntry: React.FC = () => {
             grandTotal.totalKg,
             gross,
             current,
-            settings
+            settings,
+            totalBags
           )
         };
       })
@@ -279,7 +281,7 @@ export const SameDateMultiFarmerEntry: React.FC = () => {
 
         return {
           ...r,
-          labourDeductions: computeLabourAndDeductions(grandTotal.totalKg, gross, current, settings)
+          labourDeductions: computeLabourAndDeductions(grandTotal.totalKg, gross, current, settings, bags)
         };
       })
     );

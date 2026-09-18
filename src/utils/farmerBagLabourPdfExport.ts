@@ -112,7 +112,8 @@ export async function exportFarmerBagLabourPDF(
     const linkedFarmers = raw.linkedFarmers || [];
     
     const totalBagsBrought = raw.totalBagsBrought ?? raw.totalBagsArrived ?? 0;
-    const totalWeightBroughtKg = raw.totalWeightBroughtKg ?? raw.totalWeightKgArrived ?? (totalBagsBrought * (settings.bagWeightStandard || 37.5));
+    const bagWeight = settings.fixedBagWeightKg || settings.bagWeightStandard || 37.5;
+    const totalWeightBroughtKg = raw.totalWeightBroughtKg ?? raw.totalWeightKgArrived ?? (totalBagsBrought * bagWeight);
     const arrivalEntries = (raw.arrivalEntries || raw.weighmentEntries || []).map((arr: any) => ({
       id: arr.id || '-',
       entryNumber: arr.entryNumber || '-',
@@ -125,7 +126,7 @@ export async function exportFarmerBagLabourPDF(
     }));
 
     const ownPurchasedBags = raw.ownPurchasedBags ?? raw.directPurchasedBags ?? raw.totalPurchasedBags ?? (raw.purchaseEntries || []).reduce((s: number, p: any) => s + (Number(p.bags) || 0), 0);
-    const ownPurchasedWeightKg = raw.ownPurchasedWeightKg ?? (ownPurchasedBags * (settings.bagWeightStandard || 37.5));
+    const ownPurchasedWeightKg = raw.ownPurchasedWeightKg ?? (ownPurchasedBags * bagWeight);
     const ownPurchases = (raw.ownPurchases || raw.purchaseEntries || []).map((pur: any) => ({
       id: pur.id || '-',
       date: pur.date || '-',
@@ -137,7 +138,7 @@ export async function exportFarmerBagLabourPDF(
     }));
 
     const linkedPurchasedBags = raw.linkedPurchasedBags || 0;
-    const linkedPurchasedWeightKg = raw.linkedPurchasedWeightKg || (linkedPurchasedBags * (settings.bagWeightStandard || 37.5));
+    const linkedPurchasedWeightKg = raw.linkedPurchasedWeightKg || (linkedPurchasedBags * bagWeight);
     const linkedFarmerPurchases = raw.linkedFarmerPurchases || [];
 
     const totalPurchasedBags = raw.totalPurchasedBags ?? (ownPurchasedBags + linkedPurchasedBags);
@@ -146,7 +147,8 @@ export async function exportFarmerBagLabourPDF(
 
     const balanceBeforeLabourBags = raw.balanceBeforeLabourBags ?? (totalBagsBrought - totalPurchasedBags);
     const labourExpense = raw.labourExpense ?? raw.totalLabourCharges ?? 0;
-    const applicableBagRate = raw.applicableBagRate ?? rawOptions?.applicableBagRate ?? settings.labourRatePerBag ?? 14.5;
+    const defaultLabour = settings.defaultPakkiLabourRate || settings.labourRatePerBag || 14.5;
+    const applicableBagRate = raw.applicableBagRate ?? rawOptions?.applicableBagRate ?? defaultLabour;
     const rawLabourBags = raw.rawLabourBags ?? (applicableBagRate > 0 ? (labourExpense / applicableBagRate) : 0);
     const labourBagsAdjustment = raw.labourBagsAdjustment ?? Math.ceil(rawLabourBags);
     const finalBalanceBags = raw.finalBalanceBags ?? (balanceBeforeLabourBags - labourBagsAdjustment);
@@ -183,7 +185,7 @@ export async function exportFarmerBagLabourPDF(
     };
   });
 
-  const applicableBagRate = rawOptions?.applicableBagRate ?? (settings.labourRatePerBag || 14.5);
+  const applicableBagRate = rawOptions?.applicableBagRate ?? (settings.defaultPakkiLabourRate || settings.labourRatePerBag || 14.5);
   const dateFilterLabel = rawOptions?.dateFilterLabel || 'ALL RECORDS';
   const totals: ReportGrandTotals = {
     totalBagsBrought: rawOptions?.totals?.totalBagsBrought ?? safeItems.reduce((acc, it) => acc + it.totalBagsBrought, 0),

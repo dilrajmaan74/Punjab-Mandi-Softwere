@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { BardanaReceivedRecord } from '../../types/mandi';
 import { useMandi } from '../../context/MandiContext';
 import {
@@ -13,9 +13,12 @@ import {
   Edit,
   Tag,
   CheckCircle2,
-  ArrowDownLeft
+  ArrowDownLeft,
+  Eye,
+  Paperclip
 } from 'lucide-react';
 import { exportBardanaReceivedVoucherPDF } from '../../utils/bardanaPdfExport';
+import { ParchiViewerModal } from './ParchiViewerModal';
 
 interface BardanaViewModalProps {
   record: BardanaReceivedRecord | null;
@@ -31,6 +34,7 @@ export const BardanaViewModal: React.FC<BardanaViewModalProps> = ({
   onEdit
 }) => {
   const { settings } = useMandi();
+  const [isParchiModalOpen, setIsParchiModalOpen] = useState(false);
 
   if (!isOpen || !record) return null;
 
@@ -199,6 +203,76 @@ export const BardanaViewModal: React.FC<BardanaViewModalProps> = ({
               {record.remarks ? record.remarks : 'ਕੋਈ ਵਾਧੂ ਟਿੱਪਣੀ ਨਹੀਂ ਹੈ (No Remarks)'}
             </p>
           </div>
+
+          {/* Section 5: Attached Parchi / ਪਰਚੀ */}
+          {record.parchiUrl ? (
+            <div className="bg-emerald-50/60 border border-emerald-300 rounded-xl p-3.5 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 bg-emerald-600 text-white rounded-lg shadow-2xs">
+                    <Paperclip className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <span className="font-black text-xs text-emerald-950 block">
+                      ਨਾਲ ਨੱਥੀ ਪਰਚੀ (Attached Parchi / Slip)
+                    </span>
+                    <span className="text-[10px] text-emerald-700 font-mono">
+                      {record.parchiName || 'Bardana_Parchi'}
+                    </span>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setIsParchiModalOpen(true)}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 shadow-2xs transition"
+                >
+                  <Eye className="w-3.5 h-3.5" />
+                  <span>View Parchi / ਪਰਚੀ ਵੇਖੋ</span>
+                </button>
+              </div>
+
+              {/* Clickable Card Preview */}
+              <div
+                onClick={() => setIsParchiModalOpen(true)}
+                className="bg-white border border-emerald-200 hover:border-emerald-400 rounded-xl p-2.5 flex items-center gap-3 cursor-pointer transition group shadow-2xs"
+              >
+                {record.parchiUrl.startsWith('data:application/pdf') ||
+                (record.parchiName && record.parchiName.toLowerCase().endsWith('.pdf')) ? (
+                  <div className="w-14 h-14 bg-rose-50 border border-rose-200 text-rose-600 rounded-lg flex flex-col items-center justify-center shrink-0">
+                    <FileText className="w-6 h-6" />
+                    <span className="text-[9px] font-black uppercase">PDF</span>
+                  </div>
+                ) : (
+                  <div className="w-14 h-14 rounded-lg overflow-hidden border border-slate-200 bg-slate-100 shrink-0 relative">
+                    <img
+                      src={record.parchiUrl}
+                      alt="Parchi"
+                      className="w-full h-full object-cover group-hover:scale-105 transition duration-200"
+                    />
+                    <div className="absolute inset-0 bg-black/20 group-hover:bg-transparent transition" />
+                  </div>
+                )}
+                <div className="text-xs min-w-0 flex-1">
+                  <span className="font-bold text-slate-900 block group-hover:text-emerald-700 transition">
+                    ਕਲਿੱਕ ਕਰਕੇ ਪੂਰੀ ਪਰਚੀ ਵੇਖੋ (Click to open full view)
+                  </span>
+                  <span className="text-[11px] text-slate-500 truncate block">
+                    ਅਸਲ ਫੋਟੋ / ਸਕੈਨ ਕਾਪੀ ਵੇਖਣ ਲਈ ਇੱਥੇ ਦਬਾਓ
+                  </span>
+                </div>
+                <Eye className="w-4 h-4 text-emerald-600 shrink-0 mr-1" />
+              </div>
+            </div>
+          ) : (
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex items-center justify-between text-xs text-slate-500">
+              <span className="flex items-center gap-2">
+                <Paperclip className="w-3.5 h-3.5 text-slate-400" />
+                <span>ਕੋਈ ਪਰਚੀ ਨੱਥੀ ਨਹੀਂ ਕੀਤੀ ਗਈ (No Parchi Attached)</span>
+              </span>
+              <span className="text-[10px] text-slate-400 italic">ਸਿਰਫ਼ ਮੈਨੂਅਲ ਐਂਟਰੀ</span>
+            </div>
+          )}
         </div>
 
         {/* Modal Footer Actions */}
@@ -238,6 +312,20 @@ export const BardanaViewModal: React.FC<BardanaViewModalProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Parchi Viewer Lightbox Modal */}
+      {record.parchiUrl && (
+        <ParchiViewerModal
+          isOpen={isParchiModalOpen}
+          onClose={() => setIsParchiModalOpen(false)}
+          url={record.parchiUrl}
+          name={record.parchiName}
+          title={`ਬਾਰਦਾਨਾ ਪਰਚੀ • ${record.id}`}
+          voucherId={record.id}
+          sourceName={record.sourceName}
+          date={record.date}
+        />
+      )}
     </div>
   );
 };

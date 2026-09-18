@@ -69,6 +69,11 @@ import {
   supabaseDeleteRecycleItem,
   supabaseClearRecycleBin
 } from '../services/supabaseService';
+import {
+  addFarmerAuditLog,
+  getMaxFarmerSequence,
+  recordFarmerSequence
+} from '../utils/farmerAuditLog';
 
 interface DuplicateCheckResult {
   isDuplicate: boolean;
@@ -213,7 +218,7 @@ interface MandiContextType {
     message?: string;
   };
   updateFarmer: (id: string, updates: Partial<Farmer>) => boolean;
-  deleteFarmer: (id: string) => boolean;
+  deleteFarmer: (id: string, deletedBy?: string) => boolean;
   getFarmerById: (id: string) => Farmer | undefined;
   getFarmerByAadhaar: (aadhaar: string) => Farmer | undefined;
   saveFarmerBankDetails: (farmerId: string, bankDetails: BankDetails) => boolean;
@@ -279,8 +284,8 @@ interface MandiContextType {
   deleteLeftingRecord: (id: string) => boolean;
 
   // Recycle Bin Operations
-  restoreRecycleBinItem: (id: string) => boolean;
-  permanentlyDeleteRecycleBinItem: (id: string) => boolean;
+  restoreRecycleBinItem: (id: string, restoredBy?: string) => boolean;
+  permanentlyDeleteRecycleBinItem: (id: string, deletedBy?: string) => boolean;
   emptyRecycleBin: () => void;
 
   // Agency Operations
@@ -836,9 +841,10 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   /**
    * Generates next sequential unique Farmer ID
    * Example: FRM000001, FRM000002
+   * Guaranteed never to reuse old or deleted IDs!
    */
   const generateNextFarmerId = (): string => {
-    let maxNum = 0;
+    let maxNum = getMaxFarmerSequence();
     farmers.forEach((f) => {
       const match = f.id.match(/^FRM(\d+)$/);
       if (match) {
@@ -846,7 +852,39 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         if (num > maxNum) maxNum = num;
       }
     });
+    recycleBinItems.forEach((item) => {
+      if (item.type === 'FARMER') {
+        const idToCheck = item.originalId || item.recordData?.id || '';
+        const match = idToCheck.match(/^FRM(\d+)$/);
+        if (match) {
+          const num = parseInt(match[1], 10);
+          if (num > maxNum) maxNum = num;
+        }
+      }
+    });
+    bagsEntries.forEach((b) => {
+      const match = b.farmerId?.match(/^FRM(\d+)$/);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        if (num > maxNum) maxNum = num;
+      }
+    });
+    dailyPurchaseRecords.forEach((p) => {
+      const match = p.farmerId?.match(/^FRM(\d+)$/);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        if (num > maxNum) maxNum = num;
+      }
+    });
+    farmerAdvances.forEach((a) => {
+      const match = a.farmerId?.match(/^FRM(\d+)$/);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        if (num > maxNum) maxNum = num;
+      }
+    });
     const nextNum = maxNum + 1;
+    recordFarmerSequence(nextNum);
     return `FRM${nextNum.toString().padStart(6, '0')}`;
   };
 
@@ -923,6 +961,10 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
 
     const newFarmerId = farmerData.id || generateNextFarmerId();
+    const idMatch = newFarmerId.match(/^FRM(\d+)$/);
+    if (idMatch) {
+      recordFarmerSequence(parseInt(idMatch[1], 10));
+    }
     const newFarmer: Farmer = {
       ...farmerData,
       id: newFarmerId,
@@ -950,33 +992,63 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return true;
   };
 
-  const deleteFarmer = (id: string): boolean => {
+  const deleteFarmer = (id: string, deletedBy?: string): boolean => {
     const farmer = farmers.find((f) => f.id === id);
-    if (farmer) {
-      const binItem: RecycleBinItem = {
-        id: `BIN-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-        originalId: farmer.id,
-        type: 'FARMER',
-        titleEn: `Farmer: ${farmer.farmerName} s/o ${farmer.fatherName || '—'}`,
-        titlePa: `ਕਿਸਾਨ: ${farmer.farmerNamePa} ਸ/ਓ ${farmer.fatherNamePa || farmer.fatherName || '—'}`,
-        subtitle: `ID: ${farmer.id} • Village: ${farmer.village} • Mobile: ${farmer.mobile || '—'}`,
-        deletedAt: new Date().toLocaleString('en-IN'),
-        recordData: farmer
-      };
-      setRecycleBinItems((prev) => [binItem, ...prev]);
-      supabaseUpsertRecycleItem(binItem, activeFirmId).catch(console.error);
-    }
+    if (!farmer) return false;
+
+    const operator = deletedBy || `Admin / Software Owner (${settings.firmNameEn || 'Jammu Trading Co'})`;
+    const deleteTimestamp = new Date().toLocaleString('en-IN', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: true
+    });
+
+    const softDeletedFarmer: Farmer = {
+      ...farmer,
+      isDeleted: true,
+      deletedAt: deleteTimestamp,
+      deletedBy: operator
+    };
+
+    const binItem: RecycleBinItem = {
+      id: `BIN-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      originalId: farmer.id,
+      type: 'FARMER',
+      titleEn: `Farmer: ${farmer.farmerName} s/o ${farmer.fatherName || '—'}`,
+      titlePa: `ਕਿਸਾਨ: ${farmer.farmerNamePa} ਸ/ਓ ${farmer.fatherNamePa || farmer.fatherName || '—'}`,
+      subtitle: `ID: ${farmer.id} • Village: ${farmer.villagePa || farmer.village} • Mobile: ${farmer.mobile || '—'}`,
+      deletedAt: deleteTimestamp,
+      deletedBy: operator,
+      recordData: softDeletedFarmer
+    };
+
+    setRecycleBinItems((prev) => [binItem, ...prev]);
+    supabaseUpsertRecycleItem(binItem, activeFirmId).catch(console.error);
+
+    // Audit log
+    addFarmerAuditLog({
+      action: 'FARMER_DELETED',
+      farmerId: farmer.id,
+      farmerName: farmer.farmerName,
+      farmerNamePa: farmer.farmerNamePa,
+      village: farmer.village,
+      mobile: farmer.mobile,
+      performedBy: operator,
+      timestamp: deleteTimestamp,
+      details: `Farmer soft deleted to Recycle Bin. All historical records preserved.`
+    });
+
+    // Remove from active farmers list (disappears from active Farmer Register and new dropdowns)
     setFarmers((prev) => prev.filter((f) => f.id !== id));
     supabaseDeleteFarmer(id).catch(console.error);
 
-    // Also clean up associated transactions for data consistency
-    setBagsEntries((prev) => prev.filter((b) => b.farmerId !== id));
-    setDailyPurchaseRecords((prev) => prev.filter((p) => p.farmerId !== id));
-    setFarmerPayments((prev) => prev.filter((p) => p.farmerId !== id));
-    setBoliRecords((prev) => prev.filter((b) => b.farmerId !== id));
-    if (selectedFarmerForAccount?.id === id) {
-      setSelectedFarmerForAccount(null);
-    }
+    // CRITICAL: NEVER delete historical transactions (arrivals, purchases, advances, payments, boli)
+    // Historical records must remain safe and recoverable!
+
     if (selectedFarmerForBags?.id === id) {
       setSelectedFarmerForBags(null);
     }
@@ -984,7 +1056,14 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const getFarmerById = (id: string): Farmer | undefined => {
-    return farmers.find((f) => f.id.toUpperCase() === id.trim().toUpperCase());
+    if (!id) return undefined;
+    const cleanId = id.trim().toUpperCase();
+    const active = farmers.find((f) => f.id.toUpperCase() === cleanId);
+    if (active) return active;
+    const binItem = recycleBinItems.find(
+      (item) => item.type === 'FARMER' && (item.originalId?.toUpperCase() === cleanId || item.recordData?.id?.toUpperCase() === cleanId)
+    );
+    return binItem?.recordData;
   };
 
   const getFarmerByAadhaar = (aadhaar: string): Farmer | undefined => {
@@ -1217,7 +1296,7 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
    * - Final Net Payable Balance
    */
   const getCompleteFarmerAccount = (farmerId: string): FarmerAccountSummary | null => {
-    const farmer = farmers.find((f) => f.id === farmerId);
+    const farmer = getFarmerById(farmerId);
     if (!farmer) return null;
 
     // 1. Check Farmer Linking Hierarchy
@@ -2709,13 +2788,31 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   /**
    * Recycle Bin Operations
    */
-  const restoreRecycleBinItem = (id: string): boolean => {
+  const restoreRecycleBinItem = (id: string, restoredBy?: string): boolean => {
     const item = recycleBinItems.find((i) => i.id === id);
     if (!item) return false;
 
     if (item.type === 'FARMER') {
-      setFarmers((prev) => [item.recordData, ...prev.filter((f) => f.id !== item.recordData.id)]);
-      supabaseUpsertFarmer(item.recordData, activeFirmId).catch(console.error);
+      const restoredFarmer: Farmer = {
+        ...item.recordData,
+        isDeleted: false,
+        deletedAt: undefined,
+        deletedBy: undefined
+      };
+      setFarmers((prev) => [restoredFarmer, ...prev.filter((f) => f.id !== restoredFarmer.id)]);
+      supabaseUpsertFarmer(restoredFarmer, activeFirmId).catch(console.error);
+
+      const operator = restoredBy || `Admin / Software Owner (${settings.firmNameEn || 'Jammu Trading Co'})`;
+      addFarmerAuditLog({
+        action: 'FARMER_RESTORED',
+        farmerId: item.originalId,
+        farmerName: restoredFarmer.farmerName,
+        farmerNamePa: restoredFarmer.farmerNamePa,
+        village: restoredFarmer.village,
+        mobile: restoredFarmer.mobile,
+        performedBy: operator,
+        details: `Farmer restored back from Recycle Bin with original ID #${item.originalId}`
+      });
     } else if (item.type === 'BAGS_ENTRY') {
       setBagsEntries((prev) => [item.recordData, ...prev.filter((b) => b.id !== item.recordData.id)]);
       supabaseUpsertBagsEntry(item.recordData, activeFirmId, activeFiscalYear).catch(console.error);
@@ -2744,7 +2841,21 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return true;
   };
 
-  const permanentlyDeleteRecycleBinItem = (id: string): boolean => {
+  const permanentlyDeleteRecycleBinItem = (id: string, deletedBy?: string): boolean => {
+    const item = recycleBinItems.find((i) => i.id === id);
+    if (item && item.type === 'FARMER') {
+      const operator = deletedBy || `Admin / Software Owner (${settings.firmNameEn || 'Jammu Trading Co'})`;
+      addFarmerAuditLog({
+        action: 'FARMER_PERMANENTLY_DELETED',
+        farmerId: item.originalId,
+        farmerName: item.recordData?.farmerName || item.titleEn,
+        farmerNamePa: item.recordData?.farmerNamePa || item.titlePa,
+        village: item.recordData?.village,
+        mobile: item.recordData?.mobile,
+        performedBy: operator,
+        details: `Farmer permanently deleted from Recycle Bin. Historical transaction records remain safely archived.`
+      });
+    }
     setRecycleBinItems((prev) => prev.filter((i) => i.id !== id));
     supabaseDeleteRecycleItem(id).catch(console.error);
     return true;

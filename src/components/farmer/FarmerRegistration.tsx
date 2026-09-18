@@ -46,6 +46,117 @@ import { FarmerProfileViewModal } from './FarmerProfileViewModal';
 import { FarmerEditModal } from './FarmerEditModal';
 import { PinVillageSelector } from './PinVillageSelector';
 import { GoogleSheetsSyncModal } from './GoogleSheetsSyncModal';
+import { FarmerDeleteModal } from './FarmerDeleteModal';
+
+// Helper to extract clean English name (no bilingual slash, no Gurmukhi)
+const getEnglishNameDisplay = (enName?: string, paName?: string): string => {
+  const en = (enName || '').trim();
+  const pa = (paName || '').trim();
+
+  // If enName exists
+  if (en) {
+    if (en.includes('/')) {
+      const parts = en.split('/');
+      const part = parts.find((p) => /[a-zA-Z]/.test(p));
+      if (part && part.trim()) {
+        return part.replace(/[\u0A00-\u0A7F]/g, '').trim();
+      }
+    }
+    const pureEn = en.replace(/[\u0A00-\u0A7F]/g, '').replace(/^[\s/,-]+|[\s/,-]+$/g, '').trim();
+    if (pureEn) return pureEn;
+    return en;
+  }
+
+  // If enName is missing but paName has English part
+  if (pa && pa.includes('/')) {
+    const parts = pa.split('/');
+    const part = parts.find((p) => /[a-zA-Z]/.test(p));
+    if (part && part.trim()) {
+      return part.replace(/[\u0A00-\u0A7F]/g, '').trim();
+    }
+  }
+
+  return en || '—';
+};
+
+// Helper to extract clean Punjabi name (no bilingual slash, no Latin English characters)
+const getPunjabiNameDisplay = (paName?: string, enName?: string): string => {
+  const pa = (paName || '').trim();
+  const en = (enName || '').trim();
+
+  if (pa) {
+    if (pa.includes('/')) {
+      const parts = pa.split('/');
+      const part = parts.find((p) => /[\u0A00-\u0A7F]/.test(p));
+      if (part && part.trim()) {
+        return part.replace(/[a-zA-Z]/g, '').trim();
+      }
+    }
+    const purePa = pa.replace(/[a-zA-Z]/g, '').replace(/^[\s/,-]+|[\s/,-]+$/g, '').trim();
+    if (purePa) return purePa;
+    return pa;
+  }
+
+  if (en && en.includes('/')) {
+    const parts = en.split('/');
+    const part = parts.find((p) => /[\u0A00-\u0A7F]/.test(p));
+    if (part && part.trim()) {
+      return part.replace(/[a-zA-Z]/g, '').trim();
+    }
+  }
+
+  return '';
+};
+
+// Helper to display Village name strictly in English in the Registered Farmers Directory
+const getEnglishVillageDisplay = (
+  village?: string,
+  villagePa?: string,
+  pinCodesList?: any[]
+): string => {
+  const vEn = (village || '').trim();
+  const vPa = (villagePa || '').trim();
+
+  // 1. If English village value exists in farmer master data
+  if (vEn) {
+    // If it's a combined string with slash (e.g. "ਕਾਂਗ ਖੁਰਦ / Kang Khurd" or "Kang Khurd / ਕਾਂਗ ਖੁਰਦ")
+    if (vEn.includes('/')) {
+      const parts = vEn.split('/');
+      const enPart = parts.find((p) => /[a-zA-Z]/.test(p));
+      if (enPart && enPart.trim()) {
+        return enPart.trim();
+      }
+    }
+
+    // Strip any Gurmukhi/Punjabi characters (\u0A00-\u0A7F)
+    const pureEnglish = vEn.replace(/[\u0A00-\u0A7F]/g, '').replace(/^[\s/,-]+|[\s/,-]+$/g, '').trim();
+    if (pureEnglish) {
+      return pureEnglish;
+    }
+    return vEn;
+  }
+
+  // 2. If vEn is missing but villagePa has an English part after/before slash
+  if (vPa && vPa.includes('/')) {
+    const parts = vPa.split('/');
+    const enPart = parts.find((p) => /[a-zA-Z]/.test(p));
+    if (enPart && enPart.trim()) {
+      return enPart.trim();
+    }
+  }
+
+  // 3. If only Gurmukhi exists in villagePa, try resolving to English from pinCodes list
+  if (vPa && pinCodesList) {
+    for (const p of pinCodesList) {
+      const match = p.villages?.find((v: any) => v.pa === vPa);
+      if (match && match.en) {
+        return match.en;
+      }
+    }
+  }
+
+  return vEn || '—';
+};
 
 export const FarmerRegistration: React.FC = () => {
   const {
@@ -55,13 +166,29 @@ export const FarmerRegistration: React.FC = () => {
     generateNextFarmerId,
     checkDuplicateFarmer,
     registerFarmer,
+    deleteFarmer,
     setActiveSection,
     setSelectedFarmerForBags,
     setSelectedFarmerForAccount,
     settings
   } = useMandi();
-  const { notifySaveSuccess, notifyDuplicateWarning, notifyError } = useNotification();
+  const { notifySaveSuccess, notifyDeleteSuccess, notifyDuplicateWarning, notifyError } = useNotification();
   const [isSaving, setIsSaving] = useState(false);
+  const [farmerToDelete, setFarmerToDelete] = useState<Farmer | null>(null);
+
+  const handleConfirmDeleteFarmer = async (farmer: Farmer) => {
+    const success = deleteFarmer(farmer.id);
+    if (success) {
+      notifyDeleteSuccess({
+        titlePa: 'ਕਿਸਾਨ ਰੀਸਾਈਕਲ ਬਿਨ ਵਿੱਚ ਭੇਜ ਦਿੱਤਾ ਗਿਆ ਹੈ। ਪੁਰਾਣੇ ਰਿਕਾਰਡ ਸੁਰੱਖਿਅਤ ਹਨ।',
+        titleEn: 'Farmer moved to Recycle Bin safely. Historical records remain intact.',
+        messagePa: `ਕਿਸਾਨ ${farmer.farmerNamePa} (#${farmer.id}) ਨੂੰ ਰੀਸਾਈਕਲ ਬਿਨ ਵਿੱਚ ਭੇਜ ਦਿੱਤਾ ਗਿਆ ਹੈ।`,
+        messageEn: `Farmer ${farmer.farmerName} (#${farmer.id}) was safely moved to Recycle Bin.`
+      });
+      if (viewFarmer?.id === farmer.id) setViewFarmer(null);
+      if (editFarmer?.id === farmer.id) setEditFarmer(null);
+    }
+  };
 
   // Registration Form State with Universal Auto-Save Draft
   const defaultInitialFormData = {
@@ -1053,18 +1180,30 @@ export const FarmerRegistration: React.FC = () => {
                       </div>
                     </td>
 
-                    <td className="py-2.5 px-3 font-bold text-slate-900">
-                      <div>{f.farmerNamePa}</div>
-                      <div className="text-[10px] text-slate-500 font-normal">{f.farmerName}</div>
+                    <td className="py-2.5 px-3">
+                      <div className="font-bold text-slate-900 leading-tight text-xs sm:text-[13px]">
+                        {getEnglishNameDisplay(f.farmerName, f.farmerNamePa)}
+                      </div>
+                      {getPunjabiNameDisplay(f.farmerNamePa, f.farmerName) && (
+                        <div className="text-[11px] text-slate-500 font-medium leading-tight mt-0.5 font-sans">
+                          {getPunjabiNameDisplay(f.farmerNamePa, f.farmerName)}
+                        </div>
+                      )}
                     </td>
 
                     <td className="py-2.5 px-3 text-slate-700">
-                      <div>{f.fatherNamePa || f.fatherName || '—'}</div>
-                      <div className="text-[10px] text-slate-400">{f.fatherName || ''}</div>
+                      <div className="font-bold text-slate-800 leading-tight text-xs sm:text-[13px]">
+                        {getEnglishNameDisplay(f.fatherName, f.fatherNamePa)}
+                      </div>
+                      {getPunjabiNameDisplay(f.fatherNamePa, f.fatherName) && (
+                        <div className="text-[11px] text-slate-500 font-medium leading-tight mt-0.5 font-sans">
+                          {getPunjabiNameDisplay(f.fatherNamePa, f.fatherName)}
+                        </div>
+                      )}
                     </td>
 
                     <td className="py-2.5 px-3 text-slate-700">
-                      <div className="font-bold">{f.villagePa || f.village}</div>
+                      <div className="font-bold">{getEnglishVillageDisplay(f.village, f.villagePa, pinCodes)}</div>
                       <div className="text-[10px] text-slate-500 font-mono">{f.pinCode}</div>
                     </td>
 
@@ -1123,6 +1262,17 @@ export const FarmerRegistration: React.FC = () => {
                         >
                           <FileDown className="w-3.5 h-3.5 text-amber-300" />
                           <span className="hidden sm:inline">PDF</span>
+                        </button>
+
+                        {/* 4. DELETE FARMER Button (Safe Soft Delete into Recycle Bin) */}
+                        <button
+                          type="button"
+                          onClick={() => setFarmerToDelete(f)}
+                          className="bg-white hover:bg-rose-50 text-rose-700 hover:text-rose-800 border border-rose-200 hover:border-rose-300 font-bold px-2 py-1 rounded text-[11px] flex items-center gap-1 shadow-2xs transition-colors cursor-pointer"
+                          title="ਕਿਸਾਨ ਡਿਲੀਟ ਕਰੋ (Delete Farmer)"
+                        >
+                          <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                          <span>ਡਿਲੀਟ (Delete)</span>
                         </button>
                       </div>
                     </td>
@@ -1183,6 +1333,14 @@ export const FarmerRegistration: React.FC = () => {
       <GoogleSheetsSyncModal
         isOpen={isGoogleSheetsModalOpen}
         onClose={() => setIsGoogleSheetsModalOpen(false)}
+      />
+
+      {/* Safe Farmer Delete Confirmation Modal (Requirements 1, 2, 3, 4, 5, 9) */}
+      <FarmerDeleteModal
+        isOpen={!!farmerToDelete}
+        farmer={farmerToDelete}
+        onClose={() => setFarmerToDelete(null)}
+        onConfirmDelete={handleConfirmDeleteFarmer}
       />
     </div>
   );

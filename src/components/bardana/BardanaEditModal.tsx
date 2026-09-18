@@ -3,6 +3,8 @@ import { BardanaReceivedRecord, BardanaSourceType, BardanaType } from '../../typ
 import { useMandi } from '../../context/MandiContext';
 import { useNotification } from '../../context/NotificationContext';
 import { SearchableSelect, SearchableSelectOption } from '../common/SearchableSelect';
+import { ParchiUploadWidget } from './ParchiUploadWidget';
+import { ParchiViewerModal } from './ParchiViewerModal';
 import {
   Edit,
   X,
@@ -48,6 +50,9 @@ export const BardanaEditModal: React.FC<BardanaEditModalProps> = ({
   const [sourceName, setSourceName] = useState('');
   const [newBags, setNewBags] = useState<number | string>(0);
   const [oldBags, setOldBags] = useState<number | string>(0);
+  const [parchiUrl, setParchiUrl] = useState<string>('');
+  const [parchiName, setParchiName] = useState<string>('');
+  const [isParchiViewerOpen, setIsParchiViewerOpen] = useState<boolean>(false);
   const [remarks, setRemarks] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
 

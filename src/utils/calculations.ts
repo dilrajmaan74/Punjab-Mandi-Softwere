@@ -244,6 +244,286 @@ export function maskAadhaarNumber(aadhaar: string): string {
 export const DEFAULT_PAKKI_LABOUR_RATE = 7; // ₹7 per Bag (ਪੱਕੀ ਲੇਬਰ)
 export const DEFAULT_PAKKA_DOUBLE_LABOUR_RATE = 14; // ₹14 per Bag (ਪੱਖਾ ਡਬਲ)
 export const DEFAULT_SUKHI_LABOUR_RATE = 5; // ₹5 per Bag (ਝੋਨਾ ਸਕਾਈ)
+export const DEFAULT_CROP_BAG_CONVERSION_RATE = 925; // ₹925 per Bag standard conversion for crop balance deduction
+
+/**
+ * Calculate single labour category amount: Bags × Rate per Bag
+ * Guaranteed: Never ₹0 when valid bags (> 0) and valid rate (> 0) exist.
+ */
+export function calculateCategoryLabourAmount(
+  bags: number | string | null | undefined,
+  rate: number | string | null | undefined
+): number {
+  const numBags = typeof bags === 'number' ? bags : (parseFloat(String(bags || '0')) || 0);
+  const numRate = typeof rate === 'number' ? rate : (parseFloat(String(rate || '0')) || 0);
+  if (numBags <= 0 || numRate <= 0) return 0;
+  return Math.round(numBags * numRate * 100) / 100;
+}
+
+/**
+ * Calculate Crop Balance Labour Deduction Bags:
+ * Total Labour Amount ÷ Bag Conversion Rate (₹925), rounded UP to whole bag.
+ * Example: ₹5,698 ÷ ₹925 = 6.16 -> 7 Bags
+ * If Total Labour Amount <= 0, returns 0 bags.
+ */
+export function calculateLabourDeductionBags(
+  totalLabourAmount: number | string | null | undefined,
+  bagConversionRate: number | string | null | undefined = DEFAULT_CROP_BAG_CONVERSION_RATE
+): number {
+  const safeAmount = Math.max(0, typeof totalLabourAmount === 'number' ? totalLabourAmount : (parseFloat(String(totalLabourAmount || '0')) || 0));
+  const safeRate = Math.max(1, typeof bagConversionRate === 'number' ? bagConversionRate : (parseFloat(String(bagConversionRate || '0')) || DEFAULT_CROP_BAG_CONVERSION_RATE));
+  if (safeAmount <= 0) return 0;
+  return Math.ceil(safeAmount / safeRate);
+}
+
+/**
+ * Calculate Remaining Crop Balance Bags after Labour Deduction:
+ * (Total Bags - Purchased Bags) - Labour Deduction Bags
+ */
+export function calculateRemainingBalanceBags(
+  totalBags: number | string | null | undefined,
+  purchasedBags: number | string | null | undefined = 0,
+  labourDeductionBags: number | string | null | undefined = 0
+): number {
+  const safeTotal = Math.max(0, typeof totalBags === 'number' ? totalBags : (parseInt(String(totalBags || '0'), 10) || 0));
+  const safePurchased = Math.max(0, typeof purchasedBags === 'number' ? purchasedBags : (parseInt(String(purchasedBags || '0'), 10) || 0));
+  const safeLabour = Math.max(0, typeof labourDeductionBags === 'number' ? labourDeductionBags : (parseInt(String(labourDeductionBags || '0'), 10) || 0));
+  return (safeTotal - safePurchased) - safeLabour;
+}
+
+export interface UniversalLabourInput {
+  totalBags: number; // Exact bag count (e.g. 407)
+  pakkiBags?: number | string | null;
+  pakkiRate?: number | string | null;
+  doubleBags?: number | string | null;
+  doubleRate?: number | string | null;
+  sukkiBags?: number | string | null;
+  sukkiRate?: number | string | null;
+  grossAmount?: number | string | null;
+  bagConversionRate?: number | string | null; // default 925
+  purchasedBags?: number | string | null;
+  customDeductions?: CustomDeductionLine[];
+  otherDeductionsEnabled?: boolean;
+  settings?: Partial<MandiSettings>;
+}
+
+export interface UniversalLabourResult {
+  totalBags: number;
+  pakkiBags: number;
+  doubleBags: number;
+  sukkiBags: number;
+  pakkiRate: number;
+  doubleRate: number;
+  sukkiRate: number;
+
+  pakkiAmount: number;
+  doubleAmount: number;
+  sukkiAmount: number;
+
+  pakkiEnabled: boolean;
+  doubleEnabled: boolean;
+  sukkiEnabled: boolean;
+
+  totalLabourBags: number;
+  totalLabour: number;
+  totalOtherDeduction: number;
+  grandTotalDeductions: number;
+
+  bagConversionRate: number;
+  labourDeductionBags: number;
+  balanceBeforeLabourBags: number;
+  remainingBalanceBags: number;
+
+  unassignedBags: number;
+  isExceeding: boolean;
+  excessBags: number;
+  validationWarning?: string;
+
+  grossAmount: number;
+  netAmount: number;
+
+  labourDeductions: LabourAndDeductions;
+  conditionBreakdown: BagConditionBreakdown;
+}
+
+/**
+ * Universal Single Source of Truth for Labour Calculations.
+ * Strictly adheres to Mandi rules:
+ * 1. Bags × Rate = Amount for each category independently
+ * 2. Total Labour = Pakki + Double + Sukki
+ * 3. Crop Balance Deduction = Total Labour ÷ 925 (Round UP)
+ * 4. Remaining Balance = Total Bags - Deduction Bags
+ * 5. Handles NULL/empty safely as 0
+ * 6. Never shows ₹0 when valid bags and rates exist
+ * 7. When no labour entered, Total Labour = ₹0 and Deduction Bags = 0
+ */
+export function computeUniversalLabour(params: UniversalLabourInput): UniversalLabourResult {
+  const totalBags = Math.max(0, typeof params.totalBags === 'number' ? params.totalBags : (parseInt(String(params.totalBags || '0'), 10) || 0));
+
+  // Category rates
+  const defaultPakki = params.settings?.defaultPakkiLabourRate ?? DEFAULT_PAKKI_LABOUR_RATE;
+  const defaultDouble = params.settings?.defaultPakkaDoubleLabourRate ?? DEFAULT_PAKKA_DOUBLE_LABOUR_RATE;
+  const defaultSukki = params.settings?.defaultSukhiLabourRate ?? DEFAULT_SUKHI_LABOUR_RATE;
+
+  const pakkiRate = params.pakkiRate !== undefined && params.pakkiRate !== null && !isNaN(Number(params.pakkiRate)) && Number(params.pakkiRate) >= 0
+    ? Number(params.pakkiRate)
+    : defaultPakki;
+
+  const doubleRate = params.doubleRate !== undefined && params.doubleRate !== null && !isNaN(Number(params.doubleRate)) && Number(params.doubleRate) >= 0
+    ? Number(params.doubleRate)
+    : defaultDouble;
+
+  const sukkiRate = params.sukkiRate !== undefined && params.sukkiRate !== null && !isNaN(Number(params.sukkiRate)) && Number(params.sukkiRate) >= 0
+    ? Number(params.sukkiRate)
+    : defaultSukki;
+
+  // Category bags
+  const pakkiBags = Math.max(0, typeof params.pakkiBags === 'number' ? params.pakkiBags : (parseInt(String(params.pakkiBags || '0'), 10) || 0));
+  const doubleBags = Math.max(0, typeof params.doubleBags === 'number' ? params.doubleBags : (parseInt(String(params.doubleBags || '0'), 10) || 0));
+  const sukkiBags = Math.max(0, typeof params.sukkiBags === 'number' ? params.sukkiBags : (parseInt(String(params.sukkiBags || '0'), 10) || 0));
+
+  // Category amounts: Bags × Rate
+  const pakkiAmount = calculateCategoryLabourAmount(pakkiBags, pakkiRate);
+  const doubleAmount = calculateCategoryLabourAmount(doubleBags, doubleRate);
+  const sukkiAmount = calculateCategoryLabourAmount(sukkiBags, sukkiRate);
+
+  const pakkiEnabled = pakkiBags > 0;
+  const doubleEnabled = doubleBags > 0;
+  const sukkiEnabled = sukkiBags > 0;
+
+  // Total labour bags and amount
+  const totalLabourBags = pakkiBags + doubleBags + sukkiBags;
+  const totalLabour = Math.round((pakkiAmount + doubleAmount + sukkiAmount) * 100) / 100;
+
+  // Bag consistency & validation
+  const isExceeding = totalBags > 0 && totalLabourBags > totalBags;
+  const excessBags = Math.max(0, totalLabourBags - totalBags);
+  const unassignedBags = Math.max(0, totalBags - totalLabourBags);
+  const validationWarning = isExceeding
+    ? `ਚੇਤਾਵਨੀ: ਮਜ਼ਦੂਰੀ ਬੋਰੀਆਂ (${totalLabourBags}) ਕੁੱਲ ਬੋਰੀਆਂ (${totalBags}) ਨਾਲੋਂ ${excessBags} ਵੱਧ ਹਨ! / Warning: Total Labour Bags (${totalLabourBags}) exceed Available Bags (${totalBags}) by ${excessBags}!`
+    : undefined;
+
+  // Conversion to Crop Balance Deduction Bags
+  const bagConversionRate = Math.max(1, typeof params.bagConversionRate === 'number' ? params.bagConversionRate : (parseFloat(String(params.bagConversionRate || '0')) || DEFAULT_CROP_BAG_CONVERSION_RATE));
+  const labourDeductionBags = calculateLabourDeductionBags(totalLabour, bagConversionRate);
+
+  const safePurchased = Math.max(0, typeof params.purchasedBags === 'number' ? params.purchasedBags : (parseInt(String(params.purchasedBags || '0'), 10) || 0));
+  const balanceBeforeLabourBags = Math.max(0, totalBags - safePurchased);
+  const remainingBalanceBags = balanceBeforeLabourBags - labourDeductionBags;
+
+  // Other custom deductions
+  const customLines: CustomDeductionLine[] = (params.customDeductions || DEFAULT_PRESET_DEDUCTIONS).map((item) => {
+    if (!item.enabled) return { ...item, amount: 0 };
+    if (item.type === 'PER_QTL') {
+      const qtl = (totalBags * FIXED_BAG_WEIGHT_KG) / 100;
+      return { ...item, amount: Math.round(qtl * Number(item.rate || 0) * 100) / 100 };
+    }
+    return { ...item, amount: Math.round(Number(item.rate || 0) * 100) / 100 };
+  });
+
+  const otherDeductionsEnabled = params.otherDeductionsEnabled ?? customLines.some((l) => l.enabled);
+  const totalOtherDeduction = customLines
+    .filter((l) => l.enabled)
+    .reduce((sum, l) => sum + (Number(l.amount) || 0), 0);
+
+  const grandTotalDeductions = Math.round((totalLabour + totalOtherDeduction) * 100) / 100;
+  const safeGross = Math.max(0, typeof params.grossAmount === 'number' ? params.grossAmount : (parseFloat(String(params.grossAmount || '0')) || 0));
+  const netAmount = Math.max(0, Math.round((safeGross - grandTotalDeductions) * 100) / 100);
+
+  // Summary Text
+  const partsSummary: string[] = [];
+  if (pakkiBags > 0) partsSummary.push(`${pakkiBags} ਪੱਕੀ (@₹${pakkiRate})`);
+  if (doubleBags > 0) partsSummary.push(`${doubleBags} ਡਬਲ (@₹${doubleRate})`);
+  if (sukkiBags > 0) partsSummary.push(`${sukkiBags} ਸੁੱਕੀ (@₹${sukkiRate})`);
+
+  const summaryText = partsSummary.length > 0
+    ? `${partsSummary.join(' + ')} = ${totalLabourBags} ਬੋਰੀਆਂ (₹${totalLabour})`
+    : `${totalBags} ਬੋਰੀਆਂ (ਕੋਈ ਮਜ਼ਦੂਰੀ ਨਹੀਂ)`;
+
+  const conditionBreakdown: BagConditionBreakdown = {
+    enabled: totalLabourBags > 0,
+    totalBags,
+    pakkiBags,
+    pakkiRate,
+    pakkiAmount,
+    doubleBags,
+    doubleRate,
+    doubleAmount,
+    sukkiBags,
+    sukkiRate,
+    sukkiAmount,
+    balanceBags: unassignedBags,
+    summaryText
+  };
+
+  const labourDeductions: LabourAndDeductions = {
+    pakkiLabourEnabled: pakkiEnabled,
+    pakkiLabourRate: pakkiRate,
+    pakkiLabourAmount: pakkiAmount,
+    pakkiBagsCount: pakkiBags,
+
+    pakkaDoubleLabourEnabled: doubleEnabled,
+    pakkaDoubleLabourRate: doubleRate,
+    pakkaDoubleLabourAmount: doubleAmount,
+    doubleBagsCount: doubleBags,
+
+    sukhiLabourEnabled: sukkiEnabled,
+    sukhiLabourRate: sukkiRate,
+    sukhiLabourAmount: sukkiAmount,
+    sukkiBagsCount: sukkiBags,
+
+    balanceBagsCount: unassignedBags,
+    conditionBreakdown,
+
+    otherDeductionsEnabled,
+    customDeductions: customLines,
+
+    totalLabourDeduction: totalLabour,
+    totalOtherDeduction,
+    grandTotalDeductions,
+    grossAmount: safeGross,
+    netPayableAmount: netAmount
+  };
+
+  return {
+    totalBags,
+    pakkiBags,
+    doubleBags,
+    sukkiBags,
+    pakkiRate,
+    doubleRate,
+    sukkiRate,
+
+    pakkiAmount,
+    doubleAmount,
+    sukkiAmount,
+
+    pakkiEnabled,
+    doubleEnabled,
+    sukkiEnabled,
+
+    totalLabourBags,
+    totalLabour,
+    totalOtherDeduction,
+    grandTotalDeductions,
+
+    bagConversionRate,
+    labourDeductionBags,
+    balanceBeforeLabourBags,
+    remainingBalanceBags,
+
+    unassignedBags,
+    isExceeding,
+    excessBags,
+    validationWarning,
+
+    grossAmount: safeGross,
+    netAmount,
+
+    labourDeductions,
+    conditionBreakdown
+  };
+}
 
 /**
  * Standard preset other deductions for Punjab Mandi
@@ -321,12 +601,7 @@ export function createDefaultLabourDeductions(settings?: Partial<MandiSettings>)
 
 /**
  * Recalculate all Labour & Deductions based on Bags Count and Gross Amount.
- * Strictly adheres to rule:
- * - Labour calculation is PER BAG, not Qul.
- * - Pakki Labour (ਪੱਕੀ ਲੇਬਰ): ₹7 / Bag
- * - Pakha Double Labour (ਪੱਖਾ ਡਬਲ): ₹14 / Bag
- * - Sukhi Labour (ਝੋਨਾ ਸਕਾਈ): ₹5 / Bag
- * - If option is NOT enabled: Amount = 0 and does NOT affect farmer's total.
+ * Delegates to the universal calculation engine.
  */
 export function computeLabourAndDeductions(
   totalWeightKg: number,
@@ -335,119 +610,38 @@ export function computeLabourAndDeductions(
   settings?: Partial<MandiSettings>,
   bagsCount?: number
 ): LabourAndDeductions {
-  const qtlDecimal = Math.max(0, totalWeightKg) / 100;
   // Calculate bags: use explicit bags count if provided, or estimate from weight
   const bagCount = typeof bagsCount === 'number' && bagsCount > 0
     ? bagsCount
     : Math.max(0, Math.round(totalWeightKg / FIXED_BAG_WEIGHT_KG));
 
-  // 1. Pakki Labour (ਪੱਕੀ ਲੇਬਰ) - PER BAG
-  const pakkiRate = current.pakkiLabourRate ?? settings?.defaultPakkiLabourRate ?? DEFAULT_PAKKI_LABOUR_RATE;
-  const pakkiEnabled = !!current.pakkiLabourEnabled;
-  const pakkiBags = pakkiEnabled
-    ? (typeof current.pakkiBagsCount === 'number' && current.pakkiBagsCount >= 0
-        ? current.pakkiBagsCount
-        : bagCount)
-    : 0;
-  const pakkiAmount = Math.round(pakkiBags * pakkiRate * 100) / 100;
+  const pakkiBags = current.pakkiLabourEnabled
+    ? (typeof current.pakkiBagsCount === 'number' && current.pakkiBagsCount >= 0 ? current.pakkiBagsCount : bagCount)
+    : (typeof current.pakkiBagsCount === 'number' && current.pakkiBagsCount > 0 ? current.pakkiBagsCount : 0);
 
-  // 2. Pakha Double (ਪੱਖਾ ਡਬਲ) - PER BAG
-  const doubleRate = current.pakkaDoubleLabourRate ?? settings?.defaultPakkaDoubleLabourRate ?? DEFAULT_PAKKA_DOUBLE_LABOUR_RATE;
-  const doubleEnabled = !!current.pakkaDoubleLabourEnabled;
-  const doubleBags = doubleEnabled
-    ? (typeof current.doubleBagsCount === 'number' && current.doubleBagsCount >= 0
-        ? current.doubleBagsCount
-        : bagCount)
-    : 0;
-  const doubleAmount = Math.round(doubleBags * doubleRate * 100) / 100;
+  const doubleBags = current.pakkaDoubleLabourEnabled
+    ? (typeof current.doubleBagsCount === 'number' && current.doubleBagsCount >= 0 ? current.doubleBagsCount : bagCount)
+    : (typeof current.doubleBagsCount === 'number' && current.doubleBagsCount > 0 ? current.doubleBagsCount : 0);
 
-  // 3. Sukhi Labour / Paddy Drying (ਝੋਨਾ ਸਕਾਈ) - PER BAG
-  const sukhiRate = current.sukhiLabourRate ?? settings?.defaultSukhiLabourRate ?? DEFAULT_SUKHI_LABOUR_RATE;
-  const sukhiEnabled = !!current.sukhiLabourEnabled;
-  const sukkiBags = sukhiEnabled
-    ? (typeof current.sukkiBagsCount === 'number' && current.sukkiBagsCount >= 0
-        ? current.sukkiBagsCount
-        : bagCount)
-    : 0;
-  const sukhiAmount = Math.round(sukkiBags * sukhiRate * 100) / 100;
+  const sukkiBags = current.sukhiLabourEnabled
+    ? (typeof current.sukkiBagsCount === 'number' && current.sukkiBagsCount >= 0 ? current.sukkiBagsCount : bagCount)
+    : (typeof current.sukkiBagsCount === 'number' && current.sukkiBagsCount > 0 ? current.sukkiBagsCount : 0);
 
-  // Multiple Condition Breakdown & Remaining Balance
-  const accountedConditionBags = (doubleEnabled ? doubleBags : 0) + (sukhiEnabled ? sukkiBags : 0) + (pakkiEnabled ? pakkiBags : 0);
-  const balanceBags = Math.max(0, bagCount - accountedConditionBags);
-
-  const partsSummary: string[] = [];
-  if (doubleEnabled && doubleBags > 0) partsSummary.push(`${doubleBags} ਡਬਲ`);
-  if (sukhiEnabled && sukkiBags > 0) partsSummary.push(`${sukkiBags} ਸੁੱਕੀ`);
-  if (pakkiEnabled && pakkiBags > 0) partsSummary.push(`${pakkiBags} ਪੱਕੀ`);
-  if (balanceBags > 0) partsSummary.push(`${balanceBags} ਬਾਕੀ ਬੈਲੇਂਸ`);
-
-  const conditionBreakdown = {
-    enabled: !!(doubleEnabled || sukhiEnabled || pakkiEnabled),
+  const universal = computeUniversalLabour({
     totalBags: bagCount,
-    doubleBags: doubleEnabled ? doubleBags : 0,
-    doubleRate,
-    doubleAmount,
-    sukkiBags: sukhiEnabled ? sukkiBags : 0,
-    sukkiRate: sukhiRate,
-    sukkiAmount: sukhiAmount,
-    pakkiBags: pakkiEnabled ? pakkiBags : 0,
-    pakkiRate,
-    pakkiAmount,
-    balanceBags,
-    summaryText: partsSummary.length > 0 ? `${bagCount} ਕੁੱਲ = ${partsSummary.join(' + ')}` : `${bagCount} ਬੋਰੀਆਂ`
-  };
-
-  // 4. Custom / Other Deductions
-  const customLines: CustomDeductionLine[] = (current.customDeductions || DEFAULT_PRESET_DEDUCTIONS).map((item) => {
-    if (!item.enabled) {
-      return { ...item, amount: 0 };
-    }
-    if (item.type === 'PER_QTL') {
-      const calc = Math.round(qtlDecimal * Number(item.rate || 0) * 100) / 100;
-      return { ...item, amount: calc };
-    } else {
-      return { ...item, amount: Math.round(Number(item.rate || 0) * 100) / 100 };
-    }
+    pakkiBags,
+    pakkiRate: current.pakkiLabourRate,
+    doubleBags,
+    doubleRate: current.pakkaDoubleLabourRate,
+    sukkiBags,
+    sukkiRate: current.sukhiLabourRate,
+    grossAmount,
+    customDeductions: current.customDeductions,
+    otherDeductionsEnabled: current.otherDeductionsEnabled,
+    settings
   });
 
-  const otherDeductionsEnabled = current.otherDeductionsEnabled ?? customLines.some((l) => l.enabled);
-  const totalOtherDeduction = customLines
-    .filter((l) => l.enabled)
-    .reduce((sum, l) => sum + (Number(l.amount) || 0), 0);
-
-  const totalLabourDeduction = Math.round((pakkiAmount + doubleAmount + sukhiAmount) * 100) / 100;
-  const grandTotalDeductions = Math.round((totalLabourDeduction + totalOtherDeduction) * 100) / 100;
-  const safeGross = Math.max(0, Number(grossAmount) || 0);
-  const netPayableAmount = Math.max(0, Math.round((safeGross - grandTotalDeductions) * 100) / 100);
-
-  return {
-    pakkiLabourEnabled: pakkiEnabled,
-    pakkiLabourRate: pakkiRate,
-    pakkiLabourAmount: pakkiAmount,
-    pakkiBagsCount: pakkiBags,
-
-    pakkaDoubleLabourEnabled: doubleEnabled,
-    pakkaDoubleLabourRate: doubleRate,
-    pakkaDoubleLabourAmount: doubleAmount,
-    doubleBagsCount: doubleBags,
-
-    sukhiLabourEnabled: sukhiEnabled,
-    sukhiLabourRate: sukhiRate,
-    sukhiLabourAmount: sukhiAmount,
-    sukkiBagsCount: sukkiBags,
-
-    balanceBagsCount: balanceBags,
-    conditionBreakdown,
-
-    otherDeductionsEnabled,
-    customDeductions: customLines,
-
-    totalLabourDeduction,
-    totalOtherDeduction,
-    grandTotalDeductions,
-    grossAmount: safeGross,
-    netPayableAmount
-  };
+  return universal.labourDeductions;
 }
 
 export interface LabourRateOverrides {
@@ -459,13 +653,11 @@ export interface LabourRateOverrides {
 /**
  * Automatically calculate Labour Deduction from entered New, Old, Double, Sukki bags and applicable labour rates.
  * Adheres strictly to Mandi standard:
- * - Total Bags = New Bags + Old Bags
- * - Double Bags @ Double Rate (user-editable, default ₹14/bag)
- * - Sukki Bags @ Sukki Rate (user-editable, default ₹5/bag)
- * - Remaining / Pakki Bags = Total Bags - (Double Bags + Sukki Bags) @ Pakki Rate (user-editable, default ₹7/bag)
- * - Total Labour = (Pakki Bags * Pakki Rate) + (Double Bags * Double Rate) + (Sukki Bags * Sukki Rate)
- * - Gross Amount = (Total Weight Kg / 100) * MSP Rate (₹2,461)
- * - Net Amount = Gross Amount - Total Labour
+ * - Labour Bags × Labour Rate per Bag = Labour Amount for each category independently
+ * - Total Labour = Pakki + Double + Sukki
+ * - Crop Balance Deduction = Total Labour ÷ ₹925 (Round UP)
+ * - Remaining Balance = Total Bags - Deduction Bags
+ * - Live recalculation on any input change
  */
 export function calculateAutomaticLabour(
   newBags: number,
@@ -474,110 +666,51 @@ export function calculateAutomaticLabour(
   sukkiBags: number,
   grossAmount: number,
   settings?: Partial<MandiSettings>,
-  customRates?: LabourRateOverrides
+  customRates?: LabourRateOverrides,
+  pakkiBags?: number | null,
+  options?: {
+    totalBagsOverride?: number;
+    bagConversionRate?: number;
+    purchasedBags?: number;
+    customDeductions?: CustomDeductionLine[];
+    otherDeductionsEnabled?: boolean;
+  }
 ) {
-  const safeNew = Math.max(0, newBags || 0);
-  const safeOld = Math.max(0, oldBags || 0);
-  const totalBags = safeNew + safeOld;
+  const safeNew = Math.max(0, Number(newBags) || 0);
+  const safeOld = Math.max(0, Number(oldBags) || 0);
+  const totalBags = options?.totalBagsOverride !== undefined && options.totalBagsOverride !== null
+    ? Math.max(0, Number(options.totalBagsOverride) || 0)
+    : (safeNew + safeOld);
 
-  const safeDouble = Math.max(0, Math.min(totalBags, doubleBags || 0));
-  const safeSukki = Math.max(0, Math.min(Math.max(0, totalBags - safeDouble), sukkiBags || 0));
-  const safePakki = Math.max(0, totalBags - (safeDouble + safeSukki));
+  let effectivePakki: number;
+  if (pakkiBags !== undefined && pakkiBags !== null) {
+    effectivePakki = Math.max(0, Number(pakkiBags) || 0);
+  } else {
+    // If pakkiBags is not passed, calculate if double or sukki bags are entered
+    const doubleNum = Math.max(0, Number(doubleBags) || 0);
+    const sukkiNum = Math.max(0, Number(sukkiBags) || 0);
+    if (doubleNum > 0 || sukkiNum > 0) {
+      effectivePakki = Math.max(0, totalBags - (doubleNum + sukkiNum));
+    } else {
+      effectivePakki = 0;
+    }
+  }
 
-  const defaultPakki = settings?.defaultPakkiLabourRate ?? DEFAULT_PAKKI_LABOUR_RATE;
-  const defaultDouble = settings?.defaultPakkaDoubleLabourRate ?? DEFAULT_PAKKA_DOUBLE_LABOUR_RATE;
-  const defaultSukki = settings?.defaultSukhiLabourRate ?? DEFAULT_SUKHI_LABOUR_RATE;
-
-  const pakkiRate =
-    customRates?.pakkiRate !== undefined && !isNaN(customRates.pakkiRate) && customRates.pakkiRate >= 0
-      ? customRates.pakkiRate
-      : defaultPakki;
-
-  const doubleRate =
-    customRates?.doubleRate !== undefined && !isNaN(customRates.doubleRate) && customRates.doubleRate >= 0
-      ? customRates.doubleRate
-      : defaultDouble;
-
-  const sukkiRate =
-    customRates?.sukkiRate !== undefined && !isNaN(customRates.sukkiRate) && customRates.sukkiRate >= 0
-      ? customRates.sukkiRate
-      : defaultSukki;
-
-  const pakkiAmount = totalBags > 0 ? Math.round(safePakki * pakkiRate * 100) / 100 : 0;
-  const doubleAmount = totalBags > 0 ? Math.round(safeDouble * doubleRate * 100) / 100 : 0;
-  const sukkiAmount = totalBags > 0 ? Math.round(safeSukki * sukkiRate * 100) / 100 : 0;
-
-  const totalLabour = Math.round((pakkiAmount + doubleAmount + sukkiAmount) * 100) / 100;
-  const safeGross = Math.max(0, Number(grossAmount) || 0);
-  const netAmount = Math.max(0, Math.round((safeGross - totalLabour) * 100) / 100);
-
-  const partsSummary: string[] = [];
-  if (safeDouble > 0) partsSummary.push(`${safeDouble} ਡਬਲ`);
-  if (safeSukki > 0) partsSummary.push(`${safeSukki} ਸੁੱਕੀ`);
-  if (safePakki > 0) partsSummary.push(`${safePakki} ਪੱਕੀ`);
-
-  const conditionBreakdown: BagConditionBreakdown = {
-    enabled: totalBags > 0,
+  return computeUniversalLabour({
     totalBags,
-    doubleBags: safeDouble,
-    doubleRate,
-    doubleAmount,
-    sukkiBags: safeSukki,
-    sukkiRate,
-    sukkiAmount,
-    pakkiBags: safePakki,
-    pakkiRate,
-    pakkiAmount,
-    balanceBags: safePakki,
-    summaryText: partsSummary.length > 0 ? `${totalBags} ਕੁੱਲ = ${partsSummary.join(' + ')}` : `${totalBags} ਬੋਰੀਆਂ`
-  };
-
-  const labourDeductions: LabourAndDeductions = {
-    pakkiLabourEnabled: safePakki > 0,
-    pakkiLabourRate: pakkiRate,
-    pakkiLabourAmount: pakkiAmount,
-    pakkiBagsCount: safePakki,
-
-    pakkaDoubleLabourEnabled: safeDouble > 0,
-    pakkaDoubleLabourRate: doubleRate,
-    pakkaDoubleLabourAmount: doubleAmount,
-    doubleBagsCount: safeDouble,
-
-    sukhiLabourEnabled: safeSukki > 0,
-    sukhiLabourRate: sukkiRate,
-    sukhiLabourAmount: sukkiAmount,
-    sukkiBagsCount: safeSukki,
-
-    balanceBagsCount: safePakki,
-    conditionBreakdown,
-
-    otherDeductionsEnabled: false,
-    customDeductions: [],
-
-    totalLabourDeduction: totalLabour,
-    totalOtherDeduction: 0,
-    grandTotalDeductions: totalLabour,
-    grossAmount: safeGross,
-    netPayableAmount: netAmount
-  };
-
-  return {
-    totalBags,
-    pakkiBags: safePakki,
-    doubleBags: safeDouble,
-    sukkiBags: safeSukki,
-    pakkiRate,
-    doubleRate,
-    sukkiRate,
-    pakkiAmount,
-    doubleAmount,
-    sukkiAmount,
-    totalLabour,
-    grossAmount: safeGross,
-    netAmount,
-    labourDeductions,
-    conditionBreakdown
-  };
+    pakkiBags: effectivePakki,
+    pakkiRate: customRates?.pakkiRate,
+    doubleBags,
+    doubleRate: customRates?.doubleRate,
+    sukkiBags,
+    sukkiRate: customRates?.sukkiRate,
+    grossAmount,
+    bagConversionRate: options?.bagConversionRate,
+    purchasedBags: options?.purchasedBags,
+    customDeductions: options?.customDeductions,
+    otherDeductionsEnabled: options?.otherDeductionsEnabled,
+    settings
+  });
 }
 
 /**

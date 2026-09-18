@@ -1254,7 +1254,7 @@ export async function exportPaymentAdjustmentPDF(
       if (currentY + thisRowH > 275) {
         doc.addPage();
         currentY = 12;
-        drawTableHeaderRow(doc, ptfColumns, margin, currentY, 6.5);
+        drawTableHeaderRow(doc, ptColumns, margin, currentY, 6.5);
         currentY += 6.5;
       }
 

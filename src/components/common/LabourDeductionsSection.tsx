@@ -55,7 +55,8 @@ export const LabourDeductionsSection: React.FC<LabourDeductionsSectionProps> = (
       grossAmount,
       {
         ...value,
-        pakkiLabourEnabled: enabled
+        pakkiLabourEnabled: enabled,
+        pakkiBagsCount: enabled ? (value.pakkiBagsCount ?? effectiveBags) : 0
       },
       settings,
       effectiveBags
