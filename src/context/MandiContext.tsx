@@ -22,7 +22,10 @@ import {
   MandiFirm,
   SellerMaster,
   OtherPartyBardanaBalance,
-  TruckMasterRecord
+  TruckMasterRecord,
+  LabourMate,
+  LabourWorkEntry,
+  LabourAdvancePayment
 } from '../types/mandi';
 import { INITIAL_PIN_CODES } from '../data/pinCodes';
 import {
@@ -31,7 +34,8 @@ import {
   calculateAdvanceInterest,
   formatDateToDDMMYYYY,
   FIXED_BAG_WEIGHT_KG,
-  FIXED_RATE_PER_QTL
+  FIXED_RATE_PER_QTL,
+  calculateAutomaticLabour
 } from '../utils/calculations';
 import { isSupabaseConfigured } from '../lib/supabase';
 import {
@@ -238,7 +242,20 @@ interface MandiContextType {
 
   // Boli Operations
   addBoliRecord: (record: Omit<BoliRecord, 'id' | 'createdAt'>) => BoliRecord;
+  updateBoliRecord: (id: string, updates: Partial<BoliRecord>) => boolean;
   deleteBoliRecord: (id: string) => boolean;
+
+  // Labour Gang / Mates Ledger Operations
+  labourMates: LabourMate[];
+  addLabourMate: (mate: Omit<LabourMate, 'id' | 'createdAt'>) => LabourMate;
+  updateLabourMate: (id: string, updates: Partial<LabourMate>) => boolean;
+  deleteLabourMate: (id: string) => boolean;
+  labourWorkEntries: LabourWorkEntry[];
+  addLabourWorkEntry: (entry: Omit<LabourWorkEntry, 'id' | 'createdAt'>) => LabourWorkEntry;
+  deleteLabourWorkEntry: (id: string) => boolean;
+  labourAdvancePayments: LabourAdvancePayment[];
+  addLabourAdvancePayment: (payment: Omit<LabourAdvancePayment, 'id' | 'createdAt'>) => LabourAdvancePayment;
+  deleteLabourAdvancePayment: (id: string) => boolean;
 
   // Bags operations
   getNextParchiNo: () => number;
@@ -341,8 +358,44 @@ const LOCAL_STORAGE_KEYS = {
   FISCAL_YEARS: 'punjab_mandi_fiscal_years_v2',
   ACTIVE_FISCAL_YEAR: 'punjab_mandi_active_fiscal_year_v2',
   SELLERS: 'punjab_mandi_sellers_v2',
-  TRUCKS: 'punjab_mandi_trucks_v2'
+  TRUCKS: 'punjab_mandi_trucks_v2',
+  LABOUR_MATES: 'punjab_mandi_labour_mates_v2',
+  LABOUR_WORK_ENTRIES: 'punjab_mandi_labour_work_entries_v2',
+  LABOUR_ADVANCE_PAYMENTS: 'punjab_mandi_labour_advance_payments_v2'
 };
+
+const DEFAULT_LABOUR_MATES: LabourMate[] = [
+  {
+    id: 'MATE-001',
+    mateName: 'Kalu Mate',
+    mateNamePa: 'ਕਾਲੂ ਮੇਟ',
+    mobile: '98721-88901',
+    village: 'ਕੰਗ ਖੁਰਦ',
+    teamSize: 14,
+    notes: 'ਫੜ੍ਹ ਨੰ. 1 ਅਤੇ ਤੁਲਾਈ ਟੀਮ',
+    createdAt: '01/09/2026'
+  },
+  {
+    id: 'MATE-002',
+    mateName: 'Jeeta Mate',
+    mateNamePa: 'ਜੀਤਾ ਮੇਟ',
+    mobile: '98145-22341',
+    village: 'ਲੋਹੀਆਂ',
+    teamSize: 10,
+    notes: 'ਟਰੱਕ ਲੋਡਿੰਗ ਅਤੇ ਲਿਫਟਿੰਗ ਟੀਮ',
+    createdAt: '01/09/2026'
+  },
+  {
+    id: 'MATE-003',
+    mateName: 'Ramu Mate',
+    mateNamePa: 'ਰਾਮੂ ਮੇਟ',
+    mobile: '94172-66554',
+    village: 'ਮਲਸੀਆਂ',
+    teamSize: 12,
+    notes: 'ਪੱਖਾ ਅਤੇ ਛਣਾਈ ਟੀਮ',
+    createdAt: '01/09/2026'
+  }
+];
 
 const DEFAULT_SETTINGS: MandiSettings = {
   mandiNameEn: 'Dana Mandi Kang Khurd',
@@ -358,7 +411,7 @@ const DEFAULT_SETTINGS: MandiSettings = {
   firmGstin: '03AAACJ1234F1Z5',
   fixedRatePerQtl: 2461,
   fixedBagWeightKg: 37.50,
-  defaultPakkiLabourRate: 7, // default ₹7 / Bag
+  defaultPakkiLabourRate: 8, // default ₹8 / Bag (Fixed Labour - ਪੱਕੀ ਲੇਬਰ)
   defaultPakkaDoubleLabourRate: 14, // default ₹14 / Bag
   defaultSukhiLabourRate: 5, // default ₹5 / Bag
   requireAgencyPurchaseBeforeLefting: true
@@ -379,7 +432,56 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [bagsEntries, setBagsEntries] = useState<BagsEntryRecord[]>(() => {
     try {
       const stored = localStorage.getItem(LOCAL_STORAGE_KEYS.BAGS_ENTRIES);
-      return stored ? JSON.parse(stored) : [];
+      if (!stored) return [];
+      const parsed: BagsEntryRecord[] = JSON.parse(stored);
+      // Auto-repair any entries where Pakha or Sukhi was calculated, but fixed Pakki labour was omitted (the subtraction bug)
+      let needsSave = false;
+      const repaired = parsed.map((entry) => {
+        const totalBags = entry.bags || ((entry.newBags || 0) + (entry.oldBags || 0));
+        const hasDoubleOrSukki = 
+          (entry.conditionBreakdown?.doubleBags !== undefined && entry.conditionBreakdown.doubleBags > 0) ||
+          (entry.conditionBreakdown?.sukkiBags !== undefined && entry.conditionBreakdown.sukkiBags > 0) ||
+          (entry.labourDeductions?.pakkaDoubleLabourAmount !== undefined && entry.labourDeductions.pakkaDoubleLabourAmount > 0) ||
+          (entry.labourDeductions?.sukhiLabourAmount !== undefined && entry.labourDeductions.sukhiLabourAmount > 0);
+
+        const pakkiAmount = entry.conditionBreakdown?.pakkiAmount ?? entry.labourDeductions?.pakkiLabourAmount ?? 0;
+        const pakkiBags = entry.conditionBreakdown?.pakkiBags ?? entry.labourDeductions?.pakkiBagsCount ?? 0;
+
+        // If entry had double or sukki bags, but pakki bags or amount was 0 because of the old bug:
+        if (totalBags > 0 && hasDoubleOrSukki && (pakkiAmount === 0 || pakkiBags === 0)) {
+          needsSave = true;
+          const doubleBags = entry.conditionBreakdown?.doubleBags ?? entry.labourDeductions?.doubleBagsCount ?? 0;
+          const doubleRate = entry.conditionBreakdown?.doubleRate ?? entry.labourDeductions?.pakkaDoubleLabourRate ?? 14;
+          const sukkiBags = entry.conditionBreakdown?.sukkiBags ?? entry.labourDeductions?.sukkiBagsCount ?? 0;
+          const sukkiRate = entry.conditionBreakdown?.sukkiRate ?? entry.labourDeductions?.sukhiLabourRate ?? 5;
+          const pakkiRate = 8; // Fixed ₹8 pakki labour
+
+          const recalc = calculateAutomaticLabour(
+            entry.newBags || 0,
+            entry.oldBags || 0,
+            doubleBags,
+            sukkiBags,
+            entry.totalAmount,
+            undefined,
+            { pakkiRate, doubleRate, sukkiRate },
+            totalBags, // Fixed Pakki labour applies to all total bags!
+            { totalBagsOverride: totalBags }
+          );
+
+          return {
+            ...entry,
+            labourDeductions: recalc.labourDeductions,
+            conditionBreakdown: recalc.conditionBreakdown,
+            netAmount: recalc.netAmount
+          };
+        }
+        return entry;
+      });
+
+      if (needsSave) {
+        localStorage.setItem(LOCAL_STORAGE_KEYS.BAGS_ENTRIES, JSON.stringify(repaired));
+      }
+      return repaired;
     } catch {
       return [];
     }
@@ -429,6 +531,36 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [boliRecords, setBoliRecords] = useState<BoliRecord[]>(() => {
     try {
       const stored = localStorage.getItem(LOCAL_STORAGE_KEYS.BOLI_RECORDS);
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  // 4d-2. Labour Mates / Palledar Gangs
+  const [labourMates, setLabourMates] = useState<LabourMate[]>(() => {
+    try {
+      const stored = localStorage.getItem(LOCAL_STORAGE_KEYS.LABOUR_MATES);
+      return stored ? JSON.parse(stored) : DEFAULT_LABOUR_MATES;
+    } catch {
+      return DEFAULT_LABOUR_MATES;
+    }
+  });
+
+  // 4d-3. Labour Work Entries (Palledari/Loading/Cleaning tasks)
+  const [labourWorkEntries, setLabourWorkEntries] = useState<LabourWorkEntry[]>(() => {
+    try {
+      const stored = localStorage.getItem(LOCAL_STORAGE_KEYS.LABOUR_WORK_ENTRIES);
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  // 4d-4. Labour Advance / Kharcha Payments
+  const [labourAdvancePayments, setLabourAdvancePayments] = useState<LabourAdvancePayment[]>(() => {
+    try {
+      const stored = localStorage.getItem(LOCAL_STORAGE_KEYS.LABOUR_ADVANCE_PAYMENTS);
       return stored ? JSON.parse(stored) : [];
     } catch {
       return [];
@@ -503,6 +635,9 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         const parsed = JSON.parse(stored);
         if (parsed.fixedRatePerQtl === 2475 || !parsed.fixedRatePerQtl) {
           parsed.fixedRatePerQtl = 2461;
+        }
+        if (!parsed.defaultPakkiLabourRate || parsed.defaultPakkiLabourRate === 7) {
+          parsed.defaultPakkiLabourRate = 8;
         }
         if (parsed.mandiNameEn && (parsed.mandiNameEn.includes('Khanna') || parsed.mandiNameEn.includes('Khanan'))) {
           return {
@@ -817,6 +952,18 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   useEffect(() => {
     localStorage.setItem(LOCAL_STORAGE_KEYS.SELLERS, JSON.stringify(sellers));
   }, [sellers]);
+
+  useEffect(() => {
+    localStorage.setItem(LOCAL_STORAGE_KEYS.LABOUR_MATES, JSON.stringify(labourMates));
+  }, [labourMates]);
+
+  useEffect(() => {
+    localStorage.setItem(LOCAL_STORAGE_KEYS.LABOUR_WORK_ENTRIES, JSON.stringify(labourWorkEntries));
+  }, [labourWorkEntries]);
+
+  useEffect(() => {
+    localStorage.setItem(LOCAL_STORAGE_KEYS.LABOUR_ADVANCE_PAYMENTS, JSON.stringify(labourAdvancePayments));
+  }, [labourAdvancePayments]);
 
   // Keep settings automatically in sync with activeFirm
   useEffect(() => {
@@ -1282,6 +1429,77 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
     setBoliRecords((prev) => prev.filter((b) => b.id !== id));
     supabaseDeleteBoli(id).catch(console.error);
+    return true;
+  };
+
+  const updateBoliRecord = (id: string, updates: Partial<BoliRecord>): boolean => {
+    let updated = false;
+    setBoliRecords((prev) =>
+      prev.map((b) => {
+        if (b.id === id) {
+          updated = true;
+          const newRec = { ...b, ...updates };
+          supabaseUpsertBoli(newRec, activeFirmId, activeFiscalYear).catch(console.error);
+          return newRec;
+        }
+        return b;
+      })
+    );
+    return updated;
+  };
+
+  /**
+   * Labour Gang / Palledar Management
+   */
+  const addLabourMate = (mateData: Omit<LabourMate, 'id' | 'createdAt'>): LabourMate => {
+    const newMate: LabourMate = {
+      ...mateData,
+      id: `MATE-${Date.now().toString().slice(-4)}`,
+      createdAt: new Date().toLocaleDateString('en-GB')
+    };
+    setLabourMates((prev) => [newMate, ...prev]);
+    return newMate;
+  };
+
+  const updateLabourMate = (id: string, updates: Partial<LabourMate>): boolean => {
+    setLabourMates((prev) =>
+      prev.map((m) => (m.id === id ? { ...m, ...updates } : m))
+    );
+    return true;
+  };
+
+  const deleteLabourMate = (id: string): boolean => {
+    setLabourMates((prev) => prev.filter((m) => m.id !== id));
+    return true;
+  };
+
+  const addLabourWorkEntry = (entryData: Omit<LabourWorkEntry, 'id' | 'createdAt'>): LabourWorkEntry => {
+    const newEntry: LabourWorkEntry = {
+      ...entryData,
+      id: `LWRK-${Date.now().toString().slice(-5)}`,
+      createdAt: new Date().toISOString()
+    };
+    setLabourWorkEntries((prev) => [newEntry, ...prev]);
+    return newEntry;
+  };
+
+  const deleteLabourWorkEntry = (id: string): boolean => {
+    setLabourWorkEntries((prev) => prev.filter((e) => e.id !== id));
+    return true;
+  };
+
+  const addLabourAdvancePayment = (paymentData: Omit<LabourAdvancePayment, 'id' | 'createdAt'>): LabourAdvancePayment => {
+    const newPayment: LabourAdvancePayment = {
+      ...paymentData,
+      id: `LADV-${Date.now().toString().slice(-5)}`,
+      createdAt: new Date().toISOString()
+    };
+    setLabourAdvancePayments((prev) => [newPayment, ...prev]);
+    return newPayment;
+  };
+
+  const deleteLabourAdvancePayment = (id: string): boolean => {
+    setLabourAdvancePayments((prev) => prev.filter((p) => p.id !== id));
     return true;
   };
 
@@ -3163,7 +3381,18 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         updateFarmerAdvance,
         deleteFarmerAdvance,
         addBoliRecord,
+        updateBoliRecord,
         deleteBoliRecord,
+        labourMates,
+        addLabourMate,
+        updateLabourMate,
+        deleteLabourMate,
+        labourWorkEntries,
+        addLabourWorkEntry,
+        deleteLabourWorkEntry,
+        labourAdvancePayments,
+        addLabourAdvancePayment,
+        deleteLabourAdvancePayment,
         getNextParchiNo,
         addBagsEntry,
         addMultipleBagsEntries,

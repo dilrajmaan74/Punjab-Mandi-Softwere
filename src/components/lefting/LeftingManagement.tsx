@@ -35,6 +35,7 @@ import { exportLeftingVoucherPDF } from '../../utils/leftingPdfExport';
 import { SellerMasterModal } from '../seller/SellerMasterModal';
 import { TruckMasterModal } from '../truck/TruckMasterModal';
 import { DateInput } from '../common/DateInput';
+import { AgencyLiftingReport } from './AgencyLiftingReport';
 
 const STANDARD_AGENCIES = [
   'Punjab Mandi Board Agency',
@@ -63,7 +64,7 @@ export const LeftingManagement: React.FC = () => {
   const { notifySaveSuccess, notifyDeleteSuccess, notifyError, confirmDelete } = useNotification();
 
   // Active Tab
-  const [activeTab, setActiveTab] = useState<'dispatch' | 'history'>('dispatch');
+  const [activeTab, setActiveTab] = useState<'dispatch' | 'history' | 'agency-report'>('dispatch');
 
   // Form State
   const getTodayFormatted = () => {
@@ -457,7 +458,7 @@ export const LeftingManagement: React.FC = () => {
         </div>
 
         {/* Tab Toggle */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={() => setActiveTab('dispatch')}
             className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
@@ -479,6 +480,17 @@ export const LeftingManagement: React.FC = () => {
           >
             <FileText className="w-4 h-4" />
             <span>{isEn ? `Dispatch Register (${leftingRecords.length})` : `ਰਵਾਨਗੀ ਰਜਿਸਟਰ (${leftingRecords.length})`}</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('agency-report')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+              activeTab === 'agency-report'
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200'
+            }`}
+          >
+            <Building className="w-4 h-4" />
+            <span>{isEn ? 'Agency-Wise Lifting Report' : 'ਸਰਕਾਰੀ ਏਜੰਸੀ ਲਿਫਟਿੰਗ ਰਿਪੋਰਟ'}</span>
           </button>
         </div>
       </div>
@@ -1157,6 +1169,11 @@ export const LeftingManagement: React.FC = () => {
             </div>
           )}
         </div>
+      )}
+
+      {/* 4.5 AGENCY-WISE LIFTING REPORT TAB */}
+      {activeTab === 'agency-report' && (
+        <AgencyLiftingReport />
       )}
 
       {/* 5. VIEW MODAL */}

@@ -414,13 +414,21 @@ export interface BoliRecord {
   id: string;
   date: string;
   farmerId: string;
+  farmerName?: string;
+  farmerNamePa?: string;
+  farmerFatherName?: string;
+  farmerVillage?: string;
+  farmerMobile?: string;
   crop: string;
+  heapNumber?: string; // Dheri No (ਢੇਰੀ ਨੰ:)
   bags: number;
   qul: number;
   kg: number;
   totalWeightKg: number;
-  rate: number;
+  rate: number; // e.g. 2320 (₹ per Qtl)
+  ratePerQtl?: number;
   agency: string;
+  buyerName?: string; // Purchaser / Trader / Mill / Agency
   totalAmount: number;
   labourDeductions?: LabourAndDeductions;
   netAmount?: number;
@@ -612,7 +620,7 @@ export interface MandiSettings {
   requireAgencyPurchaseBeforeLefting?: boolean;
 
   // Configurable Labour Rates
-  defaultPakkiLabourRate: number; // default: 7 (₹/Bag)
+  defaultPakkiLabourRate: number; // default: 8 (₹/Bag)
   defaultPakkaDoubleLabourRate: number; // default: 14 (₹/Bag)
   defaultSukhiLabourRate: number; // default: 5 (₹/Bag)
   defaultCustomDeductions?: {
@@ -692,20 +700,58 @@ export interface RecycleBinItem {
 
 export type AppLanguage = 'en' | 'pa';
 
+export interface LabourMate {
+  id: string; // e.g. "MATE-001"
+  mateName: string; // e.g. "Kalu Mate"
+  mateNamePa: string; // e.g. "ਕਾਲੂ ਮੇਟ"
+  mobile: string;
+  village?: string;
+  teamSize?: number; // Number of workers/palledars in gang
+  notes?: string;
+  createdAt: string;
+}
+
+export interface LabourWorkEntry {
+  id: string;
+  mateId: string;
+  mateName: string;
+  date: string; // DD/MM/YYYY
+  workType: 'CLEANING_PAKHA' | 'FILLING_WEIGHING' | 'TRUCK_LOADING' | 'CHHANAI' | 'MISC';
+  workTypePa: string; // e.g. "ਪੱਖਾ / ਛਣਾਈ", "ਭਰਾਈ ਤੇ ਤੁਲਾਈ", "ਟਰੱਕ ਲੋਡਿੰਗ"
+  bags: number;
+  ratePerBag: number;
+  totalAmount: number;
+  notes?: string;
+  createdAt: string;
+}
+
+export interface LabourAdvancePayment {
+  id: string;
+  mateId: string;
+  mateName: string;
+  date: string; // DD/MM/YYYY
+  amount: number;
+  paymentMode: 'CASH' | 'UPI' | 'BANK' | 'RATION';
+  remarks?: string;
+  createdAt: string;
+}
+
 export type NavigationSection =
   | 'dashboard'
-  | 'farmer-account'
+  | 'boli'
+  | 'bags-entry'
+  | 'same-date-multi-entry'
   | 'daily-purchase'
+  | 'farmer-account'
+  | 'farmer-bag-balance-labour'
+  | 'labour-ledger'
   | 'lefting'
   | 'balance-chart'
-  | 'recycle-bin'
   | 'farmer-registration'
   | 'multi-farmer-add'
   | 'bank-details'
   | 'bardana'
-  | 'bags-entry'
-  | 'same-date-multi-entry'
   | 'search-farmer'
   | 'reports'
-  | 'farmer-bag-balance-labour'
+  | 'recycle-bin'
   | 'settings';

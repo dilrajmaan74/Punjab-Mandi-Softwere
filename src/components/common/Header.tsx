@@ -20,6 +20,8 @@ import { FirmManagerModal } from '../firm/FirmManagerModal';
 import { SellerMasterModal } from '../seller/SellerMasterModal';
 import { SupabaseSyncModal } from '../supabase/SupabaseSyncModal';
 import { GoogleSheetsSyncModal } from '../farmer/GoogleSheetsSyncModal';
+import { useGoogleSheetsSync } from '../../context/GoogleSheetsSyncContext';
+import { TopQuickNavigationBar } from './TopQuickNavigationBar';
 
 export const Header: React.FC = () => {
   const {
@@ -40,6 +42,7 @@ export const Header: React.FC = () => {
     setIsSupabaseSyncModalOpen,
     isSupabaseConfigured
   } = useMandi();
+  const { syncStatus: sheetsSyncStatus, lastSyncTime, conflicts } = useGoogleSheetsSync();
 
   const [isFirmModalOpen, setIsFirmModalOpen] = useState(false);
   const [isSellerModalOpen, setIsSellerModalOpen] = useState(false);
@@ -179,11 +182,39 @@ export const Header: React.FC = () => {
             <button
               type="button"
               onClick={() => setIsGoogleSheetsModalOpen(true)}
-              title="Google Sheets & Excel Import/Export"
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-teal-600/70 bg-teal-950/80 hover:bg-teal-900 text-teal-300 text-xs font-bold transition shadow-2xs cursor-pointer"
+              title={
+                sheetsSyncStatus === 'connected'
+                  ? `Google Sheets Connected. Last Sync: ${lastSyncTime ? new Date(lastSyncTime).toLocaleTimeString() : 'Recent'}`
+                  : 'Google Sheets Two-Way Backup & Sync'
+              }
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-bold transition shadow-2xs cursor-pointer ${
+                conflicts.length > 0
+                  ? 'bg-amber-950/90 border-amber-500/80 text-amber-300 hover:bg-amber-900 animate-pulse'
+                  : sheetsSyncStatus === 'connected'
+                  ? 'border-emerald-500/70 bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300'
+                  : sheetsSyncStatus === 'syncing'
+                  ? 'border-blue-500/70 bg-blue-950/80 hover:bg-blue-900 text-blue-300 animate-pulse'
+                  : sheetsSyncStatus === 'error'
+                  ? 'border-rose-500/70 bg-rose-950/80 hover:bg-rose-900 text-rose-300'
+                  : 'border-teal-600/70 bg-teal-950/80 hover:bg-teal-900 text-teal-300'
+              }`}
             >
               <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
               <span>{language === 'en' ? 'Google Sheets' : 'ਗੂਗਲ ਸ਼ੀਟਸ'}</span>
+              {sheetsSyncStatus === 'connected' && conflicts.length === 0 && (
+                <span className="inline-flex items-center gap-1 text-[10px] text-emerald-400">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
+                  <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                </span>
+              )}
+              {sheetsSyncStatus === 'syncing' && (
+                <RefreshCw className="w-3 h-3 text-blue-400 animate-spin" />
+              )}
+              {conflicts.length > 0 && (
+                <span className="px-1.5 py-0.2 bg-amber-500 text-slate-950 text-[10px] rounded-full font-black">
+                  {conflicts.length}
+                </span>
+              )}
             </button>
 
             {/* Quick Metrics */}
@@ -224,6 +255,8 @@ export const Header: React.FC = () => {
             </div>
           </div>
         </div>
+        {/* Universal Direct Quick-Jump Navigation Bar */}
+        <TopQuickNavigationBar />
       </header>
 
       {/* Firm and Fiscal Year Management Modal */}

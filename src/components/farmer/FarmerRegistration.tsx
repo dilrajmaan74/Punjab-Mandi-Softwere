@@ -28,7 +28,9 @@ import {
   Search,
   Check,
   HelpCircle,
-  FileSpreadsheet
+  FileSpreadsheet,
+  ShoppingBag,
+  Boxes
 } from 'lucide-react';
 import {
   autoFormatAadhaar,
@@ -532,6 +534,24 @@ export const FarmerRegistration: React.FC = () => {
             <span className="text-slate-500 text-[10px] block">ਅਗਲੀ ਆਈ.ਡੀ (Next Farmer ID):</span>
             <strong className="text-emerald-700 font-bold">{generateNextFarmerId()}</strong>
           </div>
+          <button
+            type="button"
+            onClick={() => setActiveSection('daily-purchase')}
+            className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold px-3 py-2 rounded-lg border border-slate-300 shadow-2xs transition active:scale-95 flex items-center gap-1.5"
+            title="Go to Daily Purchase (ਖਰੀਦ ਦਰਜ ਕਰੋ)"
+          >
+            <ShoppingBag className="w-3.5 h-3.5 text-emerald-700" />
+            <span>ਰੋਜ਼ਾਨਾ ਖਰੀਦ</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveSection('bardana')}
+            className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold px-3 py-2 rounded-lg border border-slate-300 shadow-2xs transition active:scale-95 flex items-center gap-1.5"
+            title="Go to Bardana Management (ਬਾਰਦਾਨਾ)"
+          >
+            <Boxes className="w-3.5 h-3.5 text-amber-600" />
+            <span>ਬਾਰਦਾਨਾ</span>
+          </button>
           <button
             type="button"
             onClick={() => setIsGoogleSheetsModalOpen(true)}

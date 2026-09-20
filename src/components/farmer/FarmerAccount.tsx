@@ -31,18 +31,22 @@ import {
   ChevronUp,
   CheckCircle2,
   FileText,
-  ArrowRightLeft
+  ArrowRightLeft,
+  Send,
+  MessageSquare
 } from 'lucide-react';
-import { formatCurrencyINR, maskAadhaarNumber, calculateAdvanceInterest } from '../../utils/calculations';
+import { formatCurrencyINR, maskAadhaarNumber, calculateAdvanceInterest, formatCurrency } from '../../utils/calculations';
 import { exportFarmerAccountPDF, exportSimpleFarmerAccountPDF } from '../../utils/farmerAccountPdfExport';
 import { FarmerProfileViewModal } from './FarmerProfileViewModal';
 import { FarmerEditModal } from './FarmerEditModal';
 import { FarmerAccountStatementA4 } from './FarmerAccountStatementA4';
+import { BulkWhatsAppModal } from './BulkWhatsAppModal';
 import {
   savePaymentTransfer,
   saveSameFarmerAdjustment,
   saveBagTransfer
 } from '../../utils/farmerAdjustmentsStorage';
+import { openWhatsApp } from '../../utils/whatsappNotification';
 
 export const FarmerAccount: React.FC = () => {
   const {
@@ -62,6 +66,7 @@ export const FarmerAccount: React.FC = () => {
     addFarmerAdvance,
     updateFarmerAdvance,
     deleteFarmerAdvance,
+    activeFirm,
     settings,
     language
   } = useMandi();
@@ -96,6 +101,7 @@ export const FarmerAccount: React.FC = () => {
   const [showMaskedAadhaar, setShowMaskedAadhaar] = useState(true);
   const [copiedId, setCopiedId] = useState(false);
   const [isExportingPDF, setIsExportingPDF] = useState(false);
+  const [isBulkWhatsAppOpen, setIsBulkWhatsAppOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'statement' | 'records'>('statement');
 
   // Print view mode ('simple' or 'full')
@@ -491,21 +497,32 @@ export const FarmerAccount: React.FC = () => {
             </p>
           </div>
 
-          {/* Search & Select Farmer */}
-          <div className="w-full md:w-96">
-            <SearchableSelect
-              id="farmer-account-search-select"
-              value={selectedFarmerId || ''}
-              onChange={(val) => {
-                setSelectedFarmerId(val);
-                const found = farmers.find((f) => f.id === val);
-                if (found) setSelectedFarmerForAccount(found);
-              }}
-              options={farmerSelectOptions}
-              placeholder="ਕਿਸਾਨ ਚੁਣੋ (Select Farmer)..."
-              searchPlaceholder="ਨਾਮ, ਪਿੰਡ, ਖਾਤਾ ਨੰਬਰ ਲਿਖੋ..."
-              emptyMessage="ਕੋਈ ਕਿਸਾਨ ਨਹੀਂ ਮਿਲਿਆ (No farmer found)"
-            />
+          {/* Search & Select Farmer + Bulk Broadcast Action */}
+          <div className="flex flex-col sm:flex-row items-center gap-2.5 w-full md:w-auto">
+            <button
+              onClick={() => setIsBulkWhatsAppOpen(true)}
+              className="w-full sm:w-auto px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black flex items-center justify-center gap-2 shadow-xs transition active:scale-95 cursor-pointer shrink-0"
+              title="ਬਲਕ ਵਿੱਚ ਕਿਸਾਨਾਂ ਨੂੰ ਸੀਜ਼ਨ ਬਕਾਇਆ ਜਾਂ ਤੁਲਾਈ ਸਟੇਟਮੈਂਟ WhatsApp ਭੇਜੋ"
+            >
+              <MessageSquare className="w-4 h-4 text-white" />
+              <span>ਬਲਕ WhatsApp (Bulk Broadcast)</span>
+            </button>
+
+            <div className="w-full sm:w-80">
+              <SearchableSelect
+                id="farmer-account-search-select"
+                value={selectedFarmerId || ''}
+                onChange={(val) => {
+                  setSelectedFarmerId(val);
+                  const found = farmers.find((f) => f.id === val);
+                  if (found) setSelectedFarmerForAccount(found);
+                }}
+                options={farmerSelectOptions}
+                placeholder="ਕਿਸਾਨ ਚੁਣੋ (Select Farmer)..."
+                searchPlaceholder="ਨਾਮ, ਪਿੰਡ, ਖਾਤਾ ਨੰਬਰ ਲਿਖੋ..."
+                emptyMessage="ਕੋਈ ਕਿਸਾਨ ਨਹੀਂ ਮਿਲਿਆ (No farmer found)"
+              />
+            </div>
           </div>
         </div>
 
@@ -611,6 +628,49 @@ export const FarmerAccount: React.FC = () => {
                   >
                     <FileDown className="w-4 h-4" />
                     <span>{isExportingPDF ? 'ਬਣ ਰਿਹਾ ਹੈ...' : 'PDF Export'}</span>
+                  </button>
+
+                  {/* WhatsApp Statement Share Button */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const farmerName = accountSummary.farmer.farmerNamePa || accountSummary.farmer.farmerName;
+                      const firmTitle = activeFirm?.namePa || activeFirm?.name || settings.firmNamePa || settings.firmNameEn || 'Mandi Commission Agent';
+                      const netBalance = accountSummary.finalBalance ?? accountSummary.finalNetSettlementBalance ?? 0;
+                      const netBalanceText = netBalance >= 0
+                        ? `ਬਾਕੀ ਦੇਣਯੋਗ (Payable to Farmer): ${formatCurrency(netBalance)}`
+                        : `ਕਿਸਾਨ ਵੱਲ ਬਕਾਇਆ (Due from Farmer): ${formatCurrency(Math.abs(netBalance))}`;
+
+                      const lines: string[] = [
+                        `🌾 *${firmTitle}*`,
+                        `📋 *ਕਿਸਾਨ ਖਾਤਾ ਸਟੇਟਮੈਂਟ ਸੰਖੇਪ (Account Summary)*`,
+                        `--------------------------------`,
+                        `👤 *ਕਿਸਾਨ (Farmer):* ${farmerName} (${accountSummary.farmer.farmerName})`,
+                        `🆔 *ਕਿਸਾਨ ID:* ${accountSummary.farmer.id}`,
+                        `🏡 *ਪਿੰਡ (Village):* ${accountSummary.farmer.village || '—'}`,
+                        `📅 *ਤਾਰੀਖ:* ${new Date().toLocaleDateString('en-GB')}`,
+                        `--------------------------------`,
+                        `📦 *ਕੁੱਲ ਬੋਰੀਆਂ (Total Bags):* ${accountSummary.purchasedBags || accountSummary.mandiArrivalBags}`,
+                        `⚖️ *ਕੁੱਲ ਵਜ਼ਨ (Total Weight):* ${accountSummary.purchasedWeightDisplay || accountSummary.mandiArrivalDisplay}`,
+                        `💰 *ਕੁੱਲ ਫਸਲ ਰਕਮ (Crop Value):* ${formatCurrency(accountSummary.totalGrossAmount)}`,
+                        accountSummary.totalLabourDeductions > 0 ? `✂️ *ਕੁੱਲ ਖਰਚਾ/ਕਟੌਤੀ (Expenses):* ${formatCurrency(accountSummary.totalLabourDeductions)}` : '',
+                        `💵 *ਸ਼ੁੱਧ ਫਸਲ ਰਕਮ (Net Crop):* ${formatCurrency(accountSummary.netPayableAmount)}`,
+                        `--------------------------------`,
+                        accountSummary.paidAmount > 0 ? `💳 *ਪਹਿਲਾਂ ਦਿੱਤਾ ਭੁਗਤਾਨ (Paid):* ${formatCurrency(accountSummary.paidAmount)}` : '',
+                        accountSummary.totalAdvanceAmount > 0 ? `🤝 *ਐਡਵਾਂਸ + ਵਿਆਜ:* ${formatCurrency(accountSummary.totalAdvanceAmount)}` : '',
+                        `--------------------------------`,
+                        `⭐ *${netBalanceText}*`,
+                        `--------------------------------`,
+                        `_ਧੰਨਵਾਦ!_`
+                      ].filter(Boolean);
+
+                      openWhatsApp(accountSummary.farmer.mobile, lines.join('\n'));
+                    }}
+                    className="px-3.5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+                    title="ਕਿਸਾਨ ਦੇ ਵ੍ਹਟਸਐਪ 'ਤੇ ਸਟੇਟਮੈਂਟ ਭੇਜੋ (Share Statement on WhatsApp)"
+                  >
+                    <Send className="w-4 h-4 text-white" />
+                    <span>WhatsApp Share / ਵ੍ਹਟਸਐਪ</span>
                   </button>
 
                   {/* Adjustment & Bag Transfer Button */}
@@ -2267,6 +2327,13 @@ export const FarmerAccount: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Bulk WhatsApp Broadcast Modal */}
+      <BulkWhatsAppModal
+        isOpen={isBulkWhatsAppOpen}
+        onClose={() => setIsBulkWhatsAppOpen(false)}
+        preSelectedFarmerId={currentFarmer?.id}
+      />
     </>
   );
 };

@@ -126,6 +126,8 @@ export const BardanaEditModal: React.FC<BardanaEditModalProps> = ({
 
       setNewBags(initialNew);
       setOldBags(initialOld);
+      setParchiUrl(record.parchiUrl || '');
+      setParchiName(record.parchiName || '');
       setRemarks(record.remarks || '');
       setErrorMsg('');
     }
@@ -211,6 +213,8 @@ export const BardanaEditModal: React.FC<BardanaEditModalProps> = ({
       boxes: newBoxes + oldBoxes,
       bags: totalBags,
       totalBags,
+      parchiUrl: parchiUrl || undefined,
+      parchiName: parchiName || undefined,
       remarks: remarks.trim() || undefined
     });
 
@@ -551,6 +555,22 @@ export const BardanaEditModal: React.FC<BardanaEditModalProps> = ({
             />
           </div>
 
+          {/* Section 6: Attached Parchi / ਪਰਚੀ ਅਪਲੋਡ */}
+          <ParchiUploadWidget
+            parchiUrl={parchiUrl}
+            parchiName={parchiName}
+            onUpload={(url, name) => {
+              setParchiUrl(url);
+              setParchiName(name);
+            }}
+            onRemove={() => {
+              setParchiUrl('');
+              setParchiName('');
+            }}
+            onView={() => setIsParchiViewerOpen(true)}
+            isEn={false}
+          />
+
           {/* Form Actions */}
           <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-200">
             <button
@@ -570,6 +590,20 @@ export const BardanaEditModal: React.FC<BardanaEditModalProps> = ({
           </div>
         </form>
       </div>
+
+      {/* Parchi Viewer Modal */}
+      {parchiUrl && (
+        <ParchiViewerModal
+          isOpen={isParchiViewerOpen}
+          onClose={() => setIsParchiViewerOpen(false)}
+          url={parchiUrl}
+          name={parchiName}
+          title={`ਬਾਰਦਾਨਾ ਪਰਚੀ • ${record.id}`}
+          voucherId={record.id}
+          sourceName={sourceName}
+          date={date}
+        />
+      )}
     </div>
   );
 };

@@ -17,9 +17,12 @@ import {
   Search,
   FileSpreadsheet,
   Settings,
-  Scale
+  Scale,
+  Gavel,
+  Briefcase
 } from 'lucide-react';
 import { GoogleSheetsSyncModal } from '../farmer/GoogleSheetsSyncModal';
+import { useGoogleSheetsSync } from '../../context/GoogleSheetsSyncContext';
 
 interface NavItem {
   id: NavigationSection;
@@ -58,6 +61,13 @@ const NAV_ITEMS: NavItem[] = [
     badgeColor: 'bg-amber-600'
   },
   {
+    id: 'boli',
+    titleEn: 'Boli (Auction) Register',
+    titlePa: 'ਬੋਲੀ (Auction) ਰਜਿਸਟਰ',
+    icon: Gavel,
+    badgeColor: 'bg-amber-500'
+  },
+  {
     id: 'bags-entry',
     titleEn: 'Bag (37.50 KG)',
     titlePa: 'ਬੋਰੀਆਂ ਤੁਲਾਈ ਐਂਟਰੀ',
@@ -91,6 +101,13 @@ const NAV_ITEMS: NavItem[] = [
     titlePa: 'ਬੋਰੀ ਬੈਲੇਂਸ ਅਤੇ ਲੇਬਰ',
     icon: Scale,
     badgeColor: 'bg-emerald-700'
+  },
+  {
+    id: 'labour-ledger',
+    titleEn: 'Labour Gang Ledger',
+    titlePa: 'ਲੇਬਰ ਗੈਂਗ / ਪੱਲੇਦਾਰ ਖਾਤਾ',
+    icon: Briefcase,
+    badgeColor: 'bg-indigo-600'
   },
   {
     id: 'lefting',
@@ -149,6 +166,7 @@ export const Sidebar: React.FC = () => {
     recycleBinItems,
     language
   } = useMandi();
+  const { syncStatus, autoSyncEnabled, conflicts } = useGoogleSheetsSync();
 
   const [isGoogleSheetsModalOpen, setIsGoogleSheetsModalOpen] = useState(false);
 
@@ -255,13 +273,32 @@ export const Sidebar: React.FC = () => {
         <button
           type="button"
           onClick={() => setIsGoogleSheetsModalOpen(true)}
-          className="w-full flex items-center justify-between px-3 py-2 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-900 rounded-lg text-xs font-bold transition shadow-2xs cursor-pointer group"
+          className={`w-full flex items-center justify-between px-3 py-2 border rounded-lg text-xs font-bold transition shadow-2xs cursor-pointer group ${
+            conflicts.length > 0
+              ? 'bg-amber-50 hover:bg-amber-100 border-amber-300 text-amber-900'
+              : syncStatus === 'connected'
+              ? 'bg-emerald-50 hover:bg-emerald-100 border-emerald-300 text-emerald-900'
+              : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-800'
+          }`}
         >
           <div className="flex items-center gap-2">
-            <FileSpreadsheet className="w-4 h-4 text-emerald-600 group-hover:scale-110 transition-transform" />
-            <span>{isEn ? 'Google Sheets & Excel' : 'ਗੂਗਲ ਸ਼ੀਟਸ ਤੇ ਐਕਸਲ'}</span>
+            <FileSpreadsheet className={`w-4 h-4 transition-transform group-hover:scale-110 ${
+              conflicts.length > 0 ? 'text-amber-600' : 'text-emerald-600'
+            }`} />
+            <span>{isEn ? 'Google Sheets Sync' : 'ਗੂਗਲ ਸ਼ੀਟਸ ਸਿੰਕ'}</span>
           </div>
-          <span className="text-[10px] bg-emerald-200 text-emerald-800 px-1.5 py-0.5 rounded font-mono">Sync</span>
+          {conflicts.length > 0 ? (
+            <span className="text-[10px] bg-amber-200 text-amber-900 px-1.5 py-0.5 rounded font-mono font-bold animate-pulse">
+              {conflicts.length} {isEn ? 'Conflict' : 'ਵਿਰੋਧ'}
+            </span>
+          ) : syncStatus === 'connected' ? (
+            <span className="text-[10px] bg-emerald-200 text-emerald-800 px-1.5 py-0.5 rounded font-mono flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+              {autoSyncEnabled ? 'Auto' : 'Live'}
+            </span>
+          ) : (
+            <span className="text-[10px] bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded font-mono">Sync</span>
+          )}
         </button>
       </div>
 

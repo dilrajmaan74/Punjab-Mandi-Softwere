@@ -28,7 +28,10 @@ import {
   CheckSquare,
   Square,
   Filter,
-  RotateCcw
+  RotateCcw,
+  Send,
+  UserPlus,
+  Boxes
 } from 'lucide-react';
 import {
   FIXED_BAG_WEIGHT_KG,
@@ -45,6 +48,7 @@ import {
   normalizeDateToComparable
 } from '../../utils/purchasePdfExport';
 import { DateInput } from '../common/DateInput';
+import { generateDailyPurchaseWhatsAppMessage, openWhatsApp } from '../../utils/whatsappNotification';
 
 interface MultiFarmerPurchaseRow {
   rowId: string;
@@ -60,9 +64,12 @@ export const DailyPurchase: React.FC = () => {
     dailyPurchaseRecords,
     agencies,
     settings,
+    activeFirm,
+    firms,
     addDailyPurchase,
     deleteDailyPurchase,
     getFarmerPurchaseSummary,
+    setActiveSection,
     language
   } = useMandi();
 
@@ -1014,12 +1021,32 @@ export const DailyPurchase: React.FC = () => {
             </div>
           </div>
 
-          {/* Rate indicator badge */}
-          <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-lg text-xs">
-            <Scale className="w-4 h-4 text-emerald-600" />
-            <span className="text-slate-600 font-bold">{isEn ? 'Govt Rate:' : 'ਸਰਕਾਰੀ ਭਾਅ:'}</span>
-            <span className="font-mono font-black text-emerald-950">₹{customRate} / {isEn ? 'Qtl' : 'ਕੁਇੰਟਲ'}</span>
-            <span className="text-slate-400 text-[10px]">({isEn ? '37.50 Kg / bag' : '37.50 ਕਿਲੋ ਪ੍ਰਤੀ ਬੋਰੀ'})</span>
+          {/* Quick jump actions & Rate indicator badge */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={() => setActiveSection('farmer-registration')}
+              className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold px-3 py-1.5 rounded-lg border border-slate-300 shadow-2xs transition active:scale-95 flex items-center gap-1.5"
+              title="Go to Farmer Registration (ਕਿਸਾਨ ਰਜਿਸਟ੍ਰੇਸ਼ਨ)"
+            >
+              <UserPlus className="w-3.5 h-3.5 text-emerald-700" />
+              <span>ਕਿਸਾਨ ਰਜਿਸਟ੍ਰੇਸ਼ਨ</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveSection('bardana')}
+              className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold px-3 py-1.5 rounded-lg border border-slate-300 shadow-2xs transition active:scale-95 flex items-center gap-1.5"
+              title="Go to Bardana Management (ਬਾਰਦਾਨਾ)"
+            >
+              <Boxes className="w-3.5 h-3.5 text-amber-600" />
+              <span>ਬਾਰਦਾਨਾ</span>
+            </button>
+            <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-lg text-xs">
+              <Scale className="w-4 h-4 text-emerald-600" />
+              <span className="text-slate-600 font-bold">{isEn ? 'Govt Rate:' : 'ਸਰਕਾਰੀ ਭਾਅ:'}</span>
+              <span className="font-mono font-black text-emerald-950">₹{customRate} / {isEn ? 'Qtl' : 'ਕੁਇੰਟਲ'}</span>
+              <span className="text-slate-400 text-[10px]">({isEn ? '37.50 Kg / bag' : '37.50 ਕਿਲੋ ਪ੍ਰਤੀ ਬੋਰੀ'})</span>
+            </div>
           </div>
         </div>
 
@@ -2648,6 +2675,24 @@ export const DailyPurchase: React.FC = () => {
                                                 title="ਵੇਖੋ (View Details)"
                                               >
                                                 <Eye className="w-3.5 h-3.5" />
+                                              </button>
+
+                                              {/* WhatsApp Send Button */}
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  const purchaseFirm = (rec.firmId ? firms.find((f) => f.id === rec.firmId) : null) || activeFirm;
+                                                  const msg = generateDailyPurchaseWhatsAppMessage({
+                                                    purchase: rec,
+                                                    firm: purchaseFirm,
+                                                    settings
+                                                  });
+                                                  openWhatsApp(rec.mobile || '', msg);
+                                                }}
+                                                className="p-1 hover:bg-emerald-50 text-emerald-600 hover:text-emerald-800 rounded transition"
+                                                title="ਵ੍ਹਟਸਐਪ ਤੇ ਸੂਚਨਾ ਭੇਜੋ (Send WhatsApp)"
+                                              >
+                                                <Send className="w-3.5 h-3.5" />
                                               </button>
 
                                               {/* PDF Voucher Button */}

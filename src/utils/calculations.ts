@@ -241,7 +241,7 @@ export function maskAadhaarNumber(aadhaar: string): string {
   return `•••• •••• ${lastFour}`;
 }
 
-export const DEFAULT_PAKKI_LABOUR_RATE = 7; // ₹7 per Bag (ਪੱਕੀ ਲੇਬਰ)
+export const DEFAULT_PAKKI_LABOUR_RATE = 8; // ₹8 per Bag (ਪੱਕੀ ਲੇਬਰ - Fixed Labour)
 export const DEFAULT_PAKKA_DOUBLE_LABOUR_RATE = 14; // ₹14 per Bag (ਪੱਖਾ ਡਬਲ)
 export const DEFAULT_SUKHI_LABOUR_RATE = 5; // ₹5 per Bag (ਝੋਨਾ ਸਕਾਈ)
 export const DEFAULT_CROP_BAG_CONVERSION_RATE = 925; // ₹925 per Bag standard conversion for crop balance deduction
@@ -395,12 +395,15 @@ export function computeUniversalLabour(params: UniversalLabourInput): UniversalL
   const totalLabourBags = pakkiBags + doubleBags + sukkiBags;
   const totalLabour = Math.round((pakkiAmount + doubleAmount + sukkiAmount) * 100) / 100;
 
-  // Bag consistency & validation
-  const isExceeding = totalBags > 0 && totalLabourBags > totalBags;
-  const excessBags = Math.max(0, totalLabourBags - totalBags);
-  const unassignedBags = Math.max(0, totalBags - totalLabourBags);
+  // Bag consistency & validation:
+  // Pakki labour applies to total bags (fixed base handling).
+  // Pakha (Double) and Sukki (Drying) are independent operations on bags.
+  // Warning triggers only if any individual category exceeds total bags.
+  const isExceeding = totalBags > 0 && (pakkiBags > totalBags || doubleBags > totalBags || sukkiBags > totalBags);
+  const excessBags = Math.max(0, Math.max(pakkiBags, doubleBags, sukkiBags) - totalBags);
+  const unassignedBags = Math.max(0, totalBags - pakkiBags);
   const validationWarning = isExceeding
-    ? `ਚੇਤਾਵਨੀ: ਮਜ਼ਦੂਰੀ ਬੋਰੀਆਂ (${totalLabourBags}) ਕੁੱਲ ਬੋਰੀਆਂ (${totalBags}) ਨਾਲੋਂ ${excessBags} ਵੱਧ ਹਨ! / Warning: Total Labour Bags (${totalLabourBags}) exceed Available Bags (${totalBags}) by ${excessBags}!`
+    ? `ਚੇਤਾਵਨੀ: ਕਿਸੇ ਮੱਦ ਵਿੱਚ ਬੋਰੀਆਂ ਦੀ ਗਿਣਤੀ (${Math.max(pakkiBags, doubleBags, sukkiBags)}) ਕੁੱਲ ਬੋਰੀਆਂ (${totalBags}) ਨਾਲੋਂ ${excessBags} ਵੱਧ ਹੈ! / Warning: Category bags exceed available bags!`
     : undefined;
 
   // Conversion to Crop Balance Deduction Bags
@@ -686,14 +689,9 @@ export function calculateAutomaticLabour(
   if (pakkiBags !== undefined && pakkiBags !== null) {
     effectivePakki = Math.max(0, Number(pakkiBags) || 0);
   } else {
-    // If pakkiBags is not passed, calculate if double or sukki bags are entered
-    const doubleNum = Math.max(0, Number(doubleBags) || 0);
-    const sukkiNum = Math.max(0, Number(sukkiBags) || 0);
-    if (doubleNum > 0 || sukkiNum > 0) {
-      effectivePakki = Math.max(0, totalBags - (doubleNum + sukkiNum));
-    } else {
-      effectivePakki = 0;
-    }
+    // Standard Mandi Rule: Fixed Pakki Labour (ਮੂਲ ਲੇਬਰ) applies to ALL total bags by default!
+    // Pakha (Double) and Sukki are independent additional charges on bags that required them.
+    effectivePakki = totalBags;
   }
 
   return computeUniversalLabour({

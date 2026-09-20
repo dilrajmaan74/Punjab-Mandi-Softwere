@@ -49,6 +49,7 @@ export const BagsEntryEditModal: React.FC = () => {
   const [selectedFarmerId, setSelectedFarmerId] = useState<string>('');
   const [newBagsInput, setNewBagsInput] = useState<string>('');
   const [oldBagsInput, setOldBagsInput] = useState<string>('');
+  const [pakkiBagsInput, setPakkiBagsInput] = useState<string>('');
   const [doubleBagsInput, setDoubleBagsInput] = useState<string>('');
   const [sukkiBagsInput, setSukkiBagsInput] = useState<string>('');
   const [totaInput, setTotaInput] = useState<string>('');
@@ -76,6 +77,15 @@ export const BagsEntryEditModal: React.FC = () => {
           ? activeBagsEntryToEdit.bags
           : 0;
 
+      const totalBagsCount = activeBagsEntryToEdit.bags || (newBagsVal + oldBagsVal);
+
+      // Default Pakki bags to total bags if it was 0 or unassigned due to old bug
+      const rawPakkiVal =
+        activeBagsEntryToEdit.conditionBreakdown?.pakkiBags ??
+        activeBagsEntryToEdit.labourDeductions?.pakkiBagsCount ??
+        totalBagsCount;
+      const pakkiBagsVal = rawPakkiVal > 0 ? rawPakkiVal : totalBagsCount;
+
       const doubleVal =
         activeBagsEntryToEdit.conditionBreakdown?.doubleBags ??
         activeBagsEntryToEdit.labourDeductions?.doubleBagsCount ??
@@ -87,10 +97,14 @@ export const BagsEntryEditModal: React.FC = () => {
         0;
 
       const pakkiRateVal =
-        activeBagsEntryToEdit.conditionBreakdown?.pakkiRate ??
-        activeBagsEntryToEdit.labourDeductions?.pakkiLabourRate ??
+        (activeBagsEntryToEdit.conditionBreakdown?.pakkiRate && activeBagsEntryToEdit.conditionBreakdown.pakkiRate !== 7
+          ? activeBagsEntryToEdit.conditionBreakdown.pakkiRate
+          : undefined) ??
+        (activeBagsEntryToEdit.labourDeductions?.pakkiLabourRate && activeBagsEntryToEdit.labourDeductions.pakkiLabourRate !== 7
+          ? activeBagsEntryToEdit.labourDeductions.pakkiLabourRate
+          : undefined) ??
         settings?.defaultPakkiLabourRate ??
-        7;
+        8;
 
       const doubleRateVal =
         activeBagsEntryToEdit.conditionBreakdown?.doubleRate ??
@@ -106,6 +120,7 @@ export const BagsEntryEditModal: React.FC = () => {
 
       setNewBagsInput(newBagsVal > 0 ? String(newBagsVal) : '');
       setOldBagsInput(oldBagsVal > 0 ? String(oldBagsVal) : '');
+      setPakkiBagsInput(pakkiBagsVal > 0 ? String(pakkiBagsVal) : '');
       setDoubleBagsInput(doubleVal > 0 ? String(doubleVal) : '');
       setSukkiBagsInput(sukkiVal > 0 ? String(sukkiVal) : '');
       setPakkiRateInput(String(pakkiRateVal));
@@ -164,14 +179,18 @@ export const BagsEntryEditModal: React.FC = () => {
     const dRate = parseFloat(doubleRateInput);
     const sRate = parseFloat(sukkiRateInput);
     return {
-      pakkiRate: !isNaN(pRate) && pRate >= 0 ? pRate : (settings?.defaultPakkiLabourRate ?? 7),
+      pakkiRate: !isNaN(pRate) && pRate >= 0 ? pRate : (settings?.defaultPakkiLabourRate ?? 8),
       doubleRate: !isNaN(dRate) && dRate >= 0 ? dRate : (settings?.defaultPakkaDoubleLabourRate ?? 14),
       sukkiRate: !isNaN(sRate) && sRate >= 0 ? sRate : (settings?.defaultSukhiLabourRate ?? 5)
     };
   }, [pakkiRateInput, doubleRateInput, sukkiRateInput, settings]);
 
+  const pakkiBagsCount = Math.max(0, parseInt(pakkiBagsInput, 10) || 0);
+
   // Automatic labour deduction calculation from entered bags & editable rates
+  // Standard Mandi Rule: Fixed Pakki Labour applies to ALL bags brought (bagsCount) by default.
   const labourSummary = useMemo(() => {
+    const effectivePakki = pakkiBagsInput.trim() !== '' ? pakkiBagsCount : bagsCount;
     return calculateAutomaticLabour(
       newBagsCount,
       oldBagsCount,
@@ -179,9 +198,10 @@ export const BagsEntryEditModal: React.FC = () => {
       sukkiBagsCount,
       calculatedGrossAmount,
       settings,
-      customRates
+      customRates,
+      effectivePakki
     );
-  }, [newBagsCount, oldBagsCount, doubleBagsCount, sukkiBagsCount, calculatedGrossAmount, settings, customRates]);
+  }, [newBagsCount, oldBagsCount, pakkiBagsInput, pakkiBagsCount, bagsCount, doubleBagsCount, sukkiBagsCount, calculatedGrossAmount, settings, customRates]);
 
   const totalLabourDeduction = labourSummary.totalLabour;
   const netPayableAmount = labourSummary.netAmount;
@@ -514,28 +534,44 @@ export const BagsEntryEditModal: React.FC = () => {
                   <div className="bg-white border-2 border-slate-200 hover:border-slate-300 rounded-xl p-2.5 space-y-2">
                     <div className="flex items-center justify-between border-b border-slate-100 pb-1">
                       <span className="font-black text-xs text-slate-900">
-                        {isEn ? 'Pakki Labour' : 'ਪੱਕੀ ਲੇਬਰ'}
+                        {isEn ? 'Pakki Labour (Fixed ₹8)' : 'ਪੱਕੀ ਲੇਬਰ (ਫਿਕਸ ₹8)'}
                       </span>
                       <span className="text-[10px] bg-slate-100 text-slate-800 font-bold px-1.5 py-0.5 rounded font-mono">
                         {labourSummary.pakkiBags} {isEn ? 'Bags' : 'ਬੋਰੀਆਂ'}
                       </span>
                     </div>
 
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-600 mb-1">
-                        {isEn ? 'Rate (₹ / Bag)' : 'ਲੇਬਰ ਦਰ (₹ / ਬੋਰੀ)'}
-                      </label>
-                      <div className="relative">
-                        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-slate-400 font-bold">₹</span>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-600 mb-1">
+                          {isEn ? 'Bags' : 'ਬੋਰੀਆਂ'}
+                        </label>
                         <input
                           type="number"
-                          step="0.5"
                           min="0"
-                          value={pakkiRateInput}
-                          onChange={(e) => setPakkiRateInput(e.target.value)}
-                          placeholder="7"
-                          className="w-full pl-5 pr-1.5 py-1 bg-slate-50 border border-slate-300 rounded-lg text-xs font-mono font-black text-slate-950 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-300"
+                          step="1"
+                          placeholder={String(bagsCount || 0)}
+                          value={pakkiBagsInput}
+                          onChange={(e) => setPakkiBagsInput(e.target.value)}
+                          className="w-full px-2 py-1 bg-white border border-slate-300 rounded-lg text-xs font-mono font-black text-slate-950 focus:outline-none focus:ring-1 focus:ring-indigo-300"
                         />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-600 mb-1">
+                          {isEn ? 'Rate (₹ / Bag)' : 'ਲੇਬਰ ਦਰ (₹ / ਬੋਰੀ)'}
+                        </label>
+                        <div className="relative">
+                          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-slate-400 font-bold">₹</span>
+                          <input
+                            type="number"
+                            step="0.5"
+                            min="0"
+                            value={pakkiRateInput}
+                            onChange={(e) => setPakkiRateInput(e.target.value)}
+                            placeholder="8"
+                            className="w-full pl-5 pr-1.5 py-1 bg-slate-50 border border-slate-300 rounded-lg text-xs font-mono font-black text-slate-950 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-300"
+                          />
+                        </div>
                       </div>
                     </div>
 

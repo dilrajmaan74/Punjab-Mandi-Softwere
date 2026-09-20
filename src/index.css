@@ -1,14 +1,21 @@
 @import "tailwindcss";
 
 @media print {
+  /* Default A4 Page setup */
   @page {
-    size: A4 portrait;
+    size: auto;
     margin: 4mm;
+  }
+
+  body.print-thermal-mode {
+    width: 76mm !important;
+    max-width: 80mm !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    font-size: 11px !important;
   }
   
   html, body {
-    width: 210mm !important;
-    height: 297mm !important;
     margin: 0 !important;
     padding: 0 !important;
     background-color: #ffffff !important;
@@ -26,6 +33,16 @@
     page-break-inside: avoid !important;
     page-break-after: avoid !important;
     page-break-before: avoid !important;
+  }
+
+  /* Thermal Slip Print specific styling */
+  .thermal-slip-container {
+    width: 72mm !important;
+    max-width: 72mm !important;
+    margin: 0 auto !important;
+    padding: 2mm !important;
+    color: #000000 !important;
+    font-family: monospace, sans-serif !important;
   }
 }
 

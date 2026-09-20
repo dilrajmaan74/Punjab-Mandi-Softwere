@@ -28,11 +28,16 @@ import {
   Clock,
   UserCheck,
   Users,
-  Repeat
+  Repeat,
+  Paperclip,
+  UserPlus,
+  ShoppingBag
 } from 'lucide-react';
 import { BardanaViewModal } from './BardanaViewModal';
 import { BardanaEditModal } from './BardanaEditModal';
 import { SellerMasterModal } from '../seller/SellerMasterModal';
+import { ParchiUploadWidget } from './ParchiUploadWidget';
+import { ParchiViewerModal } from './ParchiViewerModal';
 import {
   exportBardanaReceivedVoucherPDF,
   exportBardanaRegisterPDF
@@ -57,6 +62,7 @@ export const BardanaManagement: React.FC = () => {
     addBardanaRecord,
     deleteBardanaRecord,
     getBardanaSummary,
+    setActiveSection,
     language
   } = useMandi();
 
@@ -93,6 +99,16 @@ export const BardanaManagement: React.FC = () => {
   const [newBags, setNewBags] = useState<number | string>(1000);
   const [oldBags, setOldBags] = useState<number | string>(230);
   const [remarks, setRemarks] = useState<string>('');
+  const [parchiUrl, setParchiUrl] = useState<string>('');
+  const [parchiName, setParchiName] = useState<string>('');
+  const [isFormParchiViewerOpen, setIsFormParchiViewerOpen] = useState<boolean>(false);
+  const [activeViewingParchi, setActiveViewingParchi] = useState<{
+    url: string;
+    name?: string;
+    id?: string;
+    sourceName?: string;
+    date?: string;
+  } | null>(null);
   const [formError, setFormError] = useState<string>('');
   const [isSaving, setIsSaving] = useState<boolean>(false);
 
@@ -266,6 +282,8 @@ export const BardanaManagement: React.FC = () => {
         capacityPerBox: 500,
         bags: totalBags,
         totalBags: totalBags,
+        parchiUrl: parchiUrl || undefined,
+        parchiName: parchiName || undefined,
         remarks: remarks.trim() || undefined
       });
 
@@ -283,6 +301,8 @@ export const BardanaManagement: React.FC = () => {
       setSelectedSellerId('');
       setOtherPartyMobile('');
       setRemarks('');
+      setParchiUrl('');
+      setParchiName('');
       setNewBags(0);
       setOldBags(0);
     } catch {
@@ -535,8 +555,30 @@ export const BardanaManagement: React.FC = () => {
           </div>
         </div>
 
-        {/* Action Tabs */}
-        <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs font-bold">
+        {/* Direct Cross-Module Jump Buttons & Action Tabs */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setActiveSection('farmer-registration')}
+              className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold px-3 py-1.5 rounded-lg border border-slate-300 shadow-2xs transition active:scale-95 flex items-center gap-1.5"
+              title="Go to Farmer Registration (ਕਿਸਾਨ ਰਜਿਸਟ੍ਰੇਸ਼ਨ)"
+            >
+              <UserPlus className="w-3.5 h-3.5 text-emerald-700" />
+              <span>ਕਿਸਾਨ ਰਜਿਸਟ੍ਰੇਸ਼ਨ</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveSection('daily-purchase')}
+              className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold px-3 py-1.5 rounded-lg border border-slate-300 shadow-2xs transition active:scale-95 flex items-center gap-1.5"
+              title="Go to Daily Purchase (ਰੋਜ਼ਾਨਾ ਖਰੀਦ)"
+            >
+              <ShoppingBag className="w-3.5 h-3.5 text-emerald-700" />
+              <span>ਰੋਜ਼ਾਨਾ ਖਰੀਦ</span>
+            </button>
+          </div>
+
+          <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs font-bold">
           <button
             onClick={() => setActiveTab('receiving')}
             className={`px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 ${
@@ -577,6 +619,7 @@ export const BardanaManagement: React.FC = () => {
           </button>
         </div>
       </div>
+    </div>
 
       {/* Real-time Inventory KPI Ribbon */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
@@ -1148,6 +1191,22 @@ export const BardanaManagement: React.FC = () => {
                 />
               </div>
 
+              {/* 6. Attached Parchi / ਪਰਚੀ ਅਪਲੋਡ (Slip / Challan / Voucher Photo) */}
+              <ParchiUploadWidget
+                parchiUrl={parchiUrl}
+                parchiName={parchiName}
+                onUpload={(url, name) => {
+                  setParchiUrl(url);
+                  setParchiName(name);
+                }}
+                onRemove={() => {
+                  setParchiUrl('');
+                  setParchiName('');
+                }}
+                onView={() => setIsFormParchiViewerOpen(true)}
+                isEn={isEn}
+              />
+
               {/* Submit Button */}
               <div className="flex justify-end pt-1">
                 <button
@@ -1292,8 +1351,11 @@ export const BardanaManagement: React.FC = () => {
                             {rec.date}
                           </td>
                           <td className="py-2.5 px-3 whitespace-nowrap">
-                            <span className="bg-slate-100 text-slate-900 font-mono font-bold text-[11px] px-2 py-0.5 rounded">
-                              {rec.id}
+                            <span className="bg-slate-100 text-slate-900 font-mono font-bold text-[11px] px-2 py-0.5 rounded inline-flex items-center gap-1">
+                              <span>{rec.id}</span>
+                              {rec.parchiUrl && (
+                                <Paperclip className="w-3 h-3 text-emerald-600 shrink-0" title="ਪਰਚੀ ਨੱਥੀ ਹੈ (Parchi Attached)" />
+                              )}
                             </span>
                           </td>
                           <td className="py-2.5 px-3 font-bold text-slate-900 whitespace-nowrap">
@@ -1360,6 +1422,24 @@ export const BardanaManagement: React.FC = () => {
                               >
                                 <Eye className="w-3.5 h-3.5" />
                               </button>
+
+                              {/* View Attached Parchi */}
+                              {rec.parchiUrl && (
+                                <button
+                                  type="button"
+                                  onClick={() => setActiveViewingParchi({
+                                    url: rec.parchiUrl!,
+                                    name: rec.parchiName,
+                                    id: rec.id,
+                                    sourceName: rec.sourceName,
+                                    date: rec.date
+                                  })}
+                                  title="ਨੱਥੀ ਪਰਚੀ ਵੇਖੋ (View Attached Parchi)"
+                                  className="p-1.5 bg-emerald-100 hover:bg-emerald-200 text-emerald-800 border border-emerald-300 rounded-md transition shadow-2xs"
+                                >
+                                  <Paperclip className="w-3.5 h-3.5 text-emerald-700" />
+                                </button>
+                              )}
 
                               {/* Edit */}
                               <button
@@ -1554,7 +1634,26 @@ export const BardanaManagement: React.FC = () => {
                         {item.date}
                       </td>
                       <td className="py-2.5 px-3 font-mono font-bold text-slate-600 whitespace-nowrap">
-                        {item.id}
+                        <div className="flex items-center gap-1.5">
+                          <span>{item.id}</span>
+                          {item.originalReceived?.parchiUrl && (
+                            <button
+                              type="button"
+                              onClick={() => setActiveViewingParchi({
+                                url: item.originalReceived!.parchiUrl!,
+                                name: item.originalReceived!.parchiName,
+                                id: item.originalReceived!.id,
+                                sourceName: item.originalReceived!.sourceName,
+                                date: item.originalReceived!.date
+                              })}
+                              className="inline-flex items-center gap-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 text-[10px] px-1.5 py-0.5 rounded font-bold transition shadow-2xs"
+                              title="ਪਰਚੀ ਵੇਖੋ (View Attached Parchi)"
+                            >
+                              <Paperclip className="w-3 h-3 text-emerald-600" />
+                              <span>ਪਰਚੀ</span>
+                            </button>
+                          )}
+                        </div>
                       </td>
                       <td className="py-2.5 px-3 whitespace-nowrap">
                         {item.type === 'RECEIVED' ? (
@@ -1796,6 +1895,33 @@ export const BardanaManagement: React.FC = () => {
           setSourceName(s.firmName);
         }}
       />
+
+      {/* Form Parchi Viewer Modal */}
+      {parchiUrl && (
+        <ParchiViewerModal
+          isOpen={isFormParchiViewerOpen}
+          onClose={() => setIsFormParchiViewerOpen(false)}
+          url={parchiUrl}
+          name={parchiName}
+          title="ਨਵੀਂ ਬਾਰਦਾਨਾ ਪਰਚੀ (New Bardana Parchi)"
+          date={date}
+          sourceName={sourceName}
+        />
+      )}
+
+      {/* Global Table Parchi Viewer Modal */}
+      {activeViewingParchi && (
+        <ParchiViewerModal
+          isOpen={!!activeViewingParchi}
+          onClose={() => setActiveViewingParchi(null)}
+          url={activeViewingParchi.url}
+          name={activeViewingParchi.name}
+          title={`ਬਾਰਦਾਨਾ ਪਰਚੀ • ${activeViewingParchi.id || 'Slip'}`}
+          voucherId={activeViewingParchi.id}
+          sourceName={activeViewingParchi.sourceName}
+          date={activeViewingParchi.date}
+        />
+      )}
     </div>
   );
 };

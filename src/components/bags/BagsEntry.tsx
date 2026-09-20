@@ -20,7 +20,9 @@ import {
   Search,
   Hash,
   Edit,
-  Trash2
+  Trash2,
+  MessageSquare,
+  Send
 } from 'lucide-react';
 import {
   FIXED_BAG_WEIGHT_KG,
@@ -34,6 +36,8 @@ import {
 } from '../../utils/calculations';
 import { BagsEntryRecord, BardanaType, LabourAndDeductions } from '../../types/mandi';
 import { SearchableSelect, SearchableSelectOption } from '../common/SearchableSelect';
+import { generateBagsWeighmentWhatsAppMessage, openWhatsApp } from '../../utils/whatsappNotification';
+import { VoiceWeighmentAssistant, ParsedVoiceData } from '../common/VoiceWeighmentAssistant';
 
 interface BagsEntryDraft {
   dateInput: string;
@@ -63,6 +67,8 @@ export const BagsEntry: React.FC = () => {
     setActiveSection,
     getBardanaSummary,
     settings,
+    activeFirm,
+    firms,
     language
   } = useMandi();
   const isEn = language === 'en';
@@ -94,7 +100,7 @@ export const BagsEntry: React.FC = () => {
       doubleBagsInput: '',
       sukkiBagsInput: '',
       totaInput: '',
-      pakkiRateInput: String(settings?.defaultPakkiLabourRate ?? 7),
+      pakkiRateInput: String(settings?.defaultPakkiLabourRate ?? 8),
       doubleRateInput: String(settings?.defaultPakkaDoubleLabourRate ?? 14),
       sukkiRateInput: String(settings?.defaultSukhiLabourRate ?? 5)
     }
@@ -112,7 +118,7 @@ export const BagsEntry: React.FC = () => {
   const [sukkiBagsInput, setSukkiBagsInput] = useState<string>(draft.sukkiBagsInput || '');
   const [totaInput, setTotaInput] = useState<string>(draft.totaInput || '');
   const [pakkiRateInput, setPakkiRateInput] = useState<string>(
-    draft.pakkiRateInput || String(settings?.defaultPakkiLabourRate ?? 7)
+    draft.pakkiRateInput && draft.pakkiRateInput !== '7' ? draft.pakkiRateInput : String(settings?.defaultPakkiLabourRate ?? 8)
   );
   const [doubleRateInput, setDoubleRateInput] = useState<string>(
     draft.doubleRateInput || String(settings?.defaultPakkaDoubleLabourRate ?? 14)
@@ -221,14 +227,16 @@ export const BagsEntry: React.FC = () => {
     const dRate = parseFloat(doubleRateInput);
     const sRate = parseFloat(sukkiRateInput);
     return {
-      pakkiRate: !isNaN(pRate) && pRate >= 0 ? pRate : (settings?.defaultPakkiLabourRate ?? 7),
+      pakkiRate: !isNaN(pRate) && pRate >= 0 ? pRate : (settings?.defaultPakkiLabourRate ?? 8),
       doubleRate: !isNaN(dRate) && dRate >= 0 ? dRate : (settings?.defaultPakkaDoubleLabourRate ?? 14),
       sukkiRate: !isNaN(sRate) && sRate >= 0 ? sRate : (settings?.defaultSukhiLabourRate ?? 5)
     };
   }, [pakkiRateInput, doubleRateInput, sukkiRateInput, settings]);
 
   // 4. Automatic Labour Calculation at final summary from entered New/Old/Pakki/Double/Sukki bags and user-editable rates
+  // Standard Mandi Rule: Fixed Pakki Labour applies to ALL bags brought (bagsCount) by default.
   const labourSummary = useMemo(() => {
+    const effectivePakki = pakkiBagsInput.trim() !== '' ? pakkiBagsCount : bagsCount;
     return calculateAutomaticLabour(
       newBagsCount,
       oldBagsCount,
@@ -237,9 +245,9 @@ export const BagsEntry: React.FC = () => {
       calculatedGrossAmount,
       settings,
       customRates,
-      pakkiBagsInput.trim() !== '' ? pakkiBagsCount : null
+      effectivePakki
     );
-  }, [newBagsCount, oldBagsCount, pakkiBagsInput, pakkiBagsCount, doubleBagsCount, sukkiBagsCount, calculatedGrossAmount, settings, customRates]);
+  }, [newBagsCount, oldBagsCount, pakkiBagsInput, pakkiBagsCount, bagsCount, doubleBagsCount, sukkiBagsCount, calculatedGrossAmount, settings, customRates]);
 
   const totalLabourDeduction = labourSummary.totalLabour;
   const netPayableAmount = labourSummary.netAmount;
@@ -258,6 +266,7 @@ export const BagsEntry: React.FC = () => {
         b.farmerId.toLowerCase().includes(q) ||
         b.farmerName.toLowerCase().includes(q) ||
         (b.farmerNamePa && b.farmerNamePa.includes(q)) ||
+        (b.farmerFatherName && b.farmerFatherName.toLowerCase().includes(q)) ||
         b.farmerVillage.toLowerCase().includes(q) ||
         (b.farmerVillagePa && b.farmerVillagePa.includes(q)) ||
         b.farmerMobile.includes(q) ||
@@ -284,6 +293,32 @@ export const BagsEntry: React.FC = () => {
         });
       }
     });
+  };
+
+  // Handle voice typing parsing and auto-fill
+  const handleVoiceApply = (data: ParsedVoiceData) => {
+    if (data.farmer) {
+      setSelectedFarmerId(data.farmer.id);
+      setSelectedFarmerForBags(data.farmer);
+    }
+    if (data.newBags !== undefined && data.newBags > 0) {
+      setNewBagsInput(String(data.newBags));
+    }
+    if (data.oldBags !== undefined && data.oldBags > 0) {
+      setOldBagsInput(String(data.oldBags));
+    }
+    if (data.totalBags !== undefined && data.totalBags > 0 && !data.newBags && !data.oldBags) {
+      setNewBagsInput(String(data.totalBags));
+    }
+    if (data.doubleBags !== undefined && data.doubleBags > 0) {
+      setDoubleBagsInput(String(data.doubleBags));
+    }
+    if (data.sukkiBags !== undefined && data.sukkiBags > 0) {
+      setSukkiBagsInput(String(data.sukkiBags));
+    }
+    if (data.totaKg !== undefined && data.totaKg > 0) {
+      setTotaInput(String(data.totaKg));
+    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -362,7 +397,7 @@ export const BagsEntry: React.FC = () => {
     setDoubleBagsInput('');
     setSukkiBagsInput('');
     setTotaInput('');
-    setPakkiRateInput(String(settings?.defaultPakkiLabourRate ?? 7));
+    setPakkiRateInput(String(settings?.defaultPakkiLabourRate ?? 8));
     setDoubleRateInput(String(settings?.defaultPakkaDoubleLabourRate ?? 14));
     setSukkiRateInput(String(settings?.defaultSukhiLabourRate ?? 5));
 
@@ -492,7 +527,11 @@ export const BagsEntry: React.FC = () => {
           </button>
         </div>
       ) : (
-        <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="space-y-4">
+          {/* Smart Punjabi Voice Typing Assistant */}
+          <VoiceWeighmentAssistant onApplyData={handleVoiceApply} />
+
+          <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           {/* Left 2 Columns: Input Controls */}
           <div className="lg:col-span-2 space-y-4">
             <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xs space-y-3.5">
@@ -777,7 +816,7 @@ export const BagsEntry: React.FC = () => {
                 <div className="bg-slate-50/60 border-2 border-slate-200 hover:border-slate-300 rounded-xl p-3 space-y-2.5">
                   <div className="flex items-center justify-between border-b border-slate-200 pb-1.5">
                     <span className="font-black text-xs text-slate-900">
-                      {isEn ? 'Pakki Labour' : 'ਪੱਕੀ ਮਜ਼ਦੂਰੀ (Pakki)'}
+                      {isEn ? 'Pakki Labour (Fixed ₹8)' : 'ਪੱਕੀ ਲੇਬਰ (ਫਿਕਸ ₹8)'}
                     </span>
                     <span className="text-[10px] bg-slate-200 text-slate-800 font-bold px-1.5 py-0.5 rounded font-mono">
                       {labourSummary.pakkiBags} {isEn ? 'Bags' : 'ਬੋਰੀਆਂ'}
@@ -793,7 +832,7 @@ export const BagsEntry: React.FC = () => {
                         type="number"
                         min="0"
                         step="1"
-                        placeholder="0"
+                        placeholder={String(bagsCount || 0)}
                         value={pakkiBagsInput}
                         onChange={(e) => setPakkiBagsInput(e.target.value)}
                         className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-sm font-mono font-black text-slate-950 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
@@ -811,7 +850,7 @@ export const BagsEntry: React.FC = () => {
                           min="0"
                           value={pakkiRateInput}
                           onChange={(e) => setPakkiRateInput(e.target.value)}
-                          placeholder="7"
+                          placeholder="8"
                           className="w-full pl-5 pr-1.5 py-1.5 bg-white border border-slate-300 rounded-lg text-sm font-mono font-black text-slate-950 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
                         />
                       </div>
@@ -1176,6 +1215,7 @@ export const BagsEntry: React.FC = () => {
             </div>
           </div>
         </form>
+        </div>
       )}
 
       {/* Saved Farmer Bag Entries Section with Edit Option */}
@@ -1237,27 +1277,57 @@ export const BagsEntry: React.FC = () => {
                   </td>
                 </tr>
               ) : (
-                filteredSavedEntries.map((entry) => (
-                  <tr key={entry.id} className="hover:bg-slate-50/80 transition-colors">
-                    <td className="py-2 px-3 font-mono font-bold text-slate-900">
-                      <div className="flex items-center gap-1.5">
-                        <span className="bg-amber-100 text-amber-950 px-1.5 py-0.5 rounded text-[11px] font-black border border-amber-200">
-                          #{entry.parchiNo || entry.entryNumber}
-                        </span>
-                      </div>
-                      <span className="text-[10px] text-slate-400 font-normal">{entry.entryNumber}</span>
-                    </td>
-                    <td className="py-2 px-3 font-mono text-slate-700 text-[11px]">
-                      {entry.date}
-                    </td>
-                    <td className="py-2 px-3">
-                      <div className="font-bold text-slate-900">
-                        {entry.farmerNamePa} ({entry.farmerName})
-                      </div>
-                      <div className="text-[10px] text-slate-500">
-                        {entry.farmerVillagePa || entry.farmerVillage} • Mob: {entry.farmerMobile}
-                      </div>
-                    </td>
+                filteredSavedEntries.map((entry) => {
+                  const matchedFarmer = farmers.find((f) => f.id === entry.farmerId);
+                  const farmerNameEn = entry.farmerName || matchedFarmer?.farmerName || entry.farmerNamePa;
+                  const farmerId = entry.farmerId || matchedFarmer?.id || '';
+                  const fatherNameEn = entry.farmerFatherName || matchedFarmer?.fatherName || '';
+                  const villageEn = entry.farmerVillage || matchedFarmer?.village || '';
+
+                  return (
+                    <tr key={entry.id} className="hover:bg-slate-50/80 transition-colors">
+                      <td className="py-2 px-3 font-mono font-bold text-slate-900">
+                        <div className="flex items-center gap-1.5">
+                          <span className="bg-amber-100 text-amber-950 px-1.5 py-0.5 rounded text-[11px] font-black border border-amber-200">
+                            #{entry.parchiNo || entry.entryNumber}
+                          </span>
+                        </div>
+                        <span className="text-[10px] text-slate-400 font-normal">{entry.entryNumber}</span>
+                      </td>
+                      <td className="py-2 px-3 font-mono text-slate-700 text-[11px]">
+                        {entry.date}
+                      </td>
+                      <td className="py-2 px-3">
+                        <div className="space-y-0.5 min-w-[160px]">
+                          {/* 1. Farmer Name: English Farmer Name FIRST and prominently */}
+                          <div className="font-bold text-slate-900 text-xs sm:text-[13px] leading-tight">
+                            <span>{farmerNameEn}</span>
+                            {entry.farmerNamePa && entry.farmerNamePa !== farmerNameEn && (
+                              <span className="text-[11px] text-slate-400 font-normal ml-1">
+                                ({entry.farmerNamePa})
+                              </span>
+                            )}
+                          </div>
+
+                          {/* 2. Farmer ID: Directly below the English Farmer Name */}
+                          <div className="text-[11px] text-slate-600 font-mono">
+                            Farmer ID: <span className="font-semibold text-slate-800">{farmerId}</span>
+                          </div>
+
+                          {/* 3. Father Name: In ENGLISH */}
+                          <div className="text-[11px] text-slate-600">
+                            Father: <span className="font-medium text-slate-800">{fatherNameEn || '—'}</span>
+                          </div>
+
+                          {/* 4. Village: In ENGLISH */}
+                          <div className="text-[11px] text-slate-600">
+                            Village: <span className="font-medium text-slate-800">{villageEn || '—'}</span>
+                            {entry.farmerMobile && (
+                              <span className="text-[10px] text-slate-400 ml-1.5">• Mob: {entry.farmerMobile}</span>
+                            )}
+                          </div>
+                        </div>
+                      </td>
                     <td className="py-2 px-3 text-center font-bold">
                       {entry.bags}
                       {(entry.newBags !== undefined || entry.oldBags !== undefined) && (
@@ -1293,6 +1363,23 @@ export const BagsEntry: React.FC = () => {
                       <div className="flex items-center justify-end gap-1">
                         <button
                           type="button"
+                          onClick={() => {
+                            const receiptFirm = (entry.firmId ? firms.find((f) => f.id === entry.firmId) : null) || activeFirm;
+                            const msg = generateBagsWeighmentWhatsAppMessage({
+                              receipt: entry,
+                              firm: receiptFirm,
+                              settings,
+                              language
+                            });
+                            openWhatsApp(entry.farmerMobile, msg);
+                          }}
+                          className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold p-1 rounded-md transition shadow-2xs cursor-pointer"
+                          title="ਵ੍ਹਟਸਐਪ ਤੇ ਭੇਜੋ (Send WhatsApp)"
+                        >
+                          <Send className="w-3.5 h-3.5 text-white" />
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => setActiveBagsEntryToEdit(entry)}
                           className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold p-1 rounded-md transition shadow-2xs cursor-pointer"
                           title="ਸੋਧੋ (Edit Bags Entry)"
@@ -1318,7 +1405,8 @@ export const BagsEntry: React.FC = () => {
                       </div>
                     </td>
                   </tr>
-                ))
+                  );
+                })
               )}
             </tbody>
           </table>

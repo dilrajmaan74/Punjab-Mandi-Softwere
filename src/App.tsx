@@ -1,6 +1,7 @@
 import React from 'react';
 import { MandiProvider, useMandi } from './context/MandiContext';
 import { NotificationProvider } from './context/NotificationContext';
+import { GoogleSheetsSyncProvider } from './context/GoogleSheetsSyncContext';
 import { ToastContainer } from './components/common/ToastContainer';
 import { ConfirmationModal } from './components/common/ConfirmationModal';
 import { Header } from './components/common/Header';
@@ -20,6 +21,8 @@ import { RecycleBin } from './components/recycleBin/RecycleBin';
 import { FarmerAccount } from './components/farmer/FarmerAccount';
 import { MandiReports } from './components/reports/MandiReports';
 import { FarmerBagBalanceReport } from './components/reports/FarmerBagBalanceReport';
+import { BoliRegister } from './components/boli/BoliRegister';
+import { LabourGangLedger } from './components/labour/LabourGangLedger';
 import { SettingsManager } from './components/settings/SettingsManager';
 import { ReceiptModal } from './components/common/ReceiptModal';
 import { BagsEntryEditModal } from './components/bags/BagsEntryEditModal';
@@ -65,11 +68,13 @@ const MainAppContent: React.FC = () => {
           {activeSection === 'multi-farmer-add' && <MultiFarmerAdd />}
           {activeSection === 'bank-details' && <BankDetailsManager />}
           {activeSection === 'bardana' && <BardanaManagement />}
+          {activeSection === 'boli' && <BoliRegister />}
           {activeSection === 'bags-entry' && <BagsEntry />}
           {activeSection === 'same-date-multi-entry' && <SameDateMultiFarmerEntry />}
           {activeSection === 'search-farmer' && <FarmerSearch />}
           {activeSection === 'reports' && <MandiReports />}
           {activeSection === 'farmer-bag-balance-labour' && <FarmerBagBalanceReport />}
+          {activeSection === 'labour-ledger' && <LabourGangLedger />}
           {activeSection === 'settings' && <SettingsManager />}
         </main>
       </div>
@@ -108,7 +113,7 @@ const MainAppContent: React.FC = () => {
 
         <button
           onClick={() => setActiveSection('farmer-registration')}
-          className={`flex flex-col items-center py-1 px-2 rounded-lg text-[10px] font-bold ${
+          className={`flex flex-col items-center py-1 px-1.5 rounded-lg text-[10px] font-bold ${
             activeSection === 'farmer-registration' ? 'text-emerald-700 font-black' : 'text-slate-500'
           }`}
         >
@@ -117,8 +122,28 @@ const MainAppContent: React.FC = () => {
         </button>
 
         <button
+          onClick={() => setActiveSection('bardana')}
+          className={`flex flex-col items-center py-1 px-1.5 rounded-lg text-[10px] font-bold ${
+            activeSection === 'bardana' ? 'text-amber-600 font-black' : 'text-slate-500'
+          }`}
+        >
+          <Boxes className="w-4 h-4" />
+          <span>ਬਾਰਦਾਨਾ</span>
+        </button>
+
+        <button
+          onClick={() => setActiveSection('farmer-account')}
+          className={`flex flex-col items-center py-1 px-1.5 rounded-lg text-[10px] font-bold ${
+            activeSection === 'farmer-account' ? 'text-emerald-700 font-black' : 'text-slate-500'
+          }`}
+        >
+          <User className="w-4 h-4" />
+          <span>ਖਾਤਾ</span>
+        </button>
+
+        <button
           onClick={() => setActiveSection('reports')}
-          className={`flex flex-col items-center py-1 px-2 rounded-lg text-[10px] font-bold ${
+          className={`flex flex-col items-center py-1 px-1.5 rounded-lg text-[10px] font-bold ${
             activeSection === 'reports' ? 'text-rose-700 font-black' : 'text-slate-500'
           }`}
         >
@@ -140,7 +165,9 @@ export default function App() {
   return (
     <MandiProvider>
       <NotificationProvider>
-        <MainAppContent />
+        <GoogleSheetsSyncProvider>
+          <MainAppContent />
+        </GoogleSheetsSyncProvider>
       </NotificationProvider>
     </MandiProvider>
   );

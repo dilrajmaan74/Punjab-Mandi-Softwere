@@ -1,5 +1,6 @@
 import React from 'react';
 import { useMandi } from '../../context/MandiContext';
+import { TodayGlanceBanner } from './TodayGlanceBanner';
 import {
   User,
   UserPlus,
@@ -56,6 +57,13 @@ export const Dashboard: React.FC = () => {
 
   return (
     <div className="space-y-4">
+      {/* 1-Second Live Mandi Pulse & Today's Activity Banner */}
+      <TodayGlanceBanner
+        onOpenBoli={() => setActiveSection('boli')}
+        onOpenBags={() => setActiveSection('bags-entry')}
+        onOpenLifting={() => setActiveSection('lefting')}
+      />
+
       {/* Welcome Banner */}
       <div className="bg-slate-900 text-white rounded-xl p-4 sm:p-5 shadow-2xs border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="space-y-1">
@@ -461,8 +469,7 @@ export const Dashboard: React.FC = () => {
               <thead className="bg-slate-100/75 text-slate-700 font-bold border-b border-slate-200">
                 <tr>
                   <th className="py-2 px-3">ਰਸੀਦ / ਮਿਤੀ</th>
-                  <th className="py-2 px-3">ਕਿਸਾਨ ਆਈ.ਡੀ</th>
-                  <th className="py-2 px-3">ਕਿਸਾਨ ਦਾ ਨਾਂ ਤੇ ਪਿੰਡ</th>
+                  <th className="py-2 px-3">ਕਿਸਾਨ ਦਾ ਵੇਰਵਾ (Farmer Details)</th>
                   <th className="py-2 px-3 text-center">ਬੋਰੀਆਂ</th>
                   <th className="py-2 px-3 text-right">ਬੋਰੀ ਵਜ਼ਨ (Qul+Kg)</th>
                   <th className="py-2 px-3 text-right">ਟੋਟਾ</th>
@@ -473,24 +480,43 @@ export const Dashboard: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-medium text-slate-800">
-                {bagsEntries.slice(0, 5).map((entry) => (
-                  <tr key={entry.id} className="hover:bg-slate-50/60 transition">
-                    <td className="py-2 px-3 font-mono font-bold text-slate-900 text-xs">
-                      {entry.entryNumber}
-                      <span className="block text-[10px] text-slate-400 font-normal">{entry.date}</span>
-                    </td>
-                    <td className="py-2 px-3 font-mono font-bold text-emerald-800 text-xs">
-                      {entry.farmerId}
-                    </td>
-                    <td className="py-2 px-3">
-                      <div className="font-semibold text-slate-900 text-xs">
-                        {entry.farmerNamePa || entry.farmerName} ({entry.farmerName})
-                      </div>
-                      <div className="text-[10px] text-slate-500 font-mono">
-                        {entry.farmerVillagePa || entry.farmerVillage}
-                      </div>
-                    </td>
-                    <td className="py-2 px-3 text-center font-bold text-xs">{entry.bags}</td>
+                {bagsEntries.slice(0, 5).map((entry) => {
+                  const matchedFarmer = farmers.find((f) => f.id === entry.farmerId);
+                  const farmerNameEn = entry.farmerName || matchedFarmer?.farmerName || '';
+                  const farmerId = entry.farmerId || matchedFarmer?.id || '';
+                  const fatherNameEn = entry.farmerFatherName || matchedFarmer?.fatherName || '';
+                  const villageEn = entry.farmerVillage || matchedFarmer?.village || '';
+
+                  return (
+                    <tr key={entry.id} className="hover:bg-slate-50/60 transition">
+                      <td className="py-2 px-3 font-mono font-bold text-slate-900 text-xs">
+                        {entry.entryNumber}
+                        <span className="block text-[10px] text-slate-400 font-normal">{entry.date}</span>
+                      </td>
+                      <td className="py-2 px-3">
+                        <div className="space-y-0.5 min-w-[160px]">
+                          {/* 1. Farmer Name: English Farmer Name FIRST and prominently */}
+                          <div className="font-bold text-slate-900 text-xs sm:text-[13px] leading-tight">
+                            {farmerNameEn}
+                          </div>
+
+                          {/* 2. Father Name: English Father Name */}
+                          <div className="text-[11px] text-slate-600">
+                            Father: <span className="font-medium text-slate-800">{fatherNameEn || '—'}</span>
+                          </div>
+
+                          {/* 3. Village: English Village */}
+                          <div className="text-[11px] text-slate-600">
+                            Village: <span className="font-medium text-slate-800">{villageEn || '—'}</span>
+                          </div>
+
+                          {/* 4. Farmer ID: Show Farmer ID clearly */}
+                          <div className="text-[11px] text-slate-600 font-mono">
+                            Farmer ID: <span className="font-semibold text-slate-800">{farmerId}</span>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="py-2 px-3 text-center font-bold text-xs">{entry.bags}</td>
                     <td className="py-2 px-3 text-right font-mono text-xs text-slate-900">
                       {entry.totalBagsWeightDisplay}
                     </td>
@@ -533,7 +559,8 @@ export const Dashboard: React.FC = () => {
                       </div>
                     </td>
                   </tr>
-                ))}
+                );
+              })}
               </tbody>
             </table>
           </div>
