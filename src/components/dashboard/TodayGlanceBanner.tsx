@@ -39,7 +39,9 @@ export const TodayGlanceBanner: React.FC<TodayGlanceBannerProps> = ({
     activeFirm,
     settings,
     setActiveSection,
-    language
+    language,
+    activeCrop,
+    activeCropConfig
   } = useMandi();
 
   const isEn = language === 'en';
@@ -186,13 +188,16 @@ export const TodayGlanceBanner: React.FC<TodayGlanceBannerProps> = ({
               <span className="w-2.5 h-2.5 bg-emerald-400 rounded-full" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="text-sm sm:text-base font-black tracking-tight text-white flex items-center gap-1.5">
                   <Sparkles className="w-4 h-4 text-amber-400" />
                   <span>ਅੱਜ ਦਾ ਮੰਡੀ ਸਾਰ (Today's Live Mandi Pulse)</span>
                 </h2>
                 <span className="px-2 py-0.5 bg-emerald-950 text-emerald-300 font-mono text-[10px] font-black rounded-full border border-emerald-500/30">
                   {selectedDate}
+                </span>
+                <span className="px-2.5 py-0.5 bg-amber-500/20 text-amber-300 font-bold text-[10px] rounded-full border border-amber-500/40">
+                  {activeCropConfig.namePa} • {activeCropConfig.defaultBagWeightKg} Kg/ਬੋਰੀ
                 </span>
               </div>
               <p className="text-[11px] text-slate-300 font-medium">

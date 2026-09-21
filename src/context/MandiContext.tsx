@@ -25,7 +25,11 @@ import {
   TruckMasterRecord,
   LabourMate,
   LabourWorkEntry,
-  LabourAdvancePayment
+  LabourAdvancePayment,
+  CropType,
+  CropFilterType,
+  CropConfig,
+  CROP_CONFIGS
 } from '../types/mandi';
 import { INITIAL_PIN_CODES } from '../data/pinCodes';
 import {
@@ -166,6 +170,11 @@ interface MandiContextType {
   language: AppLanguage;
   setLanguage: (lang: AppLanguage) => void;
 
+  // Active Crop State (Wheat / Maize / Paddy)
+  activeCrop: CropType;
+  setActiveCrop: (crop: CropType) => void;
+  activeCropConfig: CropConfig;
+
   // Multi-Firm State & Operations
   firms: MandiFirm[];
   activeFirmId: string;
@@ -228,7 +237,7 @@ interface MandiContextType {
   saveFarmerBankDetails: (farmerId: string, bankDetails: BankDetails) => boolean;
 
   // Farmer Account & Summaries
-  getCompleteFarmerAccount: (farmerId: string) => FarmerAccountSummary | null;
+  getCompleteFarmerAccount: (farmerId: string, cropFilter?: CropFilterType) => FarmerAccountSummary | null;
 
   // Payment Operations
   addFarmerPayment: (payment: Omit<FarmerPaymentRecord, 'id' | 'createdAt'>) => FarmerPaymentRecord;
@@ -269,7 +278,7 @@ interface MandiContextType {
   addBardanaRecord: (record: Omit<BardanaReceivedRecord, 'id' | 'createdAt'> & { id?: string }) => BardanaReceivedRecord;
   updateBardanaRecord: (id: string, updates: Partial<BardanaReceivedRecord>) => boolean;
   deleteBardanaRecord: (id: string) => boolean;
-  getBardanaSummary: () => BardanaInventorySummary;
+  getBardanaSummary: (cropFilter?: CropFilterType) => BardanaInventorySummary;
 
   // Daily Purchase Operations
   generateNextPurchaseId: () => string;
@@ -286,8 +295,8 @@ interface MandiContextType {
     messagePa?: string;
   };
   deleteDailyPurchase: (id: string) => boolean;
-  getFarmerPurchaseSummary: (farmerId: string) => FarmerPurchaseSummary;
-  getAllFarmersPurchaseSummaries: () => FarmerPurchaseSummary[];
+  getFarmerPurchaseSummary: (farmerId: string, cropFilter?: CropFilterType) => FarmerPurchaseSummary;
+  getAllFarmersPurchaseSummaries: (cropFilter?: CropFilterType) => FarmerPurchaseSummary[];
 
   // Lefting Operations
   generateNextLeftingId: () => string;
@@ -743,6 +752,29 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   // 12. Navigation & UI States
   const [activeSection, setActiveSection] = useState<NavigationSection>('dashboard');
+  const [activeCrop, setActiveCropState] = useState<CropType>(() => {
+    try {
+      const stored = localStorage.getItem('punjab_mandi_active_crop');
+      if (stored === 'PADDY' || stored === 'WHEAT' || stored === 'MAIZE') {
+        return stored;
+      }
+      return 'PADDY';
+    } catch {
+      return 'PADDY';
+    }
+  });
+
+  const setActiveCrop = (crop: CropType) => {
+    setActiveCropState(crop);
+    try {
+      localStorage.setItem('punjab_mandi_active_crop', crop);
+    } catch {
+      // ignore
+    }
+  };
+
+  const activeCropConfig: CropConfig = CROP_CONFIGS[activeCrop] || CROP_CONFIGS.PADDY;
+
   const [language, setLanguage] = useState<AppLanguage>(() => {
     try {
       const stored = localStorage.getItem(LOCAL_STORAGE_KEYS.LANGUAGE);
@@ -1513,9 +1545,13 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
    * - Advances & Date-to-Date Interest Calculations
    * - Final Net Payable Balance
    */
-  const getCompleteFarmerAccount = (farmerId: string): FarmerAccountSummary | null => {
+  const getCompleteFarmerAccount = (farmerId: string, cropFilter?: CropFilterType): FarmerAccountSummary | null => {
     const farmer = getFarmerById(farmerId);
     if (!farmer) return null;
+
+    // Filter by crop if requested and not 'ALL'
+    const targetCrop = cropFilter !== undefined ? cropFilter : activeCrop;
+    const shouldFilterCrop = targetCrop !== 'ALL';
 
     // 1. Check Farmer Linking Hierarchy
     // A) Is this farmer a Main Farmer with linked sub-farmers?
@@ -1529,13 +1565,27 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const isLinkedFarmer = !!linkedToMainFarmerObj;
 
     // 2. Mandi Arrival Entries (Bags Weighment for this farmer)
-    const farmerArrivalEntries = bagsEntries.filter((b) => b.farmerId === farmerId);
+    const farmerArrivalEntries = bagsEntries.filter((b) => {
+      if (b.farmerId !== farmerId) return false;
+      if (shouldFilterCrop) {
+        const itemCrop = b.cropType || 'PADDY';
+        return itemCrop === targetCrop;
+      }
+      return true;
+    });
     const mandiArrivalBags = farmerArrivalEntries.reduce((sum, b) => sum + (Number(b.bags) || 0), 0);
     const mandiArrivalWeightKg = farmerArrivalEntries.reduce((sum, b) => sum + (Number(b.grandTotalKg) || 0), 0);
     const arrivalBreakdown = formatKgToQulKg(mandiArrivalWeightKg);
 
     // 3. Direct Daily Purchase Entries for this farmer
-    const farmerPurchaseEntries = dailyPurchaseRecords.filter((p) => p.farmerId === farmerId);
+    const farmerPurchaseEntries = dailyPurchaseRecords.filter((p) => {
+      if (p.farmerId !== farmerId) return false;
+      if (shouldFilterCrop) {
+        const itemCrop = p.cropType || 'PADDY';
+        return itemCrop === targetCrop;
+      }
+      return true;
+    });
     const directPurchasedBags = farmerPurchaseEntries.reduce((sum, p) => sum + (Number(p.bags) || 0), 0);
     const directPurchasedWeightKg = farmerPurchaseEntries.reduce((sum, p) => sum + (Number(p.totalWeightKg) || 0), 0);
     const directPurchasedAmount = farmerPurchaseEntries.reduce((sum, p) => sum + (Number(p.totalAmount) || 0), 0);
@@ -1548,7 +1598,14 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     if (isMainFarmer) {
       const subFarmerIds = linkedSubFarmers.map((s) => s.id);
-      const subPurchases = dailyPurchaseRecords.filter((p) => subFarmerIds.includes(p.farmerId));
+      const subPurchases = dailyPurchaseRecords.filter((p) => {
+        if (!subFarmerIds.includes(p.farmerId)) return false;
+        if (shouldFilterCrop) {
+          const itemCrop = p.cropType || 'PADDY';
+          return itemCrop === targetCrop;
+        }
+        return true;
+      });
       subPurchases.forEach((p) => {
         const subFarmer = linkedSubFarmers.find((s) => s.id === p.farmerId);
         linkedPurchasesList.push({
@@ -2200,7 +2257,10 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
    * Calculate exact real-time Bardana Inventory Summary
    * Accounts for: Received, Purchased, Returned, Issued in Mandi / Lefting, and Other-Party transactions
    */
-  const getBardanaSummary = (): BardanaInventorySummary => {
+  const getBardanaSummary = (cropFilter?: CropFilterType): BardanaInventorySummary => {
+    const targetCrop = cropFilter !== undefined ? cropFilter : activeCrop;
+    const shouldFilterCrop = targetCrop !== 'ALL';
+
     let newBagsReceived = 0;
     let newBagsReturned = 0;
     let newBagsIssued = 0;
@@ -2214,7 +2274,15 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     // Track other-party borrowing and returns
     const otherPartyMap = new Map<string, OtherPartyBardanaBalance>();
 
-    bardanaRecords.forEach((r) => {
+    const relevantBardanaRecords = bardanaRecords.filter((r) => {
+      if (shouldFilterCrop) {
+        const itemCrop = r.cropType || 'PADDY';
+        return itemCrop === targetCrop;
+      }
+      return true;
+    });
+
+    relevantBardanaRecords.forEach((r) => {
       const isReturn = r.actionType === 'RETURN';
       const isGive = r.actionType === 'GIVE';
       let nBags = 0;
@@ -2280,7 +2348,15 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     });
 
     // Outflow 1: Weighment/Arrival bags in Mandi
-    bagsEntries.forEach((b) => {
+    const relevantBagsEntries = bagsEntries.filter((b) => {
+      if (shouldFilterCrop) {
+        const itemCrop = b.cropType || 'PADDY';
+        return itemCrop === targetCrop;
+      }
+      return true;
+    });
+
+    relevantBagsEntries.forEach((b) => {
       if (b.newBags !== undefined || b.oldBags !== undefined) {
         newBagsIssued += Number(b.newBags) || 0;
         oldBagsIssued += Number(b.oldBags) || 0;
@@ -2300,7 +2376,7 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       agencyMap.set(ag.nameEn, { newRec: 0, newRet: 0, oldRec: 0, oldRet: 0, newIss: 0, oldIss: 0 });
     });
 
-    bardanaRecords.forEach((r) => {
+    relevantBardanaRecords.forEach((r) => {
       const agKey = r.sourceName || r.agency || 'Other Agency';
       if (!agencyMap.has(agKey)) {
         agencyMap.set(agKey, { newRec: 0, newRet: 0, oldRec: 0, oldRet: 0, newIss: 0, oldIss: 0 });
@@ -2420,7 +2496,10 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
    * 2. Linked Sub-Farmer: Uses Main Farmer's Mandi bag pool and remaining quota
    * 3. Independent Farmer: Direct arrival and purchase tracking
    */
-  const getFarmerPurchaseSummary = (farmerId: string): FarmerPurchaseSummary => {
+  const getFarmerPurchaseSummary = (farmerId: string, cropFilter?: CropFilterType): FarmerPurchaseSummary => {
+    const targetCrop = cropFilter !== undefined ? cropFilter : activeCrop;
+    const shouldFilterCrop = targetCrop !== 'ALL';
+
     const farmer = farmers.find((f) => f.id === farmerId);
     const linkedSubFarmers = farmers.filter((f) => f.linkedMainFarmerId === farmerId);
     const isMainFarmer = linkedSubFarmers.length > 0;
@@ -2431,14 +2510,28 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     if (isLinkedFarmer && linkedToMainFarmer) {
       // Sub-Farmer draws from Main Farmer's Mandi bag pool
-      const mainArrivalEntries = bagsEntries.filter((b) => b.farmerId === linkedToMainFarmer.id);
+      const mainArrivalEntries = bagsEntries.filter((b) => {
+        if (b.farmerId !== linkedToMainFarmer.id) return false;
+        if (shouldFilterCrop) {
+          const itemCrop = b.cropType || 'PADDY';
+          return itemCrop === targetCrop;
+        }
+        return true;
+      });
       const mandiArrivalBags = mainArrivalEntries.reduce((sum, b) => sum + (Number(b.bags) || 0), 0);
       const mandiArrivalWeightKg = mainArrivalEntries.reduce((sum, b) => sum + (Number(b.grandTotalKg) || 0), 0);
       const arrivalBreakdown = formatKgToQulKg(mandiArrivalWeightKg);
 
       const subFarmersOfMain = farmers.filter((f) => f.linkedMainFarmerId === linkedToMainFarmer.id);
       const allPoolFarmerIds = [linkedToMainFarmer.id, ...subFarmersOfMain.map((s) => s.id)];
-      const allPoolPurchases = dailyPurchaseRecords.filter((p) => allPoolFarmerIds.includes(p.farmerId));
+      const allPoolPurchases = dailyPurchaseRecords.filter((p) => {
+        if (!allPoolFarmerIds.includes(p.farmerId)) return false;
+        if (shouldFilterCrop) {
+          const itemCrop = p.cropType || 'PADDY';
+          return itemCrop === targetCrop;
+        }
+        return true;
+      });
 
       const alreadyPurchasedBags = allPoolPurchases.reduce((sum, p) => sum + (Number(p.bags) || 0), 0);
       const alreadyPurchasedWeightKg = allPoolPurchases.reduce((sum, p) => sum + (Number(p.totalWeightKg) || 0), 0);
@@ -2494,19 +2587,40 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
 
     // Main Farmer or Independent Farmer
-    const farmerEntries = bagsEntries.filter((b) => b.farmerId === farmerId);
+    const farmerEntries = bagsEntries.filter((b) => {
+      if (b.farmerId !== farmerId) return false;
+      if (shouldFilterCrop) {
+        const itemCrop = b.cropType || 'PADDY';
+        return itemCrop === targetCrop;
+      }
+      return true;
+    });
     const mandiArrivalBags = farmerEntries.reduce((sum, b) => sum + (Number(b.bags) || 0), 0);
     const mandiArrivalWeightKg = farmerEntries.reduce((sum, b) => sum + (Number(b.grandTotalKg) || 0), 0);
     const arrivalBreakdown = formatKgToQulKg(mandiArrivalWeightKg);
 
-    const directPurchases = dailyPurchaseRecords.filter((p) => p.farmerId === farmerId);
+    const directPurchases = dailyPurchaseRecords.filter((p) => {
+      if (p.farmerId !== farmerId) return false;
+      if (shouldFilterCrop) {
+        const itemCrop = p.cropType || 'PADDY';
+        return itemCrop === targetCrop;
+      }
+      return true;
+    });
     let linkedPurchases: DailyPurchaseRecord[] = [];
     let linkedPurchasedBags = 0;
     let linkedPurchasedWeightKg = 0;
 
     if (isMainFarmer) {
       const subFarmerIds = linkedSubFarmers.map((s) => s.id);
-      linkedPurchases = dailyPurchaseRecords.filter((p) => subFarmerIds.includes(p.farmerId));
+      linkedPurchases = dailyPurchaseRecords.filter((p) => {
+        if (!subFarmerIds.includes(p.farmerId)) return false;
+        if (shouldFilterCrop) {
+          const itemCrop = p.cropType || 'PADDY';
+          return itemCrop === targetCrop;
+        }
+        return true;
+      });
       linkedPurchasedBags = linkedPurchases.reduce((sum, p) => sum + (Number(p.bags) || 0), 0);
       linkedPurchasedWeightKg = linkedPurchases.reduce((sum, p) => sum + (Number(p.totalWeightKg) || 0), 0);
     }
@@ -2568,8 +2682,8 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   /**
    * Get purchase summary for all registered farmers
    */
-  const getAllFarmersPurchaseSummaries = (): FarmerPurchaseSummary[] => {
-    return farmers.map((f) => getFarmerPurchaseSummary(f.id));
+  const getAllFarmersPurchaseSummaries = (cropFilter?: CropFilterType): FarmerPurchaseSummary[] => {
+    return farmers.map((f) => getFarmerPurchaseSummary(f.id, cropFilter));
   };
 
   /**
@@ -3353,6 +3467,9 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         searchTrucksByLastDigits,
         activeSection,
         setActiveSection,
+        activeCrop,
+        setActiveCrop,
+        activeCropConfig,
         language,
         setLanguage,
         activeReceipt,

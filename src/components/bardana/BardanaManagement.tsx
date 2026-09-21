@@ -63,7 +63,9 @@ export const BardanaManagement: React.FC = () => {
     deleteBardanaRecord,
     getBardanaSummary,
     setActiveSection,
-    language
+    language,
+    activeCrop,
+    activeCropConfig
   } = useMandi();
 
   const isEn = language === 'en';
@@ -546,9 +548,14 @@ export const BardanaManagement: React.FC = () => {
             <Boxes className="w-5 h-5" />
           </div>
           <div>
-            <h2 className="text-base sm:text-lg font-black text-slate-900 leading-tight">
-              ਬਾਰਦਾਨਾ ਪ੍ਰਬੰਧਨ (Bardana Management Module)
-            </h2>
+            <div className="flex items-center gap-2">
+              <h2 className="text-base sm:text-lg font-black text-slate-900 leading-tight">
+                ਬਾਰਦਾਨਾ ਪ੍ਰਬੰਧਨ (Bardana Management)
+              </h2>
+              <span className="text-[10px] bg-amber-100 text-amber-900 font-bold px-2 py-0.5 rounded-full border border-amber-300">
+                {activeCropConfig.namePa.split(' ')[0]} ਸੀਜ਼ਨ
+              </span>
+            </div>
             <p className="text-[11px] text-slate-500">
               ਏਜੰਸੀ ਤੇ ਸੈਲਰ ਵਾਈਜ਼ ਬਾਰਦਾਨਾ ਪ੍ਰਾਪਤੀ, ਨਵਾਂ/ਪੁਰਾਣਾ ਸਟਾਕ ਤੇ ਜਾਰੀ ਰਜਿਸਟਰ
             </p>

@@ -45,11 +45,59 @@ export function formatKgToQulKg(rawKg: number): WeightBreakdown {
 }
 
 /**
- * Calculate Bags Weight for given bag count with fixed 37.50 KG/bag
+ * Calculate Bags Weight for given bag count with bag weight in KG (default 37.50 KG/bag)
  */
-export function calculateBagsWeight(bags: number): WeightBreakdown {
-  const totalKg = bags * FIXED_BAG_WEIGHT_KG;
+export function calculateBagsWeight(bags: number, bagWeightKg = FIXED_BAG_WEIGHT_KG): WeightBreakdown {
+  const totalKg = bags * (bagWeightKg || FIXED_BAG_WEIGHT_KG);
   return formatKgToQulKg(totalKg);
+}
+
+/**
+ * Calculate Moisture Deduction (ਨਮੀ ਕਾਟ) based on Crop Standards:
+ * - Paddy standard: 17%
+ * - Wheat standard: 12%
+ * - Maize standard: 14%
+ * Returns cut in KG and net weight after cut
+ */
+export function calculateMoistureCut(params: {
+  totalWeightKg: number;
+  moisturePercent: number;
+  baseMoisturePercent?: number; // default 17% for Paddy
+  cutPerPercentKg?: number; // default 1.0 kg per Qtl per 1% excess moisture
+}): {
+  excessMoisture: number;
+  cutKg: number;
+  netWeightKg: number;
+  cutAmountAtRate: (ratePerQtl: number) => number;
+} {
+  const {
+    totalWeightKg,
+    moisturePercent,
+    baseMoisturePercent = 17.0,
+    cutPerPercentKg = 1.0
+  } = params;
+
+  if (!moisturePercent || moisturePercent <= baseMoisturePercent || totalWeightKg <= 0) {
+    return {
+      excessMoisture: 0,
+      cutKg: 0,
+      netWeightKg: totalWeightKg,
+      cutAmountAtRate: () => 0
+    };
+  }
+
+  const excessMoisture = Math.round((moisturePercent - baseMoisturePercent) * 10) / 10;
+  const qtl = totalWeightKg / 100;
+  // Cut in KG = Qtl * excess% * cutPerPercentKg
+  const cutKg = Math.round(qtl * excessMoisture * cutPerPercentKg * 100) / 100;
+  const netWeightKg = Math.max(0, Math.round((totalWeightKg - cutKg) * 100) / 100);
+
+  return {
+    excessMoisture,
+    cutKg,
+    netWeightKg,
+    cutAmountAtRate: (ratePerQtl: number) => Math.round((cutKg / 100) * ratePerQtl * 100) / 100
+  };
 }
 
 /**

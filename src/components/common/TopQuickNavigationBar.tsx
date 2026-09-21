@@ -102,8 +102,20 @@ const PRIMARY_QUICK_TABS: QuickTab[] = [
 ];
 
 export const TopQuickNavigationBar: React.FC = () => {
-  const { activeSection, setActiveSection, language } = useMandi();
+  const { activeSection, setActiveSection, language, activeCrop, activeCropConfig } = useMandi();
   const isEn = language === 'en';
+
+  const getDynamicTabTitle = (tab: QuickTab) => {
+    if (tab.id === 'bags-entry') {
+      const weightLabel = `${activeCropConfig.defaultBagWeightKg}Kg`;
+      return {
+        titlePa: `ਤੁਲਾਈ (${activeCropConfig.namePa.split(' ')[0]} ${weightLabel})`,
+        titleEn: `Bags Entry (${weightLabel})`,
+        shortPa: `ਤੁਲਾਈ (${activeCrop === 'PADDY' ? '37.5Kg' : activeCrop === 'WHEAT' ? '50Kg' : 'ਮੱਕੀ'})`
+      };
+    }
+    return tab;
+  };
 
   return (
     <div className="w-full bg-slate-950/95 border-t border-b border-slate-800/80 px-2 sm:px-4 py-1.5 overflow-x-auto scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent">
@@ -113,6 +125,7 @@ export const TopQuickNavigationBar: React.FC = () => {
         </span>
 
         {PRIMARY_QUICK_TABS.map((tab) => {
+          const dynamic = getDynamicTabTitle(tab);
           const Icon = tab.icon;
           const isActive = activeSection === tab.id;
 
@@ -126,11 +139,11 @@ export const TopQuickNavigationBar: React.FC = () => {
                   ? `${tab.activeBg} text-white shadow-xs font-black ring-1 ring-white/30`
                   : 'bg-slate-900/90 text-slate-300 hover:text-white hover:bg-slate-800 border border-slate-800/80'
               }`}
-              title={`${tab.titlePa} (${tab.titleEn})`}
+              title={`${dynamic.titlePa} (${dynamic.titleEn})`}
             >
               <Icon className={`w-3.5 h-3.5 shrink-0 ${isActive ? 'text-white' : 'text-slate-400'}`} />
               <span className="text-[11px] sm:text-xs">
-                {isEn ? tab.titleEn : tab.shortPa}
+                {isEn ? dynamic.titleEn : dynamic.shortPa}
               </span>
             </button>
           );

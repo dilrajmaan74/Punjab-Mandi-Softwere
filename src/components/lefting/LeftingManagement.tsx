@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useMandi } from '../../context/MandiContext';
 import { useNotification } from '../../context/NotificationContext';
-import { LeftingRecord, BardanaType, SellerMaster } from '../../types/mandi';
+import { LeftingRecord, BardanaType, SellerMaster, CropFilterType, CropType } from '../../types/mandi';
 import { SearchableSelect, SearchableSelectOption } from '../common/SearchableSelect';
 import {
   Truck,
@@ -56,7 +56,8 @@ export const LeftingManagement: React.FC = () => {
     addLeftingRecord,
     updateLeftingRecord,
     deleteLeftingRecord,
-    language
+    language,
+    activeCrop
   } = useMandi();
 
   const isEn = language === 'en';
@@ -76,6 +77,7 @@ export const LeftingManagement: React.FC = () => {
   };
 
   const [date, setDate] = useState<string>(getTodayFormatted());
+  const [cropType, setCropType] = useState<CropType>(activeCrop || 'PADDY');
   const [selectedSellerId, setSelectedSellerId] = useState<string>('');
   const [agency, setAgency] = useState<string>(STANDARD_AGENCIES[1]); // Pungrain default
   const [customAgency, setCustomAgency] = useState<string>('');
@@ -113,6 +115,7 @@ export const LeftingManagement: React.FC = () => {
   }, [trucks, truckNo]);
 
   // Table Filter & Search States
+  const [leftingCropFilter, setLeftingCropFilter] = useState<CropFilterType>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [filterAgency, setFilterAgency] = useState<string>('ALL');
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
@@ -314,6 +317,7 @@ export const LeftingManagement: React.FC = () => {
       photos: allPhotos,
       gatePassNo: gatePassNo.trim() || undefined,
       dispatchDate: date.trim(),
+      cropType,
       status,
       remarks: remarks.trim() || undefined
     });
@@ -424,6 +428,10 @@ export const LeftingManagement: React.FC = () => {
 
   // Filtered Lefting Records
   const filteredRecords = leftingRecords.filter((rec) => {
+    if (leftingCropFilter !== 'ALL') {
+      const itemCrop = rec.cropType || 'PADDY';
+      if (itemCrop !== leftingCropFilter) return false;
+    }
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
       const mId = rec.id.toLowerCase().includes(q);

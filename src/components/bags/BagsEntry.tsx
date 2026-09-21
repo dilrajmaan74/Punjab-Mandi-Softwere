@@ -32,7 +32,8 @@ import {
   calculatePayableAmount,
   autoFormatDate,
   formatCurrency,
-  calculateAutomaticLabour
+  calculateAutomaticLabour,
+  calculateMoistureCut
 } from '../../utils/calculations';
 import { BagsEntryRecord, BardanaType, LabourAndDeductions } from '../../types/mandi';
 import { SearchableSelect, SearchableSelectOption } from '../common/SearchableSelect';
@@ -69,7 +70,9 @@ export const BagsEntry: React.FC = () => {
     settings,
     activeFirm,
     firms,
-    language
+    language,
+    activeCrop,
+    activeCropConfig
   } = useMandi();
   const isEn = language === 'en';
   const { notifySaveSuccess, notifyDeleteSuccess, confirmDelete, notifyError } = useNotification();
@@ -126,6 +129,8 @@ export const BagsEntry: React.FC = () => {
   const [sukkiRateInput, setSukkiRateInput] = useState<string>(
     draft.sukkiRateInput || String(settings?.defaultSukhiLabourRate ?? 5)
   );
+  const [moisturePercentInput, setMoisturePercentInput] = useState<string>('');
+  const [customBagWeightInput, setCustomBagWeightInput] = useState<string>('');
   const [farmerSearchTerm, setFarmerSearchTerm] = useState('');
 
   // Auto-save draft on every change
@@ -212,14 +217,35 @@ export const BagsEntry: React.FC = () => {
 
   const totaKg = Math.max(0, parseFloat(totaInput) || 0);
 
-  // 1. Total Bags Weight (bags * 37.50 KG) -> displayed in Qul + Kg
-  const bagsWeightBreakdown = calculateBagsWeight(bagsCount);
+  // Crop-specific Bag Weight and Rate
+  const effectiveBagWeight = customBagWeightInput && parseFloat(customBagWeightInput) > 0
+    ? parseFloat(customBagWeightInput)
+    : activeCropConfig.defaultBagWeightKg;
 
-  // 2. Grand Total = Bags Weight + Tota -> displayed in Qul + Kg
-  const grandTotalBreakdown = calculateGrandTotal(bagsWeightBreakdown.totalKg, totaKg);
+  const effectiveRatePerQtl = activeCropConfig.defaultRatePerQtl || FIXED_RATE_PER_QTL;
 
-  // 3. Gross Amount at ₹2,461 / Qul
-  const calculatedGrossAmount = calculatePayableAmount(grandTotalBreakdown.totalKg, FIXED_RATE_PER_QTL);
+  // 1. Total Bags Weight (bags * bagWeight KG) -> displayed in Qul + Kg
+  const bagsWeightBreakdown = calculateBagsWeight(bagsCount, effectiveBagWeight);
+
+  // 2. Gross Total = Bags Weight + Tota -> displayed in Qul + Kg
+  const grossTotalBreakdown = calculateGrandTotal(bagsWeightBreakdown.totalKg, totaKg);
+
+  // Moisture cut calculation
+  const moisturePercent = parseFloat(moisturePercentInput) || 0;
+  const moistureCutResult = useMemo(() => {
+    return calculateMoistureCut({
+      totalWeightKg: grossTotalBreakdown.totalKg,
+      moisturePercent,
+      baseMoisturePercent: activeCropConfig.baseMoisturePercent,
+      cutPerPercentKg: activeCropConfig.cutPerMoisturePercentKg
+    });
+  }, [grossTotalBreakdown.totalKg, moisturePercent, activeCropConfig]);
+
+  // Net Weight after moisture cut
+  const grandTotalBreakdown = calculateGrandTotal(moistureCutResult.netWeightKg, 0);
+
+  // 3. Gross Amount at crop rate
+  const calculatedGrossAmount = calculatePayableAmount(grandTotalBreakdown.totalKg, effectiveRatePerQtl);
 
   // Custom user-editable labour rates (Pakki, Double, Sukki)
   const customRates = useMemo(() => {
@@ -255,11 +281,17 @@ export const BagsEntry: React.FC = () => {
   const conditionBreakdown = labourSummary.conditionBreakdown;
   const hasActiveDeductions = totalLabourDeduction > 0;
 
-  // Filtered saved entries for quick search and editing
+  const [savedCropFilter, setSavedCropFilter] = useState<CropFilterType>('ALL');
+
+  // Filtered saved entries for quick search, crop filter, and editing
   const filteredSavedEntries = useMemo(() => {
-    if (!savedSearchQuery.trim()) return bagsEntries;
+    let list = bagsEntries;
+    if (savedCropFilter !== 'ALL') {
+      list = list.filter((b) => (b.cropType || 'PADDY') === savedCropFilter);
+    }
+    if (!savedSearchQuery.trim()) return list;
     const q = savedSearchQuery.toLowerCase().trim();
-    return bagsEntries.filter(
+    return list.filter(
       (b) =>
         b.entryNumber.toLowerCase().includes(q) ||
         (b.parchiNo && b.parchiNo.toString().includes(q)) ||
@@ -272,7 +304,7 @@ export const BagsEntry: React.FC = () => {
         b.farmerMobile.includes(q) ||
         b.date.includes(q)
     );
-  }, [bagsEntries, savedSearchQuery]);
+  }, [bagsEntries, savedSearchQuery, savedCropFilter]);
 
   const handleDeleteBagsEntry = (entry: BagsEntryRecord) => {
     confirmDelete({
@@ -357,14 +389,17 @@ export const BagsEntry: React.FC = () => {
       newBags: newBagsCount,
       oldBags: oldBagsCount,
       bags: bagsCount,
-      weightPerBagKg: FIXED_BAG_WEIGHT_KG, // 37.50
+      weightPerBagKg: effectiveBagWeight,
+      cropType: activeCrop,
+      moisturePercent: moisturePercent > 0 ? moisturePercent : undefined,
+      moistureCutKg: moistureCutResult.cutKg > 0 ? moistureCutResult.cutKg : undefined,
       totalBagsWeightKg: bagsWeightBreakdown.totalKg,
       totalBagsWeightDisplay: bagsWeightBreakdown.displayEn, // e.g. "37 Qul 50 Kg"
       totaKg: totaKg, // e.g. 20 Kg
       grandTotalKg: grandTotalBreakdown.totalKg,
       grandTotalDisplay: grandTotalBreakdown.displayEn, // e.g. "37 Qul 70 Kg"
       bardana: bardanaType,
-      ratePerQtl: FIXED_RATE_PER_QTL, // 2461
+      ratePerQtl: effectiveRatePerQtl,
       totalAmount: calculatedGrossAmount,
       labourDeductions: labourDeductions,
       conditionBreakdown: conditionBreakdown,
@@ -710,7 +745,7 @@ export const BagsEntry: React.FC = () => {
                 </div>
               </div>
 
-              {/* Auto-Calculated Total Bags Summary Bar */}
+              {/* Auto-Calculated Total Bags Summary Bar with Crop Indicator */}
               <div className="bg-gradient-to-r from-slate-50 to-slate-100 border border-slate-200 rounded-lg p-2.5 flex flex-wrap items-center justify-between gap-2 text-xs">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-slate-700 font-bold">{isEn ? 'Total Bags:' : 'ਕੁੱਲ ਬੋਰੀਆਂ (Total Bags):'}</span>
@@ -721,10 +756,88 @@ export const BagsEntry: React.FC = () => {
                     ({newBagsCount} {isEn ? 'New' : 'ਨਵਾਂ'} + {oldBagsCount} {isEn ? 'Old' : 'ਪੁਰਾਣਾ'})
                   </span>
                 </div>
-                <div className="flex items-center gap-1.5 text-emerald-900 font-bold text-[11px]">
-                  <span>{isEn ? 'Std Bag Weight:' : 'ਨਿਰਧਾਰਿਤ ਵਜ਼ਨ:'}</span>
-                  <strong className="font-mono bg-emerald-100 px-1.5 py-0.5 rounded">37.50 KG / Bag</strong>
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-bold text-slate-600">
+                    {isEn ? 'Active Crop:' : 'ਫਸਲ:'}
+                  </span>
+                  <span className="font-black text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300">
+                    {activeCropConfig.namePa}
+                  </span>
+                  <span className="text-[11px] text-slate-500">
+                    ({effectiveBagWeight} KG / {isEn ? 'Bag' : 'ਬੋਰੀ'})
+                  </span>
                 </div>
+              </div>
+
+              {/* Crop Specific Options: Custom Bag Weight & Moisture Deduction (ਨਮੀ ਕਾਟ) */}
+              <div className="bg-amber-50/50 border border-amber-200/80 rounded-lg p-3 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-black text-amber-950 flex items-center gap-1.5">
+                    <span>🌾</span>
+                    <span>{isEn ? 'Crop Specific Weighment & Moisture (ਨਮੀ ਕਾਟ)' : `ਫਸਲ ਵਿਸ਼ੇਸ਼ ਵਜ਼ਨ ਅਤੇ ਨਮੀ ਕਾਟ (${activeCropConfig.namePa.split(' ')[0]})`}</span>
+                  </span>
+                  <span className="text-[10px] text-slate-500 font-medium">
+                    {isEn ? `Base Moisture: ${activeCropConfig.baseMoisturePercent}%` : `ਸਰਕਾਰੀ ਮਿਆਰੀ ਨਮੀ: ${activeCropConfig.baseMoisturePercent}%`}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* Custom Bag Weight */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1 flex items-center justify-between">
+                      <span>{isEn ? 'Bag Weight (Kg)' : 'ਇੱਕ ਬੋਰੀ ਦਾ ਵਜ਼ਨ (Kg)'}</span>
+                      <span className="text-[10px] text-slate-500">
+                        {isEn ? `Default: ${activeCropConfig.defaultBagWeightKg} Kg` : `ਨਿਰਧਾਰਿਤ: ${activeCropConfig.defaultBagWeightKg} ਕਿਲੋ`}
+                      </span>
+                    </label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      placeholder={String(activeCropConfig.defaultBagWeightKg)}
+                      value={customBagWeightInput}
+                      onChange={(e) => setCustomBagWeightInput(e.target.value)}
+                      className="w-full bg-white border border-slate-300 rounded-lg py-1.5 px-2.5 text-xs font-mono font-bold text-slate-900 focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
+
+                  {/* Moisture Percentage */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1 flex items-center justify-between">
+                      <span>{isEn ? 'Moisture / ਨਮੀ (%)' : 'ਨਮੀ / Moisture (%)'}</span>
+                      {moistureCutResult.excessMoisture > 0 && (
+                        <span className="text-[10px] font-bold text-rose-600">
+                          +{moistureCutResult.excessMoisture}% ({isEn ? 'Cut' : 'ਕਾਟ'}: -{moistureCutResult.cutKg} Kg)
+                        </span>
+                      )}
+                    </label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      max="35"
+                      placeholder={isEn ? `Standard ${activeCropConfig.baseMoisturePercent}%` : `ਮਿਆਰ: ${activeCropConfig.baseMoisturePercent}%`}
+                      value={moisturePercentInput}
+                      onChange={(e) => setMoisturePercentInput(e.target.value)}
+                      className={`w-full bg-white border rounded-lg py-1.5 px-2.5 text-xs font-mono font-bold focus:outline-none ${
+                        moistureCutResult.excessMoisture > 0
+                          ? 'border-rose-300 text-rose-900 bg-rose-50/30 focus:border-rose-500'
+                          : 'border-slate-300 text-slate-900 focus:border-amber-500'
+                      }`}
+                    />
+                  </div>
+                </div>
+
+                {/* Moisture Cut Alert */}
+                {moistureCutResult.cutKg > 0 && (
+                  <div className="bg-rose-50 border border-rose-200 rounded-lg p-2 text-xs text-rose-900 flex items-center justify-between">
+                    <span>
+                      ⚠️ <strong>ਨਮੀ ਕਾਟ (Moisture Cut):</strong> {moisturePercent}% ਨਮੀ ਤੇ {moistureCutResult.excessMoisture}% ਵਾਧੂ ਨਮੀ ਬਦਲੇ <strong>-{moistureCutResult.cutKg} ਕਿਲੋ</strong> ਵਜ਼ਨ ਕੱਟਿਆ ਗਿਆ।
+                    </span>
+                    <span className="font-mono font-bold text-rose-800 shrink-0 ml-2">
+                      ਸਾਫ਼ ਵਜ਼ਨ: {grandTotalBreakdown.displayPa}
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -1054,10 +1167,18 @@ export const BagsEntry: React.FC = () => {
             <div className="bg-slate-900 text-white rounded-xl p-4 shadow-2xs border border-slate-800 space-y-3.5">
               <h3 className="font-black text-xs uppercase tracking-wider text-emerald-400 border-b border-slate-800 pb-2 flex items-center justify-between">
                 <span>{isEn ? 'Final Summary' : 'ਹਿਸਾਬ ਸਾਰੰਸ਼ (Final Summary)'}</span>
-                <span className="text-[10px] text-slate-400 font-mono">₹2,461 / Qul</span>
+                <span className="text-[10px] text-amber-300 font-mono font-bold">₹{effectiveRatePerQtl} / Qtl</span>
               </h3>
 
               <div className="space-y-2.5 text-xs">
+                {/* Crop Badge */}
+                <div className="flex items-center justify-between px-2 py-1 bg-slate-800/80 rounded border border-slate-700 text-[11px]">
+                  <span className="text-slate-400">{isEn ? 'Selected Crop:' : 'ਚੁਣੀ ਫਸਲ:'}</span>
+                  <span className="font-bold text-amber-300 font-mono">
+                    {activeCropConfig.namePa} ({effectiveBagWeight} Kg)
+                  </span>
+                </div>
+
                 {/* 0. Bardana Breakdown */}
                 <div className="bg-slate-800/90 rounded-lg p-2.5 border border-slate-700">
                   <div className="text-[11px] text-slate-400 font-semibold mb-1">
@@ -1079,7 +1200,7 @@ export const BagsEntry: React.FC = () => {
                 <div className="bg-slate-800/80 rounded-lg p-2.5 border border-slate-700/60">
                   <div className="text-[11px] text-slate-400 flex justify-between">
                     <span>{isEn ? 'Bags Total Weight:' : 'ਕੁੱਲ ਬੋਰੀਆਂ ਦਾ ਵਜ਼ਨ:'}</span>
-                    <span className="font-mono text-slate-300">{bagsCount} × 37.50 KG</span>
+                    <span className="font-mono text-slate-300">{bagsCount} × {effectiveBagWeight} KG</span>
                   </div>
                   <div className="text-base font-mono font-black text-white mt-0.5">
                     {bagsWeightBreakdown.displayEn}
@@ -1100,11 +1221,26 @@ export const BagsEntry: React.FC = () => {
                   </span>
                 </div>
 
+                {/* Moisture Cut Deduction Line if present */}
+                {moistureCutResult.cutKg > 0 && (
+                  <div className="bg-rose-950/60 border border-rose-800/70 rounded-lg p-2 text-rose-300 flex items-center justify-between text-[11px]">
+                    <div>
+                      <span className="block font-bold">ਨਮੀ ਕਾਟ ({moisturePercent}%)</span>
+                      <span className="text-[10px] opacity-80">+{moistureCutResult.excessMoisture}% ਮਿਆਰੋਂ ਵੱਧ</span>
+                    </div>
+                    <span className="font-mono font-black text-rose-200">
+                      -{moistureCutResult.cutKg} Kg
+                    </span>
+                  </div>
+                )}
+
                 {/* 3. Grand Total (Qul + Kg) */}
                 <div className="bg-slate-800/90 border border-slate-700 rounded-lg p-2.5">
                   <div className="text-[11px] text-slate-300 flex justify-between">
-                    <span>{isEn ? 'Grand Total Weight:' : 'ਗ੍ਰੈਂਡ ਟੋਟਲ ਵਜ਼ਨ (Grand Total):'}</span>
-                    <span className="font-mono text-[10px] text-slate-400">Bags + Tota</span>
+                    <span>{isEn ? 'Grand Total Weight:' : 'ਸਾਫ਼ ਕੁੱਲ ਵਜ਼ਨ (Net Total):'}</span>
+                    <span className="font-mono text-[10px] text-slate-400">
+                      {moistureCutResult.cutKg > 0 ? 'After Moisture Cut' : 'Bags + Tota'}
+                    </span>
                   </div>
                   <div className="text-lg font-mono font-black text-white mt-0.5">
                     {grandTotalBreakdown.displayEn}
@@ -1114,8 +1250,8 @@ export const BagsEntry: React.FC = () => {
 
                 {/* 4. Mandi Rate */}
                 <div className="pt-2 border-t border-slate-800 flex justify-between items-center">
-                  <span className="text-slate-400 text-xs font-semibold">{isEn ? 'Govt. MSP Rate:' : 'ਸਰਕਾਰੀ ਭਾਅ:'}</span>
-                  <span className="font-mono font-bold text-white text-xs">₹2,461 / Qul</span>
+                  <span className="text-slate-400 text-xs font-semibold">{isEn ? 'MSP / Mandi Rate:' : 'ਦਰ / ਭਾਅ:'}</span>
+                  <span className="font-mono font-bold text-amber-300 text-xs">₹{effectiveRatePerQtl} / Qtl</span>
                 </div>
 
                 {/* Gross Amount */}
@@ -1240,15 +1376,42 @@ export const BagsEntry: React.FC = () => {
             </div>
           </div>
 
-          <div className="w-full sm:w-72 relative">
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              placeholder={isEn ? 'Search slip #, farmer, village...' : 'ਪਰਚੀ ਨੰਬਰ, ਕਿਸਾਨ ਜਾਂ ਪਿੰਡ ਖੋਜੋ...'}
-              value={savedSearchQuery}
-              onChange={(e) => setSavedSearchQuery(e.target.value)}
-              className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-900 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-200"
-            />
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Crop Filter Pill Buttons */}
+            <div className="inline-flex items-center bg-slate-100 p-1 rounded-lg border border-slate-200 text-xs">
+              {(
+                [
+                  { id: 'ALL', labelPa: 'ਸਭ ਫਸਲਾਂ (All)', labelEn: 'All Crops' },
+                  { id: 'WHEAT', labelPa: '🌾 ਕਣਕ', labelEn: '🌾 Wheat' },
+                  { id: 'MAIZE', labelPa: '🌽 ਮੱਕੀ', labelEn: '🌽 Maize' },
+                  { id: 'PADDY', labelPa: '🍚 ਝੋਨਾ', labelEn: '🍚 Paddy' },
+                ] as { id: CropFilterType; labelPa: string; labelEn: string }[]
+              ).map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setSavedCropFilter(tab.id)}
+                  className={`px-2 py-1 rounded-md font-bold transition select-none cursor-pointer ${
+                    savedCropFilter === tab.id
+                      ? 'bg-white text-indigo-900 shadow-xs ring-1 ring-slate-300'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                  }`}
+                >
+                  {isEn ? tab.labelEn : tab.labelPa}
+                </button>
+              ))}
+            </div>
+
+            <div className="w-full sm:w-64 relative">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder={isEn ? 'Search slip #, farmer, village...' : 'ਪਰਚੀ ਨੰਬਰ, ਕਿਸਾਨ ਜਾਂ ਪਿੰਡ ਖੋਜੋ...'}
+                value={savedSearchQuery}
+                onChange={(e) => setSavedSearchQuery(e.target.value)}
+                className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-900 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-200"
+              />
+            </div>
           </div>
         </div>
 

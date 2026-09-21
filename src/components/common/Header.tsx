@@ -22,6 +22,7 @@ import { SupabaseSyncModal } from '../supabase/SupabaseSyncModal';
 import { GoogleSheetsSyncModal } from '../farmer/GoogleSheetsSyncModal';
 import { useGoogleSheetsSync } from '../../context/GoogleSheetsSyncContext';
 import { TopQuickNavigationBar } from './TopQuickNavigationBar';
+import { CropSwitcher } from './CropSwitcher';
 
 export const Header: React.FC = () => {
   const {
@@ -136,6 +137,9 @@ export const Header: React.FC = () => {
                 ))}
               </select>
             </div>
+
+            {/* Active Crop Switcher (Wheat / Maize / Paddy) */}
+            <CropSwitcher />
 
             {/* Seller Master Button */}
             <button

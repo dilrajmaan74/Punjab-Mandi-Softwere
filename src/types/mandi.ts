@@ -74,6 +74,61 @@ export type BardanaType = 'OLD' | 'NEW' | 'BOTH';
 export type BardanaSourceType = 'SELLER' | 'AGENCY' | 'OTHER_PARTY';
 export type BardanaAction = 'RECEIVE' | 'PURCHASE' | 'RETURN' | 'GIVE';
 
+export type CropType = 'PADDY' | 'WHEAT' | 'MAIZE';
+export type CropFilterType = CropType | 'ALL';
+
+export interface CropConfig {
+  id: CropType;
+  nameEn: string;
+  namePa: string;
+  seasonEn: string;
+  seasonPa: string;
+  defaultBagWeightKg: number; // e.g. 37.5 for Paddy, 50.0 for Wheat, 50.0 for Maize
+  defaultRatePerQtl: number; // e.g. 2320/2461 for Paddy, 2275/2425 for Wheat, 2090/2225 for Maize
+  isWeighbridgeDirectSupported: boolean; // Direct trolley weighment for Maize
+  baseMoisturePercent: number; // Standard Govt allowance e.g. 17% for Paddy, 12% for Wheat, 14% for Maize
+  cutPerMoisturePercentKg: number; // Deduction kg per Qtl for each 1% above base
+}
+
+export const CROP_CONFIGS: Record<CropType, CropConfig> = {
+  PADDY: {
+    id: 'PADDY',
+    nameEn: 'Paddy / Jhona (ਝੋਨਾ)',
+    namePa: 'ਝੋਨਾ (Paddy / ਬਾਸਮਤੀ)',
+    seasonEn: 'Kharif',
+    seasonPa: 'ਸਾਉਣੀ',
+    defaultBagWeightKg: 37.5,
+    defaultRatePerQtl: 2461,
+    isWeighbridgeDirectSupported: false,
+    baseMoisturePercent: 17.0,
+    cutPerMoisturePercentKg: 1.0
+  },
+  WHEAT: {
+    id: 'WHEAT',
+    nameEn: 'Wheat / Kanak (ਕਣਕ)',
+    namePa: 'ਕਣਕ (Wheat / ਹਾੜ੍ਹੀ)',
+    seasonEn: 'Rabi',
+    seasonPa: 'ਹਾੜ੍ਹੀ',
+    defaultBagWeightKg: 50.0,
+    defaultRatePerQtl: 2425,
+    isWeighbridgeDirectSupported: false,
+    baseMoisturePercent: 12.0,
+    cutPerMoisturePercentKg: 1.0
+  },
+  MAIZE: {
+    id: 'MAIZE',
+    nameEn: 'Maize / Makki (ਮੱਕੀ)',
+    namePa: 'ਮੱਕੀ (Maize / ਛੱਲੀ)',
+    seasonEn: 'Summer/Kharif',
+    seasonPa: 'ਗਰਮੀ/ਸਾਉਣੀ',
+    defaultBagWeightKg: 50.0,
+    defaultRatePerQtl: 2225,
+    isWeighbridgeDirectSupported: true,
+    baseMoisturePercent: 14.0,
+    cutPerMoisturePercentKg: 1.5
+  }
+};
+
 export interface MandiFirm {
   id: string; // e.g. "FIRM-001"
   name: string; // "Jammu Trading Co"
@@ -138,6 +193,7 @@ export interface BardanaReceivedRecord {
   otherPartyName?: string; // Other party/arhtiya for borrow/loan
   partyMobile?: string;
   partyAddress?: string;
+  cropType?: CropType; // 'PADDY' | 'WHEAT' | 'MAIZE'
   bardanaType: BardanaType; // 'NEW' | 'OLD' | 'BOTH'
   newBoxCount?: number; // 1 box = 500 bags
   newLooseBags?: number; // Loose new bags
@@ -285,6 +341,12 @@ export interface BagsEntryRecord {
   totaKg: number; // separate Tota in Kg
   grandTotalKg: number; // totalBagsWeightKg + totaKg
   grandTotalDisplay: string; // e.g. "37 Qul 70 Kg"
+  cropType?: CropType; // 'PADDY' | 'WHEAT' | 'MAIZE'
+  moisturePercent?: number; // e.g. 19.5%
+  moistureCutKg?: number; // Cut in KG based on moisture
+  isDirectWeighbridge?: boolean; // For Maize/Trolley loose weighment
+  trolleyGrossKg?: number; // For loose weighbridge
+  trolleyTareKg?: number; // For loose weighbridge
   bardana: BardanaType; // 'NEW' | 'OLD' | 'BOTH'
   ratePerQtl: number; // fixed 2461 (₹2,461 / Qul)
   totalAmount: number; // (grandTotalKg / 100) * 2461
@@ -322,6 +384,8 @@ export interface DailyPurchaseRecord {
   mainFarmerNamePa?: string;
   newBags?: number; // Count of New Bardana Bags (ਨਵਾਂ ਬਾਰਦਾਨਾ)
   oldBags?: number; // Count of Old Bardana Bags (ਪੁਰਾਣਾ ਬਾਰਦਾਨਾ)
+  cropType?: CropType;
+  moisturePercent?: number;
   bags: number;
   qul: number;
   kg: number;
@@ -660,6 +724,7 @@ export interface LeftingRecord {
   qul: number;
   kg: number;
   totalWeightKg: number; // (qul * 100) + kg
+  cropType?: CropType; // 'PADDY' | 'WHEAT' | 'MAIZE'
   destination: string; // Mill / Sheller Address
   truckNo: string; // e.g. "PB-10-AZ-1234"
   driverName: string;

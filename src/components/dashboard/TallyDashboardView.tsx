@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useMandi } from '../../context/MandiContext';
-import { NavigationSection } from '../../types/mandi';
+import { NavigationSection, Farmer } from '../../types/mandi';
 import {
   Search,
   Command,
@@ -37,9 +37,11 @@ export const TallyDashboardView: React.FC<TallyDashboardViewProps> = ({ onExitTa
     leftingRecords,
     boliRecords,
     dailyPurchaseRecords,
+    farmerAdvances,
     activeFirm,
     activeFiscalYear,
     setActiveSection,
+    setSelectedFarmerForAccount,
     language
   } = useMandi();
 
@@ -69,8 +71,8 @@ export const TallyDashboardView: React.FC<TallyDashboardViewProps> = ({ onExitTa
   }, [bagsEntries]);
 
   const totalAdvance = useMemo(() => {
-    return farmers.reduce((sum, f) => sum + (Number(f.openingBalance) || 0), 0);
-  }, [farmers]);
+    return (farmerAdvances || []).reduce((sum, a) => sum + (Number(a.amount ?? a.principal) || 0), 0);
+  }, [farmerAdvances]);
 
   // Classic Gateway of Tally Menu Structure
   const gatewayMenu = [
@@ -184,15 +186,20 @@ export const TallyDashboardView: React.FC<TallyDashboardViewProps> = ({ onExitTa
       ];
     }
     const q = goToQuery.toLowerCase();
-    const list: { label: string; section: NavigationSection; tag: string }[] = [];
+    const list: { label: string; section: NavigationSection; tag: string; farmer?: Farmer }[] = [];
 
     // Search farmers
     farmers.forEach(f => {
-      if (f.name.toLowerCase().includes(q) || (f.namePa && f.namePa.includes(q)) || f.accountNumber.includes(q) || (f.village && f.village.toLowerCase().includes(q))) {
+      const fName = f.farmerName || '';
+      const fNamePa = f.farmerNamePa || '';
+      const vName = f.village || '';
+      const aNo = f.bankDetails?.accountNumber || f.id;
+      if (fName.toLowerCase().includes(q) || fNamePa.includes(q) || aNo.includes(q) || vName.toLowerCase().includes(q)) {
         list.push({
-          label: `${f.name} (${f.village || 'No Village'}) - A/c #${f.accountNumber}`,
+          label: `${fName} (${vName || 'ਪਿੰਡ ਨਾਦਰੁਸਤ'}) - ${f.id}`,
           section: 'farmer-account',
-          tag: 'Farmer'
+          tag: 'Farmer',
+          farmer: f
         });
       }
     });
@@ -224,7 +231,7 @@ export const TallyDashboardView: React.FC<TallyDashboardViewProps> = ({ onExitTa
           <div className="hidden sm:flex items-center gap-2 text-slate-300 font-mono text-[11px]">
             <span className="text-amber-400 font-bold">{activeFirm?.name || 'Jammu Trading Company'}</span>
             <span>|</span>
-            <span>FY: {activeFiscalYear?.year || '2024-2025'}</span>
+            <span>FY: {activeFiscalYear || '2024-25'}</span>
             <span>|</span>
             <span className="text-emerald-400">{todayDateStr}</span>
           </div>
@@ -476,6 +483,9 @@ export const TallyDashboardView: React.FC<TallyDashboardViewProps> = ({ onExitTa
                     key={idx}
                     onClick={() => {
                       setIsGoToOpen(false);
+                      if (res.farmer) {
+                        setSelectedFarmerForAccount(res.farmer);
+                      }
                       setActiveSection(res.section);
                     }}
                     className="w-full px-3 py-2.5 text-left hover:bg-[#1b4b60] rounded flex items-center justify-between group transition cursor-pointer"

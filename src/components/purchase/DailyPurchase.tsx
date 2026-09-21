@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { DailyPurchaseRecord, Farmer, FarmerPurchaseSummary, LabourAndDeductions } from '../../types/mandi';
+import { DailyPurchaseRecord, Farmer, FarmerPurchaseSummary, LabourAndDeductions, CropFilterType } from '../../types/mandi';
 import { useMandi } from '../../context/MandiContext';
 import { useNotification } from '../../context/NotificationContext';
 import { useFormDraft } from '../../hooks/useFormDraft';
@@ -70,7 +70,9 @@ export const DailyPurchase: React.FC = () => {
     deleteDailyPurchase,
     getFarmerPurchaseSummary,
     setActiveSection,
-    language
+    language,
+    activeCrop,
+    activeCropConfig
   } = useMandi();
 
   const isEn = language === 'en';
@@ -213,6 +215,7 @@ export const DailyPurchase: React.FC = () => {
   const [selectedRecordIds, setSelectedRecordIds] = useState<Set<string>>(new Set());
 
   // All Farmers View filters
+  const [purchaseCropFilter, setPurchaseCropFilter] = useState<CropFilterType>('ALL');
   const [allFarmersSearch, setAllFarmersSearch] = useState<string>('');
   const [allFarmersAgency, setAllFarmersAgency] = useState<string>('ALL');
 
@@ -403,9 +406,11 @@ export const DailyPurchase: React.FC = () => {
       }
     });
 
-    const totalWeightKg = totalBags * FIXED_BAG_WEIGHT_KG;
+    const effectiveBagWeight = activeCropConfig.defaultBagWeightKg || FIXED_BAG_WEIGHT_KG;
+    const effectiveRate = activeCropConfig.defaultRatePerQtl || customRate;
+    const totalWeightKg = totalBags * effectiveBagWeight;
     const bDown = formatKgToQulKg(totalWeightKg);
-    const amount = calculatePayableAmount(totalWeightKg, customRate);
+    const amount = calculatePayableAmount(totalWeightKg, effectiveRate);
     const totalLabour = getRowLabourAmount(totalBags, totalWeightKg);
     const netAmount = Math.max(0, Math.round((amount - totalLabour) * 100) / 100);
 
@@ -415,13 +420,15 @@ export const DailyPurchase: React.FC = () => {
       totalOldBags,
       totalBags,
       totalWeightKg,
+      effectiveBagWeight,
+      effectiveRate,
       qul: bDown.qtl,
       kg: bDown.kg,
       amount,
       totalLabour,
       netAmount
     };
-  }, [rows, customRate, activeLabourRate, labourUnit]);
+  }, [rows, customRate, activeLabourRate, labourUnit, activeCropConfig]);
 
   // Handle Save Multi-Farmer Purchases with strict balance reduction checks
   const handleSavePurchases = () => {
@@ -462,9 +469,11 @@ export const DailyPurchase: React.FC = () => {
         const farmer = farmers.find((f) => f.id === row.farmerId);
         if (!farmer) continue;
 
-        const totalWeightKg = row.bags * FIXED_BAG_WEIGHT_KG;
+        const effectiveBagWeight = activeCropConfig.defaultBagWeightKg || FIXED_BAG_WEIGHT_KG;
+        const effectiveRate = activeCropConfig.defaultRatePerQtl || customRate;
+        const totalWeightKg = row.bags * effectiveBagWeight;
         const bDown = formatKgToQulKg(totalWeightKg);
-        const amt = calculatePayableAmount(totalWeightKg, customRate);
+        const amt = calculatePayableAmount(totalWeightKg, effectiveRate);
         const rowLabour = getRowLabourAmount(row.bags, totalWeightKg);
         const rowNet = Math.max(0, Math.round((amt - rowLabour) * 100) / 100);
 
@@ -488,6 +497,7 @@ export const DailyPurchase: React.FC = () => {
         const result = addDailyPurchase({
           date: purchaseDate.trim(),
           agency: fixedAgency,
+          cropType: activeCrop,
           farmerId: farmer.id,
           farmerName: farmer.farmerName,
           farmerNamePa: farmer.farmerNamePa,
@@ -502,7 +512,7 @@ export const DailyPurchase: React.FC = () => {
           qul: bDown.qtl,
           kg: bDown.kg,
           totalWeightKg,
-          rate: customRate,
+          rate: effectiveRate,
           totalAmount: amt,
           labourDeductions: rowLabourDeductions,
           netAmount: rowNet
@@ -579,6 +589,12 @@ export const DailyPurchase: React.FC = () => {
     } = {};
 
     dailyPurchaseRecords.forEach((rec) => {
+      if (purchaseCropFilter !== 'ALL') {
+        const itemCrop = rec.cropType || 'PADDY';
+        if (itemCrop !== purchaseCropFilter) {
+          return;
+        }
+      }
       if (!groups[rec.date]) {
         groups[rec.date] = {
           records: [],
@@ -628,7 +644,7 @@ export const DailyPurchase: React.FC = () => {
       totalLabour: groups[date].totalLabour,
       totalNetAmount: groups[date].totalNetAmount
     }));
-  }, [dailyPurchaseRecords]);
+  }, [dailyPurchaseRecords, purchaseCropFilter]);
 
   // Export Excel / CSV for a specific date
   const exportDateCsv = (date: string, records: DailyPurchaseRecord[]) => {
@@ -825,6 +841,14 @@ export const DailyPurchase: React.FC = () => {
   // Filtered records for "All Farmers View"
   const filteredAllFarmersRecords = useMemo(() => {
     return dailyPurchaseRecords.filter((rec) => {
+      // Crop filter
+      if (purchaseCropFilter !== 'ALL') {
+        const itemCrop = rec.cropType || 'PADDY';
+        if (itemCrop !== purchaseCropFilter) {
+          return false;
+        }
+      }
+
       // Agency filter
       if (allFarmersAgency !== 'ALL' && rec.agency !== allFarmersAgency) {
         return false;
@@ -853,7 +877,7 @@ export const DailyPurchase: React.FC = () => {
       if (dateDiff !== 0) return dateDiff;
       return b.id.localeCompare(a.id);
     });
-  }, [dailyPurchaseRecords, allFarmersAgency, allFarmersSearch]);
+  }, [dailyPurchaseRecords, allFarmersAgency, allFarmersSearch, purchaseCropFilter]);
 
   // Totals for "All Farmers View"
   const allFarmersTotals = useMemo(() => {
@@ -908,6 +932,10 @@ export const DailyPurchase: React.FC = () => {
   const availableDates = useMemo(() => {
     const dateCounts: { [date: string]: number } = {};
     dailyPurchaseRecords.forEach((r) => {
+      if (purchaseCropFilter !== 'ALL') {
+        const itemCrop = r.cropType || 'PADDY';
+        if (itemCrop !== purchaseCropFilter) return;
+      }
       dateCounts[r.date] = (dateCounts[r.date] || 0) + 1;
     });
 
@@ -917,11 +945,17 @@ export const DailyPurchase: React.FC = () => {
         date,
         count: dateCounts[date]
       }));
-  }, [dailyPurchaseRecords]);
+  }, [dailyPurchaseRecords, purchaseCropFilter]);
 
   // Filtered records for "Date-wise View" when a date is selected
   const filteredDateRecords = useMemo(() => {
     return dailyPurchaseRecords.filter((rec) => {
+      if (purchaseCropFilter !== 'ALL') {
+        const itemCrop = rec.cropType || 'PADDY';
+        if (itemCrop !== purchaseCropFilter) {
+          return false;
+        }
+      }
       if (selectedFilterDate !== 'ALL' && rec.date !== selectedFilterDate) {
         return false;
       }
@@ -946,7 +980,7 @@ export const DailyPurchase: React.FC = () => {
       if (dateDiff !== 0) return dateDiff;
       return b.id.localeCompare(a.id);
     });
-  }, [dailyPurchaseRecords, selectedFilterDate, dateViewAgency, dateViewSearch]);
+  }, [dailyPurchaseRecords, selectedFilterDate, dateViewAgency, dateViewSearch, purchaseCropFilter]);
 
   // Totals for selected date in "Date-wise View"
   const dateViewTotals = useMemo(() => {
@@ -1043,9 +1077,13 @@ export const DailyPurchase: React.FC = () => {
             </button>
             <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-lg text-xs">
               <Scale className="w-4 h-4 text-emerald-600" />
-              <span className="text-slate-600 font-bold">{isEn ? 'Govt Rate:' : 'ਸਰਕਾਰੀ ਭਾਅ:'}</span>
-              <span className="font-mono font-black text-emerald-950">₹{customRate} / {isEn ? 'Qtl' : 'ਕੁਇੰਟਲ'}</span>
-              <span className="text-slate-400 text-[10px]">({isEn ? '37.50 Kg / bag' : '37.50 ਕਿਲੋ ਪ੍ਰਤੀ ਬੋਰੀ'})</span>
+              <span className="text-slate-600 font-bold">{isEn ? 'Crop & Rate:' : 'ਫਸਲ ਤੇ ਭਾਅ:'}</span>
+              <span className="font-mono font-black text-amber-900 bg-amber-100 px-2 py-0.5 rounded border border-amber-300">
+                {activeCropConfig.namePa.split(' ')[0]} (₹{rowTotals.effectiveRate}/Qtl)
+              </span>
+              <span className="text-slate-500 text-[11px] font-mono">
+                ({rowTotals.effectiveBagWeight} Kg / {isEn ? 'bag' : 'ਬੋਰੀ'})
+              </span>
             </div>
           </div>
         </div>
@@ -1696,9 +1734,34 @@ export const DailyPurchase: React.FC = () => {
           <div className="space-y-4">
             {/* Filter & Search Bar */}
             <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex flex-col md:flex-row md:items-center justify-between gap-3">
-              <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 flex-1">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 flex-1 flex-wrap">
+                {/* Crop Filter Selector */}
+                <div className="inline-flex items-center bg-white p-1 rounded-lg border border-slate-200 text-xs shrink-0">
+                  {(
+                    [
+                      { id: 'ALL', labelPa: 'ਸਭ ਫਸਲਾਂ', labelEn: 'All' },
+                      { id: 'WHEAT', labelPa: '🌾 ਕਣਕ', labelEn: '🌾 Wheat' },
+                      { id: 'MAIZE', labelPa: '🌽 ਮੱਕੀ', labelEn: '🌽 Maize' },
+                      { id: 'PADDY', labelPa: '🍚 ਝੋਨਾ', labelEn: '🍚 Paddy' },
+                    ] as { id: CropFilterType; labelPa: string; labelEn: string }[]
+                  ).map((tab) => (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => setPurchaseCropFilter(tab.id)}
+                      className={`px-2 py-1 rounded font-bold transition select-none cursor-pointer text-xs ${
+                        purchaseCropFilter === tab.id
+                          ? 'bg-emerald-600 text-white shadow-2xs'
+                          : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                      }`}
+                    >
+                      {isEn ? tab.labelEn : tab.labelPa}
+                    </button>
+                  ))}
+                </div>
+
                 {/* Search text box */}
-                <div className="relative flex-1 min-w-[220px]">
+                <div className="relative flex-1 min-w-[200px]">
                   <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                   <input
                     type="text"
@@ -1723,7 +1786,7 @@ export const DailyPurchase: React.FC = () => {
                 </div>
 
                 {/* Agency filter dropdown */}
-                <div className="w-full sm:w-52">
+                <div className="w-full sm:w-48">
                   <select
                     value={allFarmersAgency}
                     onChange={(e) => setAllFarmersAgency(e.target.value)}
@@ -1739,12 +1802,13 @@ export const DailyPurchase: React.FC = () => {
                 </div>
 
                 {/* Reset Filters */}
-                {(allFarmersSearch || allFarmersAgency !== 'ALL') && (
+                {(allFarmersSearch || allFarmersAgency !== 'ALL' || purchaseCropFilter !== 'ALL') && (
                   <button
                     type="button"
                     onClick={() => {
                       setAllFarmersSearch('');
                       setAllFarmersAgency('ALL');
+                      setPurchaseCropFilter('ALL');
                     }}
                     className="text-xs text-slate-500 hover:text-slate-800 flex items-center gap-1 font-bold px-2 py-1.5 hover:bg-slate-200/60 rounded-lg transition shrink-0"
                     title="ਫਿਲਟਰ ਸਾਫ਼ ਕਰੋ"
@@ -2034,8 +2098,38 @@ export const DailyPurchase: React.FC = () => {
             <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-3">
               <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
                 {/* Date Picker Input & Quick Chips */}
-                <div className="flex flex-col sm:flex-row sm:items-center gap-3 flex-1">
-                  <div className="w-full sm:w-64">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3 flex-1 flex-wrap">
+                  {/* Crop Filter Selector */}
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+                      {isEn ? 'Crop Filter' : 'ਫਸਲ ਫਿਲਟਰ'}
+                    </label>
+                    <div className="inline-flex items-center bg-white p-1 rounded-lg border border-slate-200 text-xs">
+                      {(
+                        [
+                          { id: 'ALL', labelPa: 'ਸਭ ਫਸਲਾਂ', labelEn: 'All' },
+                          { id: 'WHEAT', labelPa: '🌾 ਕਣਕ', labelEn: '🌾 Wheat' },
+                          { id: 'MAIZE', labelPa: '🌽 ਮੱਕੀ', labelEn: '🌽 Maize' },
+                          { id: 'PADDY', labelPa: '🍚 ਝੋਨਾ', labelEn: '🍚 Paddy' },
+                        ] as { id: CropFilterType; labelPa: string; labelEn: string }[]
+                      ).map((tab) => (
+                        <button
+                          key={tab.id}
+                          type="button"
+                          onClick={() => setPurchaseCropFilter(tab.id)}
+                          className={`px-2 py-1 rounded font-bold transition select-none cursor-pointer text-xs ${
+                            purchaseCropFilter === tab.id
+                              ? 'bg-indigo-600 text-white shadow-2xs'
+                              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                          }`}
+                        >
+                          {isEn ? tab.labelEn : tab.labelPa}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="w-full sm:w-56">
                     <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
                       {isEn ? 'Select Date Filter' : 'ਮਿਤੀ ਚੁਣੋ (Date Filter)'}
                     </label>
