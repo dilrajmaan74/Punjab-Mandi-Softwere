@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useMandi } from '../../context/MandiContext';
 import { TodayGlanceBanner } from './TodayGlanceBanner';
+import { TallyDashboardView } from './TallyDashboardView';
 import {
   User,
   UserPlus,
@@ -45,6 +46,8 @@ export const Dashboard: React.FC = () => {
     setSelectedFarmerForBags
   } = useMandi();
 
+  const [isTallyMode, setIsTallyMode] = useState(false);
+
   // Calculate actual aggregates from real entered records (starts empty if no records)
   const totalBagsCount = bagsEntries.reduce((sum, b) => sum + (b.bags || 0), 0);
   const totalBagsWeightKg = bagsEntries.reduce((sum, b) => sum + (b.totalBagsWeightKg || 0), 0);
@@ -54,6 +57,10 @@ export const Dashboard: React.FC = () => {
 
   const bagsWeightBreakdown = formatKgToQulKg(totalBagsWeightKg);
   const grandTotalBreakdown = formatKgToQulKg(combinedGrandTotalKg);
+
+  if (isTallyMode) {
+    return <TallyDashboardView onExitTallyMode={() => setIsTallyMode(false)} />;
+  }
 
   return (
     <div className="space-y-4">
@@ -82,8 +89,16 @@ export const Dashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* Action Buttons */}
+        {/* Action Buttons with Tally Mode Toggle */}
         <div className="flex flex-wrap items-center gap-2 self-start md:self-auto">
+          <button
+            onClick={() => setIsTallyMode(true)}
+            className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black px-3 py-1.5 rounded-lg text-xs transition shadow-2xs active:scale-95 border border-amber-300"
+            title="Switch to Tally Prime Keyboard Style View (ਟੈਲੀ ਮੋਡ)"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-slate-950" />
+            <span>ਟੈਲੀ ਮੋਡ (Tally Prime View)</span>
+          </button>
           <button
             onClick={() => setActiveSection('farmer-registration')}
             className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold px-3 py-1.5 rounded-lg text-xs transition shadow-2xs active:scale-95"
@@ -93,7 +108,7 @@ export const Dashboard: React.FC = () => {
           </button>
           <button
             onClick={() => setActiveSection('bags-entry')}
-            className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black px-3 py-1.5 rounded-lg text-xs transition shadow-2xs active:scale-95"
+            className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white font-bold px-3 py-1.5 rounded-lg text-xs transition shadow-2xs active:scale-95"
           >
             <PackageCheck className="w-3.5 h-3.5" />
             <span>+ ਬੋਰੀਆਂ ਐਂਟਰੀ (Bags Entry)</span>
