@@ -1,0 +1,13 @@
+<resources>
+    <string name="app_name">Punjab Mandi Software | ਪੰਜਾਬ ਮੰਡੀ ਸਾਫਟਵੇਅਰ</string>
+    <string name="app_name_short">Punjab Mandi</string>
+    <string name="dashboard">Dashboard</string>
+    <string name="bags_entry">Bags Entry</string>
+    <string name="daily_purchase">Daily Purchase</string>
+    <string name="farmer_registration">Farmer Registration</string>
+    <string name="bardana_management">Bardana</string>
+    <string name="farmer_account">Farmer Account</string>
+    <string name="lefting">Lefting</string>
+    <string name="reports">Reports</string>
+    <string name="settings">Settings</string>
+</resources>

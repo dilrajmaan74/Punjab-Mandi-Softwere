@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:scaleX="0.65"
+        android:scaleY="0.65"
+        android:translateX="18.9"
+        android:translateY="18.9">
+        <!-- Center Beam Scale / Mandi Kanda -->
+        <path
+            android:fillColor="#FBBF24"
+            android:pathData="M54,20 L57,20 L57,32 L54,32 Z" />
+        <path
+            android:fillColor="#FBBF24"
+            android:pathData="M24,30 L84,30 L84,34 L24,34 Z" />
+        <path
+            android:fillColor="#F59E0B"
+            android:pathData="M54,28 A4,4 0 1,0 54,36 A4,4 0 1,0 54,28 Z" />
+        
+        <!-- Left Scale Pan -->
+        <path
+            android:strokeColor="#FDE68A"
+            android:strokeWidth="2"
+            android:pathData="M28,34 L22,56 M36,34 L42,56" />
+        <path
+            android:fillColor="#FDE68A"
+            android:pathData="M18,56 Q32,68 46,56 Z" />
+            
+        <!-- Right Scale Pan -->
+        <path
+            android:strokeColor="#FDE68A"
+            android:strokeWidth="2"
+            android:pathData="M72,34 L66,56 M80,34 L86,56" />
+        <path
+            android:fillColor="#FDE68A"
+            android:pathData="M62,56 Q76,68 90,56 Z" />
+
+        <!-- Wheat / Grain Stalk Motif -->
+        <path
+            android:fillColor="#34D399"
+            android:pathData="M54,42 Q46,58 54,74 Q62,58 54,42 Z" />
+        <path
+            android:fillColor="#10B981"
+            android:pathData="M54,56 Q42,66 48,80 Q56,72 54,56 Z" />
+        <path
+            android:fillColor="#10B981"
+            android:pathData="M54,56 Q66,66 60,80 Q52,72 54,56 Z" />
+        <!-- Pedestal / Base -->
+        <path
+            android:fillColor="#FBBF24"
+            android:pathData="M52,34 L56,34 L56,86 L52,86 Z" />
+        <path
+            android:fillColor="#D97706"
+            android:pathData="M40,86 L68,86 L72,92 L36,92 Z" />
+    </group>
+</vector>

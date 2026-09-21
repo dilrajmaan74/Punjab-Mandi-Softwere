@@ -1,5 +1,5 @@
 {
-  "name": "Punjab Mandi Software | ਪੰਜਾਬ ਮੰਡੀ ਸਾਫਟਵੇਅਰ",
+  "name": "Punjab Mandi Software",
   "description": "Punjab Mandi Software for Farmer Registration with Aadhaar & Photo OCR, Farmer Linking, Bags Entry (fixed 37.50 KG/bag, Qul + Kg weight, separate Tota, ₹2,475/Qul rate), Optional Labour deductions (Pakki ₹7, Double ₹14, Sukhi ₹5), Agency Purchase with live remaining stock, Separate Advance & Interest calculation, and comprehensive Farmer Account Reconciliation.",
   "requestFramePermissions": ["camera"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]

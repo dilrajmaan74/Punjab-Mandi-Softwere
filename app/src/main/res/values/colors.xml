@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="primary">#047857</color>
+    <color name="primary_variant">#065F46</color>
+    <color name="on_primary">#FFFFFF</color>
+    <color name="secondary">#D97706</color>
+    <color name="background">#F8FAFC</color>
+    <color name="surface">#FFFFFF</color>
+    <color name="wheat_gold">#D97706</color>
+    <color name="paddy_green">#059669</color>
+</resources>
