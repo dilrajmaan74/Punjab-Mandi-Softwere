@@ -35,7 +35,7 @@ import {
   calculateAutomaticLabour,
   calculateMoistureCut
 } from '../../utils/calculations';
-import { BagsEntryRecord, BardanaType, LabourAndDeductions } from '../../types/mandi';
+import { BagsEntryRecord, BardanaType, LabourAndDeductions, CropFilterType } from '../../types/mandi';
 import { SearchableSelect, SearchableSelectOption } from '../common/SearchableSelect';
 import { generateBagsWeighmentWhatsAppMessage, openWhatsApp } from '../../utils/whatsappNotification';
 import { VoiceWeighmentAssistant, ParsedVoiceData } from '../common/VoiceWeighmentAssistant';

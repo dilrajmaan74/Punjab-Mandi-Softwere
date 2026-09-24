@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useMandi } from '../../context/MandiContext';
-import { NavigationSection, Farmer } from '../../types/mandi';
+import { NavigationSection, Farmer, CropType } from '../../types/mandi';
 import {
   Search,
   Command,
@@ -42,7 +42,10 @@ export const TallyDashboardView: React.FC<TallyDashboardViewProps> = ({ onExitTa
     activeFiscalYear,
     setActiveSection,
     setSelectedFarmerForAccount,
-    language
+    language,
+    activeCrop,
+    setActiveCrop,
+    activeCropConfig
   } = useMandi();
 
   const isEn = language === 'en';
@@ -61,14 +64,19 @@ export const TallyDashboardView: React.FC<TallyDashboardViewProps> = ({ onExitTa
     return `${day}/${month}/${year}`;
   }, []);
 
+  // Filter bags entries by activeCrop
+  const cropBagsEntries = useMemo(() => {
+    return bagsEntries.filter((b) => (b.cropType || 'PADDY') === activeCrop);
+  }, [bagsEntries, activeCrop]);
+
   // Total Bags, Amount, Balance
   const totalBags = useMemo(() => {
-    return bagsEntries.reduce((sum, b) => sum + (Number(b.bags) || 0), 0);
-  }, [bagsEntries]);
+    return cropBagsEntries.reduce((sum, b) => sum + (Number(b.bags) || 0), 0);
+  }, [cropBagsEntries]);
 
   const totalAmount = useMemo(() => {
-    return bagsEntries.reduce((sum, b) => sum + (Number(b.netAmount ?? b.totalAmount) || 0), 0);
-  }, [bagsEntries]);
+    return cropBagsEntries.reduce((sum, b) => sum + (Number(b.netAmount ?? b.totalAmount) || 0), 0);
+  }, [cropBagsEntries]);
 
   const totalAdvance = useMemo(() => {
     return (farmerAdvances || []).reduce((sum, a) => sum + (Number(a.amount ?? a.principal) || 0), 0);
@@ -223,7 +231,7 @@ export const TallyDashboardView: React.FC<TallyDashboardViewProps> = ({ onExitTa
       
       {/* Tally Prime Top Bar (Classic Navy Blue / Mustard Gold) */}
       <div className="bg-[#0a1e28] px-4 py-2.5 border-b border-[#225770] flex flex-wrap items-center justify-between gap-3 text-xs">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <div className="flex items-center gap-1.5 px-2.5 py-1 bg-[#f59e0b] text-[#0f2b38] font-black rounded text-xs tracking-wider shadow-sm">
             <span>TALLY PRIME</span>
             <span className="text-[10px] bg-[#0f2b38] text-[#f59e0b] px-1 py-0.2 rounded font-mono">MANDI v4</span>
@@ -234,6 +242,23 @@ export const TallyDashboardView: React.FC<TallyDashboardViewProps> = ({ onExitTa
             <span>FY: {activeFiscalYear || '2024-25'}</span>
             <span>|</span>
             <span className="text-emerald-400">{todayDateStr}</span>
+          </div>
+          {/* Tally Crop Selector */}
+          <div className="flex items-center gap-1 bg-[#091a24] p-1 rounded border border-[#225770]">
+            {(['WHEAT', 'MAIZE', 'PADDY'] as CropType[]).map((crop) => (
+              <button
+                key={crop}
+                type="button"
+                onClick={() => setActiveCrop(crop)}
+                className={`px-2 py-0.5 rounded text-[11px] font-mono font-bold transition cursor-pointer ${
+                  activeCrop === crop
+                    ? 'bg-[#f59e0b] text-[#0f2b38] font-black'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                {crop === 'WHEAT' ? '🌾 WHEAT' : crop === 'MAIZE' ? '🌽 MAIZE' : '🍚 PADDY'}
+              </button>
+            ))}
           </div>
         </div>
 
@@ -277,10 +302,17 @@ export const TallyDashboardView: React.FC<TallyDashboardViewProps> = ({ onExitTa
                 <span>01-Apr-2024 to 31-Mar-2025</span>
                 <span>{todayDateStr}</span>
               </div>
-              <div className="pt-2">
-                <div className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Name of Company / Mandi Firm</div>
-                <div className="text-lg font-black text-white font-mono">{activeFirm?.name || 'Jammu Trading Company'}</div>
-                <div className="text-xs text-slate-300">Market Committee: ਦਾਣਾ ਮੰਡੀ ਕੰਗ ਖੁਰਦ</div>
+              <div className="pt-2 flex items-center justify-between">
+                <div>
+                  <div className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Name of Company / Mandi Firm</div>
+                  <div className="text-lg font-black text-white font-mono">{activeFirm?.name || 'Jammu Trading Company'}</div>
+                  <div className="text-xs text-slate-300">Market Committee: ਦਾਣਾ ਮੰਡੀ ਕੰਗ ਖੁਰਦ</div>
+                </div>
+                <div className="text-right">
+                  <div className="text-[10px] text-amber-400 font-mono uppercase font-bold">SELECTED CROP</div>
+                  <div className="text-sm font-black text-white font-mono">{activeCropConfig.namePa} ({activeCropConfig.nameEn})</div>
+                  <div className="text-[11px] text-slate-400 font-mono">@{activeCropConfig.defaultBagWeightKg}Kg • ₹{activeCropConfig.mspRate}</div>
+                </div>
               </div>
             </div>
 

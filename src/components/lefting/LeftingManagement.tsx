@@ -561,8 +561,8 @@ export const LeftingManagement: React.FC = () => {
           )}
 
           <form onSubmit={handleSaveLefting} className="space-y-5">
-            {/* Top Row: Date, Agency, and Available Stock */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Top Row: Date, Crop, Agency, and Available Stock */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
               {/* Date */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
@@ -573,6 +573,22 @@ export const LeftingManagement: React.FC = () => {
                   onChange={setDate}
                   required
                 />
+              </div>
+
+              {/* Crop Type */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  {isEn ? 'Crop Type' : 'ਫਸਲ ਦੀ ਕਿਸਮ (Crop)'} <span className="text-rose-500">*</span>
+                </label>
+                <select
+                  value={cropType}
+                  onChange={(e) => setCropType(e.target.value as CropType)}
+                  className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-slate-900 focus:outline-none font-bold"
+                >
+                  <option value="PADDY">🍚 ਝੋਨਾ (Paddy)</option>
+                  <option value="WHEAT">🌾 ਕਣਕ (Wheat)</option>
+                  <option value="MAIZE">🌽 ਮੱਕੀ (Maize)</option>
+                </select>
               </div>
 
               {/* Procurement Agency */}
@@ -1014,16 +1030,43 @@ export const LeftingManagement: React.FC = () => {
       {activeTab === 'history' && (
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden space-y-4 p-5">
           {/* Filter Bar */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-            <div className="relative min-w-[280px]">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                value={searchQuery || ''}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="ਗੇਟ ਪਾਸ, ਟਰੱਕ ਨੰਬਰ, ਕਿਸਾਨ ਜਾਂ ਸ਼ੈਲਰ ਖੋਜੋ..."
-                className="w-full pl-9 pr-4 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-slate-900 focus:outline-none"
-              />
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-2 flex-wrap flex-1">
+              {/* Crop Filter Selector */}
+              <div className="inline-flex items-center bg-slate-100 p-1 rounded-lg border border-slate-200 text-xs shrink-0">
+                {(
+                  [
+                    { id: 'ALL', labelPa: 'ਸਭ ਫਸਲਾਂ', labelEn: 'All' },
+                    { id: 'WHEAT', labelPa: '🌾 ਕਣਕ', labelEn: '🌾 Wheat' },
+                    { id: 'MAIZE', labelPa: '🌽 ਮੱਕੀ', labelEn: '🌽 Maize' },
+                    { id: 'PADDY', labelPa: '🍚 ਝੋਨਾ', labelEn: '🍚 Paddy' },
+                  ] as { id: CropFilterType; labelPa: string; labelEn: string }[]
+                ).map((tab) => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setLeftingCropFilter(tab.id)}
+                    className={`px-2 py-1 rounded-md font-bold transition select-none cursor-pointer text-xs ${
+                      leftingCropFilter === tab.id
+                        ? 'bg-white text-indigo-900 shadow-2xs ring-1 ring-slate-300'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                    }`}
+                  >
+                    {isEn ? tab.labelEn : tab.labelPa}
+                  </button>
+                ))}
+              </div>
+
+              <div className="relative min-w-[240px] flex-1">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={searchQuery || ''}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="ਗੇਟ ਪਾਸ, ਟਰੱਕ ਨੰਬਰ, ਕਿਸਾਨ ਜਾਂ ਸ਼ੈਲਰ ਖੋਜੋ..."
+                  className="w-full pl-9 pr-4 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-slate-900 focus:outline-none"
+                />
+              </div>
             </div>
 
             <div className="flex items-center gap-2 flex-wrap min-w-[340px]">
@@ -1075,8 +1118,11 @@ export const LeftingManagement: React.FC = () => {
                   {filteredRecords.map((rec) => (
                     <tr key={rec.id} className="hover:bg-slate-50 transition-colors">
                       <td className="p-3 font-medium text-slate-900">{rec.dispatchDate}</td>
-                      <td className="p-3 font-mono font-bold text-slate-800">
-                        {rec.gatePassNo || rec.id}
+                      <td className="p-3">
+                        <div className="font-mono font-bold text-slate-800">{rec.gatePassNo || rec.id}</div>
+                        <span className="inline-block mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-600">
+                          {rec.cropType === 'WHEAT' ? '🌾 ਕਣਕ (Wheat)' : rec.cropType === 'MAIZE' ? '🌽 ਮੱਕੀ (Maize)' : '🍚 ਝੋਨਾ (Paddy)'}
+                        </span>
                       </td>
                       <td className="p-3">
                         <div className="font-bold text-slate-900">{rec.truckNo}</div>

@@ -34,12 +34,49 @@ export interface Farmer {
   aadhaarBackUrl?: string; // Aadhaar Card BACK
   aadhaarPhotoUrl?: string; // backward compatibility
   bankDetails?: BankDetails;
+
+  // Land & Cultivation Profile (ਜ਼ਮੀਨ ਤੇ ਫਸਲ ਦਾ ਰਿਕਾਰਡ)
+  ownedLandAcres?: number; // ਆਪਣੀ ਜ਼ਮੀਨ (ਏਕੜ/ਕਿੱਲੇ)
+  leasedLandAcres?: number; // ਠੇਕੇ ਵਾਲੀ ਜ਼ਮੀਨ (ਕਿੱਲੇ)
+  leaseRatePerAcre?: number; // ਠੇਕੇ ਦੀ ਰਕਮ ਪ੍ਰਤੀ ਏਕੜ (₹)
+  expectedWheatBags?: number; // ਅੰਦਾਜ਼ਨ ਕਣਕ ਬੋਰੀਆਂ
+  expectedPaddyBags?: number; // ਅੰਦਾਜ਼ਨ ਝੋਨਾ ਬੋਰੀਆਂ
+  creditLimit?: number; // ਉਧਾਰ ਹੱਦ / ਸੁਰੱਖਿਅਤ ਲਿਮਿਟ (₹)
+  openingBalance?: number; // ਪਿਛਲਾ ਓਪਨਿੰਗ ਬੈਲੇਂਸ (+ ਦੇਣਯੋਗ, - ਬਕਾਇਆ)
+  openingBalanceDate?: string; // ਓਪਨਿੰਗ ਬੈਲੇਂਸ ਮਿਤੀ
+  openingBalanceSeason?: string; // ਸੀਜ਼ਨ ਜਿਵੇਂ "ਹਾੜ੍ਹੀ 2025"
+  
   firmId?: string;
   createdAt: string;
   updatedAt?: string;
   isDeleted?: boolean;
   deletedAt?: string;
   deletedBy?: string;
+}
+
+export type AdvanceCategory = 
+  | 'CASH'               // ਨਕਦ ਪੇਸ਼ਗੀ (Cash Advance for household/general)
+  | 'FERTILIZER'         // ਖਾਦ / ਕੀਟਨਾਸ਼ਕ (Fertilizer)
+  | 'SEED'               // ਬੀਜ (Seed)
+  | 'FERTILIZER_SEEDS'   // ਖਾਦ / ਬੀਜ / ਕੀਟਨਾਸ਼ਕ (Fertilizer, Seed & Pesticide)
+  | 'DIESEL'             // ਡੀਜ਼ਲ ਖਾਤਾ / ਪੰਪ ਪਰਚੀ (Diesel / Fuel Slip)
+  | 'MACHINERY'          // ਟਰੈਕਟਰ / ਕੰਬਾਈਨ ਕਿਰਾਇਆ (Machinery / Combine Harvester)
+  | 'PREVIOUS_SEASON'    // ਪਿਛਲੇ ਸੀਜ਼ਨ ਦਾ ਬਕਾਇਆ (Previous Season Balance)
+  | 'PREVIOUS_BALANCE'   // ਪਿਛਲਾ ਬਕਾਇਆ (Previous Balance)
+  | 'OTHER';             // ਹੋਰ ਖਰਚਾ (Other)
+
+export type InterestCalculationMode = 'MONTHLY' | 'YEARLY' | 'INTEREST_FREE';
+export type CompoundingFrequency = 'SIMPLE' | 'HALF_YEARLY' | 'HALF_YEARLY_COMPOUND' | 'YEARLY';
+
+export interface AdvanceRepayment {
+  id: string;
+  date: string; // DD/MM/YYYY
+  amount: number;
+  paymentMode: 'CASH' | 'BANK_TRANSFER' | 'CHEQUE' | 'OTHER';
+  referenceNumber?: string;
+  referenceNo?: string;
+  remarks?: string;
+  createdAt: string;
 }
 
 export interface FarmerAdvanceRecord {
@@ -52,18 +89,40 @@ export interface FarmerAdvanceRecord {
   amount: number; // Principal advance amount in ₹
   principal?: number; // Explicit Principal Amount
   monthlyInterestRate: number; // Interest % per Month (e.g. 2.0)
+  annualInterestRate?: number; // Annual Interest % (e.g. 24.0)
+  interestMode?: InterestCalculationMode; // 'MONTHLY' | 'YEARLY' | 'INTEREST_FREE'
+  compounding?: CompoundingFrequency; // 'SIMPLE' | 'HALF_YEARLY' | 'HALF_YEARLY_COMPOUND' | 'YEARLY'
+  isInterestFree?: boolean; // 0% interest flag
   interestTillDate?: string; // Interest calculated till date / End Date e.g. "04/09/2026"
   endDate?: string; // Explicit End Date
   interestAmount: number; // Calculated interest amount
   totalDays: number; // Total exact days elapsed
   monthsElapsed: number; // Full months elapsed
   daysElapsed: number; // Remaining days elapsed
-  totalPayableWithInterest: number; // Principal + Interest Amount
+  totalPayableWithInterest: number; // Principal + Interest Amount (minus repayments if any)
   totalPayable?: number;
   paymentMode?: 'CASH' | 'BANK_TRANSFER' | 'CHEQUE' | 'OTHER';
   referenceNumber?: string;
   status?: 'ACTIVE' | 'SETTLED' | 'CANCELLED';
   remarks?: string;
+  category?: AdvanceCategory; // Purpose of advance
+  itemDescription?: string; // Specific item details
+  itemDetails?: string; // Specific item details (alias)
+  cropSeason?: CropType | string; // Associated crop season (Wheat/Paddy/Maize)
+  cropType?: CropType; // Associated crop
+  season?: 'KHARIF' | 'RABI' | 'ZAID';
+  guarantorFarmerId?: string; // Reference/Guarantor Farmer
+  guarantorFarmerName?: string;
+  guarantorFarmerNamePa?: string;
+  guarantorName?: string; // Direct name
+  guarantorPhone?: string;
+  guarantorMobile?: string; // Direct mobile
+  voucherPhotoUrl?: string; // Pronote / Signed voucher photo (base64/url)
+  voucherFileName?: string;
+  voucherPhotoName?: string;
+  repayments?: AdvanceRepayment[]; // Partial installments repaid against advance
+  totalRepaid?: number; // Sum of partial repayments
+  netPrincipalRemaining?: number; // Principal - totalRepaid
   firmId?: string;
   fiscalYear?: string;
   createdAt: string;
@@ -85,6 +144,7 @@ export interface CropConfig {
   seasonPa: string;
   defaultBagWeightKg: number; // e.g. 37.5 for Paddy, 50.0 for Wheat, 50.0 for Maize
   defaultRatePerQtl: number; // e.g. 2320/2461 for Paddy, 2275/2425 for Wheat, 2090/2225 for Maize
+  mspRate?: number; // alias for defaultRatePerQtl
   isWeighbridgeDirectSupported: boolean; // Direct trolley weighment for Maize
   baseMoisturePercent: number; // Standard Govt allowance e.g. 17% for Paddy, 12% for Wheat, 14% for Maize
   cutPerMoisturePercentKg: number; // Deduction kg per Qtl for each 1% above base
@@ -99,6 +159,7 @@ export const CROP_CONFIGS: Record<CropType, CropConfig> = {
     seasonPa: 'ਸਾਉਣੀ',
     defaultBagWeightKg: 37.5,
     defaultRatePerQtl: 2461,
+    mspRate: 2461,
     isWeighbridgeDirectSupported: false,
     baseMoisturePercent: 17.0,
     cutPerMoisturePercentKg: 1.0
@@ -111,6 +172,7 @@ export const CROP_CONFIGS: Record<CropType, CropConfig> = {
     seasonPa: 'ਹਾੜ੍ਹੀ',
     defaultBagWeightKg: 50.0,
     defaultRatePerQtl: 2425,
+    mspRate: 2425,
     isWeighbridgeDirectSupported: false,
     baseMoisturePercent: 12.0,
     cutPerMoisturePercentKg: 1.0
@@ -123,6 +185,7 @@ export const CROP_CONFIGS: Record<CropType, CropConfig> = {
     seasonPa: 'ਗਰਮੀ/ਸਾਉਣੀ',
     defaultBagWeightKg: 50.0,
     defaultRatePerQtl: 2225,
+    mspRate: 2225,
     isWeighbridgeDirectSupported: true,
     baseMoisturePercent: 14.0,
     cutPerMoisturePercentKg: 1.5
@@ -634,6 +697,12 @@ export interface FarmerAccountSummary {
     details?: string;
     rawRecord?: any;
   }[];
+
+  // Opening Balance & Credit Limit
+  openingBalance?: number;
+  creditLimit?: number;
+  creditLimitExceeded?: boolean;
+  creditLimitRemaining?: number;
 }
 
 export interface VillageOption {
@@ -671,6 +740,7 @@ export interface MandiSettings {
   firmAddress?: string; // "Dana Mandi Kang Khurd, Teh. Shahkot, Distt. Jalandhar, Punjab - 144629"
   firmMobile?: string; // "98147-74651"
   firmLicence?: string; // "JAL/LKH/133"
+  licenceNo?: string; // alias for firmLicence
   firmPan?: string; // "AAACJ1234F"
   firmGstin?: string;
   fixedRatePerQtl: number; // 2461

@@ -55,7 +55,15 @@ export const FarmerEditModal: React.FC<FarmerEditModalProps> = ({
     linkedMainFarmerName: '',
     photoUrl: '',
     aadhaarFrontUrl: '',
-    aadhaarBackUrl: ''
+    aadhaarBackUrl: '',
+    // Land & Cultivation & Credit
+    ownedLandAcres: '',
+    leasedLandAcres: '',
+    leaseRatePerAcre: '',
+    expectedWheatBags: '',
+    expectedPaddyBags: '',
+    creditLimit: '',
+    openingBalance: ''
   });
 
   const [cameraModal, setCameraModal] = useState<{
@@ -83,7 +91,14 @@ export const FarmerEditModal: React.FC<FarmerEditModalProps> = ({
         linkedMainFarmerName: farmer.linkedMainFarmerName || '',
         photoUrl: farmer.photoUrl || '',
         aadhaarFrontUrl: farmer.aadhaarFrontUrl || farmer.aadhaarPhotoUrl || '',
-        aadhaarBackUrl: farmer.aadhaarBackUrl || ''
+        aadhaarBackUrl: farmer.aadhaarBackUrl || '',
+        ownedLandAcres: farmer.ownedLandAcres !== undefined ? String(farmer.ownedLandAcres) : '',
+        leasedLandAcres: farmer.leasedLandAcres !== undefined ? String(farmer.leasedLandAcres) : '',
+        leaseRatePerAcre: farmer.leaseRatePerAcre !== undefined ? String(farmer.leaseRatePerAcre) : '',
+        expectedWheatBags: farmer.expectedWheatBags !== undefined ? String(farmer.expectedWheatBags) : '',
+        expectedPaddyBags: farmer.expectedPaddyBags !== undefined ? String(farmer.expectedPaddyBags) : '',
+        creditLimit: farmer.creditLimit !== undefined ? String(farmer.creditLimit) : '',
+        openingBalance: farmer.openingBalance !== undefined ? String(farmer.openingBalance) : ''
       });
       setErrorMsg('');
       setIsUpdating(false);
@@ -187,6 +202,14 @@ export const FarmerEditModal: React.FC<FarmerEditModalProps> = ({
       aadhaarFrontUrl: formData.aadhaarFrontUrl || undefined,
       aadhaarBackUrl: formData.aadhaarBackUrl || undefined,
       aadhaarPhotoUrl: formData.aadhaarFrontUrl || farmer.aadhaarPhotoUrl,
+      // Land & Cultivation & Credit
+      ownedLandAcres: formData.ownedLandAcres ? parseFloat(formData.ownedLandAcres) : undefined,
+      leasedLandAcres: formData.leasedLandAcres ? parseFloat(formData.leasedLandAcres) : undefined,
+      leaseRatePerAcre: formData.leaseRatePerAcre ? parseFloat(formData.leaseRatePerAcre) : undefined,
+      expectedWheatBags: formData.expectedWheatBags ? parseInt(formData.expectedWheatBags, 10) : undefined,
+      expectedPaddyBags: formData.expectedPaddyBags ? parseInt(formData.expectedPaddyBags, 10) : undefined,
+      creditLimit: formData.creditLimit ? parseFloat(formData.creditLimit) : undefined,
+      openingBalance: formData.openingBalance ? parseFloat(formData.openingBalance) : undefined,
       updatedAt: new Date().toISOString()
     };
 
@@ -393,6 +416,131 @@ export const FarmerEditModal: React.FC<FarmerEditModalProps> = ({
                   });
                 }}
               />
+            </div>
+          </div>
+
+          {/* Section 3.5: Land & Cultivation Profile & Credit Limit (ਨਵਾਂ: ਜ਼ਮੀਨ ਅਤੇ ਉਧਾਰ ਲਿਮਿਟ) */}
+          <div className="bg-amber-50/60 border border-amber-200 rounded-xl p-3.5 space-y-3">
+            <h4 className="text-xs font-black text-amber-950 border-b border-amber-200 pb-1.5 flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <span className="text-sm">🌾</span>
+                <span>ਜ਼ਮੀਨ, ਫਸਲ ਅਤੇ ਉਧਾਰ ਲਿਮਿਟ (Land, Yield & Credit Limit)</span>
+              </div>
+              <span className="text-[10px] text-amber-800 font-bold bg-amber-100 px-2 py-0.5 rounded">
+                ਸੁਰੱਖਿਅਤ ਮੁਨੀਮੀ ਹੱਦ
+              </span>
+            </h4>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  ਆਪਣੀ ਜ਼ਮੀਨ (ਏਕੜ/ਕਿੱਲੇ)
+                </label>
+                <input
+                  type="number"
+                  step="0.25"
+                  min="0"
+                  placeholder="e.g. 5"
+                  value={formData.ownedLandAcres}
+                  onChange={(e) => setFormData({ ...formData, ownedLandAcres: e.target.value })}
+                  className="w-full bg-white border border-slate-300 rounded-lg p-2 text-xs font-mono font-bold text-slate-900 focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  ਠੇਕੇ 'ਤੇ ਜ਼ਮੀਨ (ਕਿੱਲੇ)
+                </label>
+                <input
+                  type="number"
+                  step="0.25"
+                  min="0"
+                  placeholder="e.g. 8"
+                  value={formData.leasedLandAcres}
+                  onChange={(e) => setFormData({ ...formData, leasedLandAcres: e.target.value })}
+                  className="w-full bg-white border border-slate-300 rounded-lg p-2 text-xs font-mono font-bold text-slate-900 focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  ਠੇਕਾ ਰੇਟ ₹ ਪ੍ਰਤੀ ਏਕੜ
+                </label>
+                <input
+                  type="number"
+                  step="1000"
+                  min="0"
+                  placeholder="e.g. 60000"
+                  value={formData.leaseRatePerAcre}
+                  onChange={(e) => setFormData({ ...formData, leaseRatePerAcre: e.target.value })}
+                  className="w-full bg-white border border-slate-300 rounded-lg p-2 text-xs font-mono font-bold text-slate-900 focus:outline-none focus:border-amber-500"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  ਅੰਦਾਜ਼ਨ ਕਣਕ (ਬੋਰੀਆਂ)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  placeholder="e.g. 250"
+                  value={formData.expectedWheatBags}
+                  onChange={(e) => setFormData({ ...formData, expectedWheatBags: e.target.value })}
+                  className="w-full bg-white border border-slate-300 rounded-lg p-2 text-xs font-mono font-bold text-slate-900 focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  ਅੰਦਾਜ਼ਨ ਝੋਨਾ (ਬੋਰੀਆਂ)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  placeholder="e.g. 400"
+                  value={formData.expectedPaddyBags}
+                  onChange={(e) => setFormData({ ...formData, expectedPaddyBags: e.target.value })}
+                  className="w-full bg-white border border-slate-300 rounded-lg p-2 text-xs font-mono font-bold text-slate-900 focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-rose-800 mb-1">
+                  ਉਧਾਰ ਲਿਮਿਟ (Credit Limit ₹)
+                </label>
+                <input
+                  type="number"
+                  step="5000"
+                  min="0"
+                  placeholder="e.g. 500000"
+                  value={formData.creditLimit}
+                  onChange={(e) => setFormData({ ...formData, creditLimit: e.target.value })}
+                  className="w-full bg-white border-2 border-rose-300 rounded-lg p-2 text-xs font-mono font-black text-rose-950 focus:outline-none focus:border-rose-600"
+                />
+                <span className="text-[10px] text-slate-500">ਐਡਵਾਂਸ ਟੱਪਣ 'ਤੇ ਅਲਰਟ ਆਵੇਗਾ</span>
+              </div>
+            </div>
+
+            <div className="pt-2 border-t border-amber-200">
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                ਪਿਛਲਾ ਓਪਨਿੰਗ ਬੈਲੇਂਸ (Opening Balance ₹)
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  step="1"
+                  placeholder="+ ਰਕਮ ਜੇ ਕਿਸਾਨ ਨੂੰ ਦੇਣੀ ਹੈ, - ਰਕਮ ਜੇ ਕਿਸਾਨ ਵੱਲ ਬਾਕੀ ਹੈ (e.g. -25000)"
+                  value={formData.openingBalance}
+                  onChange={(e) => setFormData({ ...formData, openingBalance: e.target.value })}
+                  className="w-full bg-white border border-slate-300 rounded-lg p-2 text-xs font-mono font-bold text-slate-900 focus:outline-none focus:border-amber-500"
+                />
+              </div>
+              <span className="text-[10px] text-slate-500">
+                ਨੋਟ: ਜੇਕਰ ਕਿਸਾਨ ਵੱਲ ਪਿਛਲਾ ਬਕਾਇਆ ਖੜ੍ਹਾ ਹੈ ਤਾਂ ਮਨਫੀ (-) ਨਾਲ ਭਰੋ (ਜਿਵੇਂ -50000), ਜੇਕਰ ਕਿਸਾਨ ਦੇ ਆੜ੍ਹਤ ਵੱਲ ਜਮ੍ਹਾਂ ਹਨ ਤਾਂ ਪਲੱਸ (+) ਭਰੋ।
+              </span>
             </div>
           </div>
 

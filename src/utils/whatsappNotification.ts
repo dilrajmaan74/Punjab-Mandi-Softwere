@@ -134,20 +134,69 @@ export function generateAdvanceWhatsAppMessage(params: {
 }): string {
   const { advance, farmerName, firm, settings } = params;
   const firmName = firm?.name || settings.firmNameEn || 'Jammu Trading Co';
+  const mandiName = settings.mandiNamePa || settings.mandiNameEn || 'ਦਾਣਾ ਮੰਡੀ ਕੰਗ ਖੁਰਦ';
+  const firmPhone = firm?.mobile || settings.firmMobile || '98147-74651';
 
-  return (
-`📜 *ਪੇਸ਼ਗੀ / ਐਡਵਾਂਸ ਰਿਕਾਰਡ (Advance Receipt)* 📜
------------------------------------
-🏛 *${firmName.toUpperCase()}*
------------------------------------
-👤 *ਕਿਸਾਨ:* ${farmerName} (${advance.farmerId})
-📅 *ਮਿਤੀ:* ${advance.date}
-💵 *ਮੂਲ ਰਕਮ (Principal):* ${formatCurrency(advance.amount)}
-📈 *ਮਾਸਿਕ ਵਿਆਜ ਦਰ:* ${advance.monthlyInterestRate}% ਪ੍ਰਤੀ ਮਹੀਨਾ
------------------------------------
-ਇਹ ਰਕਮ ਤੁਹਾਡੇ ਖਾਤੇ ਵਿੱਚ ਐਡਵਾਂਸ ਵਜੋਂ ਦਰਜ ਹੈ।
-ਧੰਨਵਾਦ! 🙏`
-  );
+  const categoryLabels: Record<string, string> = {
+    CASH: 'ਨਕਦ ਪੇਸ਼ਗੀ (Cash)',
+    FERTILIZER: 'ਖਾਦ / ਦਵਾਈਆਂ (Fertilizer)',
+    SEED: 'ਬੀਜ (Seed)',
+    DIESEL: 'ਡੀਜ਼ਲ / ਤੇਲ (Diesel)',
+    MACHINERY: 'ਟਰੈਕਟਰ / ਮਸ਼ੀਨਰੀ (Machinery)',
+    PREVIOUS_BALANCE: 'ਪਿਛਲਾ ਬਕਾਇਆ (Prev Balance)',
+    OTHER: 'ਹੋਰ ਖਰਚਾ (Other)'
+  };
+
+  const catLabel = advance.category ? (categoryLabels[advance.category] || advance.category) : 'ਨਕਦ ਪੇਸ਼ਗੀ (Cash)';
+  const cropLabel = advance.cropSeason ? `🌾 *ਸੀਜ਼ਨ/ਫਸਲ:* ${advance.cropSeason}` : '';
+  const itemDesc = advance.itemDescription ? `📝 *ਵੇਰਵਾ:* ${advance.itemDescription}` : '';
+  
+  let interestRateText = `${advance.monthlyInterestRate || 0}% ਪ੍ਰਤੀ ਮਹੀਨਾ`;
+  if (advance.isInterestFree || advance.interestMode === 'INTEREST_FREE') {
+    interestRateText = '0% (ਬਿਨਾਂ ਵਿਆਜ / Interest-Free)';
+  } else if (advance.interestMode === 'YEARLY') {
+    interestRateText = `${advance.annualInterestRate || (advance.monthlyInterestRate * 12)}% ਸਾਲਾਨਾ (${advance.compounding === 'HALF_YEARLY' ? 'ਛਿਮਾਹੀ ਚੱਕਰਵਰਤੀ' : 'ਸਾਧਾਰਨ'})`;
+  }
+
+  const principal = formatCurrency(advance.amount || 0);
+  const repaid = (advance.totalRepaid || 0) > 0 ? `💵 *ਕਿਸ਼ਤ ਵਾਪਸੀ (Repaid):* ${formatCurrency(advance.totalRepaid || 0)}` : '';
+  const remainingPrincipal = (advance.netPrincipalRemaining !== undefined && advance.netPrincipalRemaining !== advance.amount)
+    ? `⚖ *ਬਾਕੀ ਮੂਲ (Remaining Principal):* ${formatCurrency(advance.netPrincipalRemaining)}`
+    : '';
+  const interestAmount = formatCurrency(advance.interestAmount || 0);
+  const totalPayable = formatCurrency(advance.totalPayableWithInterest ?? (advance.amount + (advance.interestAmount || 0)));
+  const daysInfo = (advance.totalDays || 0) > 0 ? `⏳ *ਸਮਾਂ:* ${advance.totalDays} ਦਿਨ (${advance.monthsElapsed || 0} ਮਹੀਨੇ ${advance.daysElapsed || 0} ਦਿਨ)` : '';
+  const guarantorInfo = advance.guarantorName ? `🤝 *ਜ਼ਾਮਨ/ਗਰੰਟਰ:* ${advance.guarantorName}${advance.guarantorMobile ? ` (${advance.guarantorMobile})` : ''}` : '';
+
+  const lines = [
+    `📜 *ਪੇਸ਼ਗੀ / ਐਡਵਾਂਸ ਵਾਊਚਰ ਰਸੀਦ (Advance Voucher)* 📜`,
+    `-----------------------------------`,
+    `🏛 *${firmName.toUpperCase()}*`,
+    `📍 ${mandiName} | 📞 ${firmPhone}`,
+    `-----------------------------------`,
+    `👤 *ਕਿਸਾਨ:* ${farmerName} (${advance.farmerId})`,
+    `🧾 *ਵਾਊਚਰ ਨੰਬਰ:* ${advance.id}`,
+    `📅 *ਮਿਤੀ:* ${advance.date}`,
+    `🏷️ *ਮੰਤਵ/ਕੈਟਾਗਰੀ:* ${catLabel}`,
+    cropLabel,
+    itemDesc,
+    `-----------------------------------`,
+    `💰 *ਮੂਲ ਰਕਮ (Principal):* ${principal}`,
+    repaid,
+    remainingPrincipal,
+    `📈 *ਵਿਆਜ ਦਰ (Interest Rate):* ${interestRateText}`,
+    daysInfo,
+    `📊 *ਕੁੱਲ ਵਿਆਜ (Interest Amount):* ${interestAmount}`,
+    `-----------------------------------`,
+    `⭐ *ਕੁੱਲ ਦੇਣਯੋਗ (Net Total Payable):* ${totalPayable}`,
+    guarantorInfo,
+    `-----------------------------------`,
+    `ਇਹ ਰਕਮ ਤੁਹਾਡੇ ਖਾਤੇ ਵਿੱਚ ਐਡਵਾਂਸ ਵਜੋਂ ਦਰਜ ਹੈ।`,
+    `ਕਿਸੇ ਵੀ ਸ਼ੰਕੇ ਲਈ ਆੜ੍ਹਤ ਦੁਕਾਨ 'ਤੇ ਸੰਪਰਕ ਕਰੋ ਜੀ।`,
+    `ਧੰਨਵਾਦ! 🙏`
+  ].filter(Boolean);
+
+  return lines.join('\n');
 }
 
 /**

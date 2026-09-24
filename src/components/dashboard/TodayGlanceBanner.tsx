@@ -85,20 +85,32 @@ export const TodayGlanceBanner: React.FC<TodayGlanceBannerProps> = ({
     return false;
   };
 
-  // 1. Today's Boli Records
+  // 1. Today's Boli Records (filtered by activeCrop)
   const dateBoliRecords = useMemo(() => {
-    return boliRecords.filter(r => isDateMatch(r.date, selectedDate));
-  }, [boliRecords, selectedDate]);
+    return boliRecords.filter(r => {
+      if (!isDateMatch(r.date, selectedDate)) return false;
+      const c = r.crop || 'PADDY';
+      return c === activeCrop;
+    });
+  }, [boliRecords, selectedDate, activeCrop]);
 
-  // 2. Today's Weighment Records (Bags Entries)
+  // 2. Today's Weighment Records (Bags Entries, filtered by activeCrop)
   const dateBagsEntries = useMemo(() => {
-    return bagsEntries.filter(r => isDateMatch(r.date, selectedDate));
-  }, [bagsEntries, selectedDate]);
+    return bagsEntries.filter(r => {
+      if (!isDateMatch(r.date, selectedDate)) return false;
+      const c = r.cropType || 'PADDY';
+      return c === activeCrop;
+    });
+  }, [bagsEntries, selectedDate, activeCrop]);
 
-  // 3. Today's Lifting Records
+  // 3. Today's Lifting Records (filtered by activeCrop)
   const dateLiftingRecords = useMemo(() => {
-    return leftingRecords.filter(r => isDateMatch(r.date, selectedDate));
-  }, [leftingRecords, selectedDate]);
+    return leftingRecords.filter(r => {
+      if (!isDateMatch(r.date, selectedDate)) return false;
+      const c = r.cropType || 'PADDY';
+      return c === activeCrop;
+    });
+  }, [leftingRecords, selectedDate, activeCrop]);
 
   // Calculations for Today
   // Arrival: from Boli heaps or estimated
@@ -145,14 +157,18 @@ export const TodayGlanceBanner: React.FC<TodayGlanceBannerProps> = ({
   // Yard / Pharr Balance
   const dayYardBalance = weighedBags - liftedBags;
 
-  // Overall Season Stock in Yard
+  // Overall Season Stock in Yard (filtered by activeCrop)
   const totalSeasonWeighedBags = useMemo(() => {
-    return bagsEntries.reduce((sum, r) => sum + (Number(r.bags) || 0), 0);
-  }, [bagsEntries]);
+    return bagsEntries
+      .filter((r) => (r.cropType || 'PADDY') === activeCrop)
+      .reduce((sum, r) => sum + (Number(r.bags) || 0), 0);
+  }, [bagsEntries, activeCrop]);
 
   const totalSeasonLiftedBags = useMemo(() => {
-    return leftingRecords.reduce((sum, r) => sum + (Number(r.bags) || 0), 0);
-  }, [leftingRecords]);
+    return leftingRecords
+      .filter((r) => (r.cropType || 'PADDY') === activeCrop)
+      .reduce((sum, r) => sum + (Number(r.bags) || 0), 0);
+  }, [leftingRecords, activeCrop]);
 
   const totalSeasonYardStock = totalSeasonWeighedBags - totalSeasonLiftedBags;
 

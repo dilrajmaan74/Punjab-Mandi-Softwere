@@ -2,7 +2,9 @@ import React, { useState, useMemo } from 'react';
 import {
   BardanaReceivedRecord,
   BardanaSourceType,
-  BardanaType
+  BardanaType,
+  CropFilterType,
+  CropType
 } from '../../types/mandi';
 import { useMandi } from '../../context/MandiContext';
 import { useNotification } from '../../context/NotificationContext';
@@ -123,6 +125,7 @@ export const BardanaManagement: React.FC = () => {
   const [isSellerModalOpen, setIsSellerModalOpen] = useState<boolean>(false);
 
   // Table Filter & Search States
+  const [bardanaCropFilter, setBardanaCropFilter] = useState<CropFilterType>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [filterAgency, setFilterAgency] = useState<string>('ALL');
   const [filterSourceType, setFilterSourceType] = useState<string>('ALL');
@@ -138,7 +141,7 @@ export const BardanaManagement: React.FC = () => {
   const [editRecord, setEditRecord] = useState<BardanaReceivedRecord | null>(null);
 
   // Computed Inventory Summary
-  const summary = getBardanaSummary();
+  const summary = useMemo(() => getBardanaSummary(bardanaCropFilter), [getBardanaSummary, bardanaCropFilter]);
 
   const agencyOptions: SearchableSelectOption[] = useMemo(() => {
     const opts: SearchableSelectOption[] = STANDARD_AGENCIES.map((ag) => ({
@@ -269,6 +272,7 @@ export const BardanaManagement: React.FC = () => {
         agency: effectiveAgency,
         actionType,
         receivedFrom,
+        cropType: (activeCrop as CropType) || 'PADDY',
         sellerId: selectedSellerId || undefined,
         sourceName: effectiveSourceName,
         otherPartyName: receivedFrom === 'OTHER_PARTY' ? effectiveSourceName : undefined,
@@ -350,6 +354,14 @@ export const BardanaManagement: React.FC = () => {
 
   // Filtered Bardana Received Records
   const filteredRecords = bardanaRecords.filter((rec) => {
+    // Crop filter
+    if (bardanaCropFilter !== 'ALL') {
+      const itemCrop = rec.cropType || 'PADDY';
+      if (itemCrop !== bardanaCropFilter) {
+        return false;
+      }
+    }
+
     // Search query
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
@@ -405,6 +417,7 @@ export const BardanaManagement: React.FC = () => {
     id: string;
     type: 'RECEIVED' | 'ISSUED';
     date: string;
+    cropType?: CropType;
     bardanaType: BardanaType;
     boxes?: number;
     bags: number;
@@ -426,6 +439,7 @@ export const BardanaManagement: React.FC = () => {
       id: r.id,
       type: 'RECEIVED' as const,
       date: r.date,
+      cropType: r.cropType || 'PADDY',
       bardanaType: r.bardanaType,
       boxes: r.boxes,
       bags: r.bags,
@@ -438,6 +452,7 @@ export const BardanaManagement: React.FC = () => {
     })),
     ...bagsEntries.flatMap((b) => {
       const results: UnifiedTransaction[] = [];
+      const itemCrop = b.cropType || 'PADDY';
       const hasSplit = b.newBags !== undefined || b.oldBags !== undefined;
       if (hasSplit) {
         if ((b.newBags || 0) > 0) {
@@ -445,6 +460,7 @@ export const BardanaManagement: React.FC = () => {
             id: `${b.entryNumber || b.id}-NEW`,
             type: 'ISSUED' as const,
             date: b.date,
+            cropType: itemCrop,
             bardanaType: 'NEW' as BardanaType,
             bags: b.newBags || 0,
             farmerId: b.farmerId,
@@ -461,6 +477,7 @@ export const BardanaManagement: React.FC = () => {
             id: `${b.entryNumber || b.id}-OLD`,
             type: 'ISSUED' as const,
             date: b.date,
+            cropType: itemCrop,
             bardanaType: 'OLD' as BardanaType,
             bags: b.oldBags || 0,
             farmerId: b.farmerId,
@@ -477,6 +494,7 @@ export const BardanaManagement: React.FC = () => {
             id: b.entryNumber || b.id,
             type: 'ISSUED' as const,
             date: b.date,
+            cropType: itemCrop,
             bardanaType: b.bardana || 'NEW',
             bags: b.bags,
             farmerId: b.farmerId,
@@ -493,6 +511,7 @@ export const BardanaManagement: React.FC = () => {
           id: b.entryNumber || b.id,
           type: 'ISSUED' as const,
           date: b.date,
+          cropType: itemCrop,
           bardanaType: b.bardana || 'NEW',
           bags: b.bags,
           farmerId: b.farmerId,
@@ -509,6 +528,12 @@ export const BardanaManagement: React.FC = () => {
   ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
   const filteredHistory = unifiedHistory.filter((item) => {
+    if (bardanaCropFilter !== 'ALL') {
+      const itemCrop = item.cropType || 'PADDY';
+      if (itemCrop !== bardanaCropFilter) {
+        return false;
+      }
+    }
     if (historyTypeFilter !== 'ALL' && item.type !== historyTypeFilter) {
       return false;
     }
@@ -627,6 +652,43 @@ export const BardanaManagement: React.FC = () => {
         </div>
       </div>
     </div>
+
+      {/* Crop Filter Bar for Bardana */}
+      <div className="bg-slate-50 border border-slate-200 rounded-xl p-2.5 flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-bold text-slate-700">
+            {isEn ? 'Filter by Crop:' : 'ਫਸਲ ਅਨੁਸਾਰ ਫਿਲਟਰ (Crop):'}
+          </span>
+          <div className="inline-flex items-center bg-white p-1 rounded-lg border border-slate-200 text-xs">
+            {(
+              [
+                { id: 'ALL', labelPa: 'ਸਭ ਫਸਲਾਂ (All)', labelEn: 'All Crops' },
+                { id: 'WHEAT', labelPa: '🌾 ਕਣਕ (Wheat)', labelEn: '🌾 Wheat' },
+                { id: 'MAIZE', labelPa: '🌽 ਮੱਕੀ (Maize)', labelEn: '🌽 Maize' },
+                { id: 'PADDY', labelPa: '🍚 ਝੋਨਾ (Paddy)', labelEn: '🍚 Paddy' },
+              ] as { id: CropFilterType; labelPa: string; labelEn: string }[]
+            ).map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setBardanaCropFilter(tab.id)}
+                className={`px-2.5 py-1 rounded font-bold transition select-none cursor-pointer text-xs ${
+                  bardanaCropFilter === tab.id
+                    ? 'bg-emerald-600 text-white shadow-2xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                }`}
+              >
+                {isEn ? tab.labelEn : tab.labelPa}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="text-[11px] text-slate-500 font-medium">
+          {bardanaCropFilter === 'ALL'
+            ? (isEn ? 'Showing cumulative stock across all crops' : 'ਸਾਰੀਆਂ ਫਸਲਾਂ ਦਾ ਸਮੁੱਚਾ ਬਾਰਦਾਨਾ ਸਟਾਕ')
+            : (isEn ? `Showing ${bardanaCropFilter} crop bardana stock` : `${bardanaCropFilter === 'WHEAT' ? 'ਕਣਕ' : bardanaCropFilter === 'MAIZE' ? 'ਮੱਕੀ' : 'ਝੋਨਾ'} ਲਈ ਬਾਰਦਾਨਾ ਸਟਾਕ`)}
+        </div>
+      </div>
 
       {/* Real-time Inventory KPI Ribbon */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">

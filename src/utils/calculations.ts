@@ -827,11 +827,17 @@ export function formatDateToDDMMYYYY(d: Date = new Date()): string {
 export interface AdvanceInterestCalculation {
   principal: number;
   monthlyInterestRate: number; // % per month
+  annualInterestRate: number; // % per year
+  interestMode: 'MONTHLY' | 'YEARLY' | 'INTEREST_FREE';
+  compounding: 'SIMPLE' | 'HALF_YEARLY' | 'HALF_YEARLY_COMPOUND' | 'YEARLY';
+  isInterestFree: boolean;
   startDate: string;
   endDate: string;
   totalDays: number;
   monthsElapsed: number;
   daysElapsed: number;
+  totalRepaid: number;
+  netPrincipalRemaining: number;
   interestAmount: number;
   totalPayableWithInterest: number;
   totalPayable: number; // alias
@@ -840,20 +846,23 @@ export interface AdvanceInterestCalculation {
 }
 
 /**
- * Calculate Date-to-Date Advance Interest (independent from other payments)
- * Formula:
- * - Total Days = (End Date - Start Date)
- * - Full Months = Math.floor(Total Days / 30)
- * - Remaining Days = Total Days % 30
- * - Monthly Interest = Principal * (Rate% / 100)
- * - Total Interest = (Full Months * Monthly Interest) + ((Remaining Days / 30) * Monthly Interest)
+ * Calculate Date-to-Date Advance Interest with flexible modes:
+ * - Monthly Rate (% per month, e.g. 2%) OR Yearly Rate (% per annum, e.g. 24%)
+ * - 0% Interest Free mode
+ * - Compounding: Simple vs Half-Yearly (every 6 months interest adds to principal)
+ * - Partial Repayments handling
  */
 export function calculateAdvanceInterest(
   principalOrOptions:
     | number
     | {
         principal: number;
-        monthlyInterestRate: number;
+        monthlyInterestRate?: number;
+        annualInterestRate?: number;
+        interestMode?: 'MONTHLY' | 'YEARLY' | 'INTEREST_FREE';
+        compounding?: 'SIMPLE' | 'HALF_YEARLY' | 'HALF_YEARLY_COMPOUND' | 'YEARLY';
+        isInterestFree?: boolean;
+        repayments?: { amount: number; date?: string }[];
         startDateStr?: string;
         startDate?: string;
         endDateStr?: string;
@@ -865,17 +874,39 @@ export function calculateAdvanceInterest(
 ): AdvanceInterestCalculation {
   let principal = 0;
   let rate = 0;
+  let annualRate = 0;
+  let interestMode: 'MONTHLY' | 'YEARLY' | 'INTEREST_FREE' = 'MONTHLY';
+  let compounding: 'SIMPLE' | 'HALF_YEARLY' | 'HALF_YEARLY_COMPOUND' | 'YEARLY' = 'SIMPLE';
+  let isInterestFree = false;
+  let repayments: { amount: number; date?: string }[] = [];
   let start = '';
   let end = '';
 
   if (typeof principalOrOptions === 'object' && principalOrOptions !== null) {
     principal = Math.max(0, Number(principalOrOptions.principal) || 0);
-    rate = Math.max(0, Number(principalOrOptions.monthlyInterestRate) || 0);
+    isInterestFree = Boolean(principalOrOptions.isInterestFree);
+    interestMode = principalOrOptions.interestMode || (isInterestFree ? 'INTEREST_FREE' : 'MONTHLY');
+    compounding = principalOrOptions.compounding || 'SIMPLE';
+    repayments = Array.isArray(principalOrOptions.repayments) ? principalOrOptions.repayments : [];
+
+    if (isInterestFree || interestMode === 'INTEREST_FREE') {
+      rate = 0;
+      annualRate = 0;
+      isInterestFree = true;
+    } else if (interestMode === 'YEARLY' && principalOrOptions.annualInterestRate !== undefined) {
+      annualRate = Math.max(0, Number(principalOrOptions.annualInterestRate) || 0);
+      rate = Math.round((annualRate / 12) * 1000) / 1000;
+    } else {
+      rate = Math.max(0, Number(principalOrOptions.monthlyInterestRate) || 0);
+      annualRate = Math.round(rate * 12 * 100) / 100;
+    }
+
     start = (principalOrOptions.startDateStr || principalOrOptions.startDate || '').trim();
     end = (principalOrOptions.endDateStr || principalOrOptions.endDate || '').trim();
   } else {
     principal = Math.max(0, Number(principalOrOptions) || 0);
     rate = Math.max(0, Number(monthlyRatePercent) || 0);
+    annualRate = Math.round(rate * 12 * 100) / 100;
     start = (startDateStr || '').trim();
     end = (endDateStr || '').trim();
   }
@@ -925,10 +956,44 @@ export function calculateAdvanceInterest(
     daysElapsed = Math.max(0, Math.round(remainingMs / (1000 * 60 * 60 * 24)));
   }
 
-  const monthlyInterest = principal * (rate / 100);
-  const dailyInterest = monthlyInterest / 30;
-  const interestAmount = Math.round(((monthsElapsed * monthlyInterest) + (daysElapsed * dailyInterest)) * 100) / 100;
-  const totalPayableWithInterest = Math.round((principal + interestAmount) * 100) / 100;
+  // Calculate Repayments
+  const totalRepaid = Math.round(
+    repayments.reduce((sum, r) => sum + (Number(r.amount) || 0), 0) * 100
+  ) / 100;
+  const netPrincipalRemaining = Math.max(0, Math.round((principal - totalRepaid) * 100) / 100);
+
+  // Interest computation
+  let interestAmount = 0;
+
+  if (!isInterestFree && rate > 0 && principal > 0) {
+    if ((compounding === 'HALF_YEARLY_COMPOUND' || compounding === 'HALF_YEARLY') && monthsElapsed >= 6) {
+      // 6-monthly compounding cycle
+      let currentPrincipal = principal;
+      let remainingMonths = monthsElapsed;
+
+      while (remainingMonths >= 6) {
+        const periodInterest = currentPrincipal * (rate / 100) * 6;
+        currentPrincipal += periodInterest;
+        remainingMonths -= 6;
+      }
+
+      // Remaining odd months and days on the updated principal
+      const oddMonthInterest = currentPrincipal * (rate / 100) * remainingMonths;
+      const oddDaysInterest = (currentPrincipal * (rate / 100) / 30) * daysElapsed;
+      interestAmount = Math.round((currentPrincipal - principal + oddMonthInterest + oddDaysInterest) * 100) / 100;
+    } else {
+      // Simple Interest on Principal
+      const monthlyInterest = principal * (rate / 100);
+      const dailyInterest = monthlyInterest / 30;
+      interestAmount = Math.round(((monthsElapsed * monthlyInterest) + (daysElapsed * dailyInterest)) * 100) / 100;
+    }
+  }
+
+  // Total payable with interest, accounting for any repayments
+  const totalPayableWithInterest = Math.max(
+    0,
+    Math.round((principal + interestAmount - totalRepaid) * 100) / 100
+  );
 
   const formattedDurationEn = `${monthsElapsed} Months ${daysElapsed} Days (${totalDays} Days)`;
   const formattedDurationPa = `${monthsElapsed} ਮਹੀਨੇ ${daysElapsed} ਦਿਨ (ਕੁੱਲ ${totalDays} ਦਿਨ)`;
@@ -936,11 +1001,17 @@ export function calculateAdvanceInterest(
   return {
     principal,
     monthlyInterestRate: rate,
+    annualInterestRate: annualRate,
+    interestMode,
+    compounding,
+    isInterestFree,
     startDate,
     endDate,
     totalDays,
     monthsElapsed,
     daysElapsed,
+    totalRepaid,
+    netPrincipalRemaining,
     interestAmount,
     totalPayableWithInterest,
     totalPayable: totalPayableWithInterest,

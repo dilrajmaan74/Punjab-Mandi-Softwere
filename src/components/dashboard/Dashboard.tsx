@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useMandi } from '../../context/MandiContext';
+import { CropFilterType, CropType } from '../../types/mandi';
 import { TodayGlanceBanner } from './TodayGlanceBanner';
 import { TallyDashboardView } from './TallyDashboardView';
 import {
@@ -43,17 +44,34 @@ export const Dashboard: React.FC = () => {
     setActiveSection,
     setActiveReceipt,
     setActiveBagsEntryToEdit,
-    setSelectedFarmerForBags
+    setSelectedFarmerForBags,
+    activeCrop,
+    setActiveCrop,
+    activeCropConfig,
+    language
   } = useMandi();
 
+  const isEn = language === 'en';
   const [isTallyMode, setIsTallyMode] = useState(false);
+  const [dashboardCropFilter, setDashboardCropFilter] = useState<CropFilterType>(activeCrop);
 
-  // Calculate actual aggregates from real entered records (starts empty if no records)
-  const totalBagsCount = bagsEntries.reduce((sum, b) => sum + (b.bags || 0), 0);
-  const totalBagsWeightKg = bagsEntries.reduce((sum, b) => sum + (b.totalBagsWeightKg || 0), 0);
-  const totalTotaKg = bagsEntries.reduce((sum, b) => sum + (b.totaKg || 0), 0);
+  // Sync with activeCrop whenever it changes from header or elsewhere
+  useEffect(() => {
+    setDashboardCropFilter(activeCrop);
+  }, [activeCrop]);
+
+  // Filter bags entries by selected crop
+  const filteredBagsEntries = useMemo(() => {
+    if (dashboardCropFilter === 'ALL') return bagsEntries;
+    return bagsEntries.filter((b) => (b.cropType || 'PADDY') === dashboardCropFilter);
+  }, [bagsEntries, dashboardCropFilter]);
+
+  // Calculate actual aggregates from filtered entered records
+  const totalBagsCount = filteredBagsEntries.reduce((sum, b) => sum + (b.bags || 0), 0);
+  const totalBagsWeightKg = filteredBagsEntries.reduce((sum, b) => sum + (b.totalBagsWeightKg || 0), 0);
+  const totalTotaKg = filteredBagsEntries.reduce((sum, b) => sum + (b.totaKg || 0), 0);
   const combinedGrandTotalKg = totalBagsWeightKg + totalTotaKg;
-  const totalAmountPayable = bagsEntries.reduce((sum, b) => sum + (b.totalAmount || 0), 0);
+  const totalAmountPayable = filteredBagsEntries.reduce((sum, b) => sum + (b.totalAmount || 0), 0);
 
   const bagsWeightBreakdown = formatKgToQulKg(totalBagsWeightKg);
   const grandTotalBreakdown = formatKgToQulKg(combinedGrandTotalKg);
@@ -71,6 +89,46 @@ export const Dashboard: React.FC = () => {
         onOpenLifting={() => setActiveSection('lefting')}
       />
 
+      {/* Crop Filter Bar: All / Wheat / Maize / Paddy */}
+      <div className="flex items-center justify-between bg-white border border-slate-200 rounded-xl p-2.5 shadow-2xs gap-2 flex-wrap">
+        <div className="flex items-center gap-2">
+          <Scale className="w-4 h-4 text-emerald-600" />
+          <span className="text-xs font-black text-slate-800">
+            {isEn ? 'Filter Dashboard By Crop:' : 'ਫਸਲ ਅਨੁਸਾਰ ਡਾਟਾ ਵੇਖੋ (Crop Filter):'}
+          </span>
+        </div>
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {[
+            { id: 'WHEAT' as CropFilterType, label: '🌾 ਕਣਕ (Wheat)', weight: '50.00 Kg', color: 'bg-amber-500 text-slate-950 ring-amber-400' },
+            { id: 'MAIZE' as CropFilterType, label: '🌽 ਮੱਕੀ (Maize)', weight: '50/60 Kg', color: 'bg-yellow-400 text-slate-950 ring-yellow-300' },
+            { id: 'PADDY' as CropFilterType, label: '🍚 ਝੋਨਾ (Paddy)', weight: '37.50 Kg', color: 'bg-emerald-600 text-white ring-emerald-500' },
+            { id: 'ALL' as CropFilterType, label: 'ਸਾਰੀਆਂ ਫਸਲਾਂ (All Crops)', weight: 'ਕੁੱਲ ਡਾਟਾ', color: 'bg-slate-800 text-white ring-slate-700' }
+          ].map((tab) => {
+            const isSelected = dashboardCropFilter === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => {
+                  setDashboardCropFilter(tab.id);
+                  if (tab.id !== 'ALL') {
+                    setActiveCrop(tab.id as CropType);
+                  }
+                }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer select-none ${
+                  isSelected
+                    ? `${tab.color} shadow-xs ring-2 font-black scale-102`
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                }`}
+              >
+                <span>{tab.label}</span>
+                <span className="text-[10px] opacity-80 font-mono">({tab.weight})</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       {/* Welcome Banner */}
       <div className="bg-slate-900 text-white rounded-xl p-4 sm:p-5 shadow-2xs border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="space-y-1">
@@ -83,7 +141,7 @@ export const Dashboard: React.FC = () => {
                 Punjab Mandi Software • ਪੰਜਾਬ ਮੰਡੀ ਸਾਫਟਵੇਅਰ
               </h2>
               <p className="text-xs text-slate-300">
-                ਕਿਸਾਨ ਰਜਿਸਟ੍ਰੇਸ਼ਨ, ਆਧਾਰ ਪੜਤਾਲ, ਬੈਂਕ ਵੇਰਵੇ, 37.50 KG ਬੋਰੀ ਵਜ਼ਨ ਤੇ ₹2,461/ਕੁਇੰਟਲ ਭਾਅ ਪ੍ਰਬੰਧਨ
+                {activeCropConfig.namePa} ({activeCropConfig.nameEn}) • {activeCropConfig.defaultBagWeightKg} KG ਭਰਤੀ • ₹{activeCropConfig.mspRate}/ਕੁਇੰਟਲ MSP
               </p>
             </div>
           </div>
@@ -93,7 +151,7 @@ export const Dashboard: React.FC = () => {
         <div className="flex flex-wrap items-center gap-2 self-start md:self-auto">
           <button
             onClick={() => setIsTallyMode(true)}
-            className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black px-3 py-1.5 rounded-lg text-xs transition shadow-2xs active:scale-95 border border-amber-300"
+            className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black px-3 py-1.5 rounded-lg text-xs transition shadow-2xs active:scale-95 border border-amber-300 cursor-pointer"
             title="Switch to Tally Prime Keyboard Style View (ਟੈਲੀ ਮੋਡ)"
           >
             <Sparkles className="w-3.5 h-3.5 text-slate-950" />
@@ -101,14 +159,14 @@ export const Dashboard: React.FC = () => {
           </button>
           <button
             onClick={() => setActiveSection('farmer-registration')}
-            className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold px-3 py-1.5 rounded-lg text-xs transition shadow-2xs active:scale-95"
+            className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold px-3 py-1.5 rounded-lg text-xs transition shadow-2xs active:scale-95 cursor-pointer"
           >
             <UserPlus className="w-3.5 h-3.5" />
             <span>+ ਕਿਸਾਨ ਰਜਿਸਟ੍ਰੇਸ਼ਨ (Register Farmer)</span>
           </button>
           <button
             onClick={() => setActiveSection('bags-entry')}
-            className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white font-bold px-3 py-1.5 rounded-lg text-xs transition shadow-2xs active:scale-95"
+            className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white font-bold px-3 py-1.5 rounded-lg text-xs transition shadow-2xs active:scale-95 cursor-pointer"
           >
             <PackageCheck className="w-3.5 h-3.5" />
             <span>+ ਬੋਰੀਆਂ ਐਂਟਰੀ (Bags Entry)</span>
@@ -116,7 +174,7 @@ export const Dashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* KPI Metric Summary Strip (Calculated purely from actual entered data) */}
+      {/* Aggregate Stats Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
         {/* Total Farmers */}
         <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs">
@@ -135,7 +193,9 @@ export const Dashboard: React.FC = () => {
             <Package className="w-3.5 h-3.5 text-amber-600" />
           </div>
           <div className="text-lg font-black text-slate-900 mt-1 font-mono">{totalBagsCount}</div>
-          <div className="text-[10px] text-slate-400">@ 37.50 KG / Bag</div>
+          <div className="text-[10px] text-slate-400">
+            {dashboardCropFilter !== 'ALL' ? `@ ${activeCropConfig.defaultBagWeightKg} KG / Bag` : 'ਸਭ ਫਸਲਾਂ'}
+          </div>
         </div>
 
         {/* Total Bags Weight (Qul + Kg) */}
@@ -172,7 +232,7 @@ export const Dashboard: React.FC = () => {
           <div className="text-[10px] text-slate-400 truncate">Bags + Tota</div>
         </div>
 
-        {/* Total Value at ₹2,461 / Qul */}
+        {/* Total Value */}
         <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs">
           <div className="flex items-center justify-between text-slate-500 text-[11px] font-semibold">
             <span>ਕੁੱਲ ਰਕਮ (Value)</span>
@@ -181,7 +241,9 @@ export const Dashboard: React.FC = () => {
           <div className="text-sm sm:text-base font-black text-slate-900 mt-1 font-mono truncate">
             {formatCurrency(totalAmountPayable)}
           </div>
-          <div className="text-[10px] text-slate-400">@ ₹2,461 / Qul</div>
+          <div className="text-[10px] text-slate-400">
+            {dashboardCropFilter !== 'ALL' ? `@ ₹${activeCropConfig.mspRate} / Qul` : 'ਸਭ ਫਸਲਾਂ'}
+          </div>
         </div>
       </div>
 
@@ -443,39 +505,62 @@ export const Dashboard: React.FC = () => {
           <div>
             <h3 className="text-xs sm:text-sm font-black text-slate-900">
               ਤਾਜ਼ਾ ਬੋਰੀਆਂ ਐਂਟਰੀਆਂ (Recent Bags Entries)
+              {dashboardCropFilter !== 'ALL' && (
+                <span className="ml-2 text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                  {dashboardCropFilter === 'WHEAT' ? '🌾 ਕਣਕ' : dashboardCropFilter === 'MAIZE' ? '🌽 ਮੱਕੀ' : '🍚 ਝੋਨਾ'}
+                </span>
+              )}
             </h3>
             <p className="text-[11px] text-slate-500">
-              37.50 KG ਫਿਕਸਡ ਵਜ਼ਨ, ਵੱਖਰਾ ਟੋਟਾ ਤੇ ₹2,461/ਕੁਇੰਟਲ ਹਿਸਾਬ
+              {dashboardCropFilter !== 'ALL'
+                ? `${activeCropConfig.namePa} • ${activeCropConfig.defaultBagWeightKg} KG ਭਰਤੀ • ₹${activeCropConfig.mspRate}/ਕੁਇੰਟਲ ਭਾਅ`
+                : 'ਸਾਰੀਆਂ ਫਸਲਾਂ ਦੀਆਂ ਤਾਜ਼ਾ ਐਂਟਰੀਆਂ'}
             </p>
           </div>
-          {bagsEntries.length > 0 && (
+          {filteredBagsEntries.length > 0 && (
             <button
               onClick={() => setActiveSection('reports')}
-              className="text-xs font-bold text-emerald-600 hover:text-emerald-700 hover:underline"
+              className="text-xs font-bold text-emerald-600 hover:text-emerald-700 hover:underline cursor-pointer"
             >
               ਸਾਰੀਆਂ ਦੇਖੋ (View All) →
             </button>
           )}
         </div>
 
-        {bagsEntries.length === 0 ? (
+        {filteredBagsEntries.length === 0 ? (
           <div className="p-8 text-center space-y-3">
             <div className="w-12 h-12 bg-slate-100 text-slate-400 rounded-full flex items-center justify-center mx-auto">
               <PackageCheck className="w-6 h-6" />
             </div>
             <div>
-              <h4 className="text-xs font-bold text-slate-700">ਕੋਈ ਐਂਟਰੀ ਦਰਜ ਨਹੀਂ ਹੈ (No Entries Yet)</h4>
+              <h4 className="text-xs font-bold text-slate-700">
+                {dashboardCropFilter !== 'ALL'
+                  ? `ਇਸ ਫਸਲ (${dashboardCropFilter}) ਲਈ ਕੋਈ ਐਂਟਰੀ ਨਹੀਂ ਹੈ`
+                  : 'ਕੋਈ ਐਂਟਰੀ ਦਰਜ ਨਹੀਂ ਹੈ (No Entries Yet)'}
+              </h4>
               <p className="text-[11px] text-slate-500 max-w-sm mx-auto mt-0.5">
-                ਪਹਿਲਾਂ ਕਿਸਾਨ ਰਜਿਸਟਰ ਕਰੋ ਅਤੇ ਫਿਰ ਉਸਦੀਆਂ ਬੋਰੀਆਂ ਦੀ ਐਂਟਰੀ ਦਰਜ ਕਰੋ।
+                {bagsEntries.length > 0 && dashboardCropFilter !== 'ALL'
+                  ? 'ਦੂਜੀਆਂ ਫਸਲਾਂ ਵਿੱਚ ਐਂਟਰੀਆਂ ਮੌਜੂਦ ਹਨ। ਸਾਰਾ ਡਾਟਾ ਵੇਖਣ ਲਈ "ਸਾਰੀਆਂ ਫਸਲਾਂ" ਚੁਣੋ।'
+                  : 'ਪਹਿਲਾਂ ਕਿਸਾਨ ਰਜਿਸਟਰ ਕਰੋ ਅਤੇ ਫਿਰ ਉਸਦੀਆਂ ਬੋਰੀਆਂ ਦੀ ਐਂਟਰੀ ਦਰਜ ਕਰੋ।'}
               </p>
             </div>
             <div className="flex justify-center gap-2 pt-1">
-              <button
-                onClick={() => setActiveSection('farmer-registration')}
-                className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3 py-1.5 rounded-lg text-xs shadow-2xs"
-              >
-                + ਪਹਿਲਾ ਕਿਸਾਨ ਰਜਿਸਟਰ ਕਰੋ
-              </button>
+              {bagsEntries.length > 0 && dashboardCropFilter !== 'ALL' ? (
+                <button
+                  type="button"
+                  onClick={() => setDashboardCropFilter('ALL')}
+                  className="bg-slate-800 hover:bg-slate-700 text-white font-bold px-3 py-1.5 rounded-lg text-xs shadow-2xs cursor-pointer"
+                >
+                  ਸਾਰੀਆਂ ਫਸਲਾਂ ਦਾ ਡਾਟਾ ਵੇਖੋ (View All Crops)
+                </button>
+              ) : (
+                <button
+                  onClick={() => setActiveSection('farmer-registration')}
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3 py-1.5 rounded-lg text-xs shadow-2xs cursor-pointer"
+                >
+                  + ਪਹਿਲਾ ਕਿਸਾਨ ਰਜਿਸਟਰ ਕਰੋ
+                </button>
+              )}
             </div>
           </div>
         ) : (
@@ -485,6 +570,7 @@ export const Dashboard: React.FC = () => {
                 <tr>
                   <th className="py-2 px-3">ਰਸੀਦ / ਮਿਤੀ</th>
                   <th className="py-2 px-3">ਕਿਸਾਨ ਦਾ ਵੇਰਵਾ (Farmer Details)</th>
+                  <th className="py-2 px-3 text-center">ਫਸਲ (Crop)</th>
                   <th className="py-2 px-3 text-center">ਬੋਰੀਆਂ</th>
                   <th className="py-2 px-3 text-right">ਬੋਰੀ ਵਜ਼ਨ (Qul+Kg)</th>
                   <th className="py-2 px-3 text-right">ਟੋਟਾ</th>
@@ -495,12 +581,13 @@ export const Dashboard: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-medium text-slate-800">
-                {bagsEntries.slice(0, 5).map((entry) => {
+                {filteredBagsEntries.slice(0, 5).map((entry) => {
                   const matchedFarmer = farmers.find((f) => f.id === entry.farmerId);
                   const farmerNameEn = entry.farmerName || matchedFarmer?.farmerName || '';
                   const farmerId = entry.farmerId || matchedFarmer?.id || '';
                   const fatherNameEn = entry.farmerFatherName || matchedFarmer?.fatherName || '';
                   const villageEn = entry.farmerVillage || matchedFarmer?.village || '';
+                  const entryCrop = entry.cropType || 'PADDY';
 
                   return (
                     <tr key={entry.id} className="hover:bg-slate-50/60 transition">
@@ -530,6 +617,19 @@ export const Dashboard: React.FC = () => {
                             Farmer ID: <span className="font-semibold text-slate-800">{farmerId}</span>
                           </div>
                         </div>
+                      </td>
+                      <td className="py-2 px-3 text-center">
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                            entryCrop === 'WHEAT'
+                              ? 'bg-amber-100 text-amber-900 border-amber-300'
+                              : entryCrop === 'MAIZE'
+                              ? 'bg-yellow-100 text-yellow-900 border-yellow-300'
+                              : 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                          }`}
+                        >
+                          {entryCrop === 'WHEAT' ? '🌾 ਕਣਕ' : entryCrop === 'MAIZE' ? '🌽 ਮੱਕੀ' : '🍚 ਝੋਨਾ'}
+                        </span>
                       </td>
                       <td className="py-2 px-3 text-center font-bold text-xs">{entry.bags}</td>
                     <td className="py-2 px-3 text-right font-mono text-xs text-slate-900">

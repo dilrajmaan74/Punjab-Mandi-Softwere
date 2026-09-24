@@ -1,7 +1,15 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useMandi } from '../../context/MandiContext';
 import { useNotification } from '../../context/NotificationContext';
-import { Farmer, FarmerAccountSummary, FarmerAdvanceRecord } from '../../types/mandi';
+import {
+  Farmer,
+  FarmerAccountSummary,
+  FarmerAdvanceRecord,
+  AdvanceCategory,
+  InterestCalculationMode,
+  CompoundingFrequency,
+  CropType
+} from '../../types/mandi';
 import { SearchableSelect, SearchableSelectOption } from '../common/SearchableSelect';
 import {
   User,
@@ -33,7 +41,18 @@ import {
   FileText,
   ArrowRightLeft,
   Send,
-  MessageSquare
+  MessageSquare,
+  ShieldCheck,
+  Share2,
+  Camera,
+  Receipt,
+  Percent,
+  UploadCloud,
+  Image as ImageIcon,
+  Volume2,
+  VolumeX,
+  Package,
+  ArrowLeftRight
 } from 'lucide-react';
 import { formatCurrencyINR, maskAadhaarNumber, calculateAdvanceInterest, formatCurrency } from '../../utils/calculations';
 import { exportFarmerAccountPDF, exportSimpleFarmerAccountPDF } from '../../utils/farmerAccountPdfExport';
@@ -41,12 +60,182 @@ import { FarmerProfileViewModal } from './FarmerProfileViewModal';
 import { FarmerEditModal } from './FarmerEditModal';
 import { FarmerAccountStatementA4 } from './FarmerAccountStatementA4';
 import { BulkWhatsAppModal } from './BulkWhatsAppModal';
+import { AdvanceRepaymentModal } from './AdvanceRepaymentModal';
+import { AdvanceVoucherModal } from './AdvanceVoucherModal';
+import { FarmerSimpleSummaryCard } from './FarmerSimpleSummaryCard';
+import { FarmerMiniSlipModal } from './FarmerMiniSlipModal';
+import { BardanaClearanceCard } from './BardanaClearanceCard';
+import { FarmerTFormatLedger } from './FarmerTFormatLedger';
+import { SeasonSettlementModal } from './SeasonSettlementModal';
 import {
   savePaymentTransfer,
   saveSameFarmerAdjustment,
   saveBagTransfer
 } from '../../utils/farmerAdjustmentsStorage';
-import { openWhatsApp } from '../../utils/whatsappNotification';
+import { openWhatsApp, generateAdvanceWhatsAppMessage } from '../../utils/whatsappNotification';
+
+export interface FarmerYearlyProfitLossModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  farmer: Farmer;
+  accountSummary?: FarmerAccountSummary | null;
+}
+
+export const FarmerYearlyProfitLossModal: React.FC<FarmerYearlyProfitLossModalProps> = ({
+  isOpen,
+  onClose,
+  farmer,
+  accountSummary
+}) => {
+  if (!isOpen || !farmer) return null;
+
+  const totalGrossAmount = accountSummary?.totalGrossAmount ?? 0;
+  const totalLabourDeductions = accountSummary?.totalLabourDeductions ?? 0;
+  const netPayableAmount = accountSummary?.netPayableAmount ?? (totalGrossAmount - totalLabourDeductions);
+  const paidAmount = accountSummary?.paidAmount ?? 0;
+  const totalAdvanceAmount = accountSummary?.totalAdvanceAmount ?? 0;
+  const finalBalance = accountSummary?.finalBalance ?? (netPayableAmount - paidAmount - totalAdvanceAmount);
+  const isNetProfit = finalBalance >= 0;
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+      <div className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full overflow-hidden border border-slate-200 animate-in fade-in zoom-in-95 duration-200">
+        {/* Modal Header */}
+        <div className="bg-gradient-to-r from-emerald-800 to-teal-900 px-6 py-5 text-white flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 bg-white/10 rounded-2xl">
+              <Coins className="w-6 h-6 text-amber-300" />
+            </div>
+            <div>
+              <h2 className="text-lg font-black tracking-tight">
+                ਸਾਲਾਨਾ ਬੱਚਤ / ਨਫ਼ਾ (P&L)
+              </h2>
+              <p className="text-xs text-emerald-200 font-medium">
+                Yearly Profit & Loss Summary • {farmer.farmerNamePa || farmer.farmerName} ({farmer.farmerName})
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-2 hover:bg-white/10 rounded-xl transition-colors text-white/80 hover:text-white cursor-pointer"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Modal Body */}
+        <div className="p-6 space-y-5 max-h-[80vh] overflow-y-auto">
+          {/* Farmer Info Banner */}
+          <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-3 text-xs">
+            <div>
+              <span className="text-slate-500">ਕਿਸਾਨ (Farmer): </span>
+              <strong className="text-slate-900 font-bold">{farmer.farmerNamePa || farmer.farmerName} ({farmer.farmerName})</strong>
+            </div>
+            <div>
+              <span className="text-slate-500">ਖਾਤਾ ਨੰਬਰ (ID): </span>
+              <strong className="text-slate-900 font-mono font-bold">{farmer.id}</strong>
+            </div>
+            <div>
+              <span className="text-slate-500">ਪਿੰਡ (Village): </span>
+              <strong className="text-slate-900 font-bold">{farmer.villagePa || farmer.village}</strong>
+            </div>
+          </div>
+
+          {/* Key Metrics Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+            {/* Total Crop Income */}
+            <div className="bg-emerald-50/60 border border-emerald-200 rounded-2xl p-4">
+              <span className="text-xs font-semibold text-emerald-800">ਕੁੱਲ ਫਸਲ ਰਕਮ / ਆਮਦਨ (Gross Crop Value)</span>
+              <div className="text-xl font-black text-emerald-950 mt-1">
+                {formatCurrency(totalGrossAmount)}
+              </div>
+              <span className="text-[11px] text-emerald-700">ਕੁੱਲ ਬੋਰੀਆਂ: {accountSummary?.purchasedBags || accountSummary?.mandiArrivalBags || 0}</span>
+            </div>
+
+            {/* Total Labour & Mandi Deductions */}
+            <div className="bg-rose-50/60 border border-rose-200 rounded-2xl p-4">
+              <span className="text-xs font-semibold text-rose-800">ਮੰਡੀ ਖਰਚੇ ਤੇ ਕਟੌਤੀਆਂ (Labour & Deductions)</span>
+              <div className="text-xl font-black text-rose-950 mt-1">
+                {formatCurrency(totalLabourDeductions)}
+              </div>
+              <span className="text-[11px] text-rose-700">ਪੱਕੀ ਲੇਬਰ, ਪੱਖਾ, ਸਕਾਈ ਆਦਿ</span>
+            </div>
+
+            {/* Net Crop Income */}
+            <div className="bg-blue-50/60 border border-blue-200 rounded-2xl p-4">
+              <span className="text-xs font-semibold text-blue-800">ਸ਼ੁੱਧ ਫਸਲ ਰਕਮ (Net Crop Payable)</span>
+              <div className="text-xl font-black text-blue-950 mt-1">
+                {formatCurrency(netPayableAmount)}
+              </div>
+              <span className="text-[11px] text-blue-700">ਆਮਦਨ ਵਿੱਚੋਂ ਕਟੌਤੀਆਂ ਘਟਾ ਕੇ</span>
+            </div>
+
+            {/* Advances + Interest */}
+            <div className="bg-amber-50/60 border border-amber-200 rounded-2xl p-4">
+              <span className="text-xs font-semibold text-amber-800">ਐਡਵਾਂਸ ਤੇ ਵਿਆਜ (Advances & Interest)</span>
+              <div className="text-xl font-black text-amber-950 mt-1">
+                {formatCurrency(totalAdvanceAmount)}
+              </div>
+              <span className="text-[11px] text-amber-700">ਲਿਆ ਗਿਆ ਪੇਸ਼ਗੀ ਕਰਜ਼ਾ ਤੇ ਵਿਆਜ</span>
+            </div>
+
+            {/* Payments Made */}
+            <div className="bg-purple-50/60 border border-purple-200 rounded-2xl p-4 sm:col-span-2">
+              <div className="flex justify-between items-center">
+                <div>
+                  <span className="text-xs font-semibold text-purple-800">ਪਹਿਲਾਂ ਦਿੱਤਾ ਭੁਗਤਾਨ (Payments Disbursed)</span>
+                  <div className="text-xl font-black text-purple-950 mt-1">
+                    {formatCurrency(paidAmount)}
+                  </div>
+                </div>
+                <span className="text-[11px] text-purple-700 bg-purple-100 px-3 py-1 rounded-xl">ਬੈਂਕ / ਨਕਦ ਭੁਗਤਾਨ</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Final Net Profit / Savings Banner */}
+          <div className={`p-5 rounded-2xl border text-center ${
+            isNetProfit
+              ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-950'
+              : 'bg-rose-500/10 border-rose-500/30 text-rose-950'
+          }`}>
+            <span className="text-xs font-bold uppercase tracking-wider block mb-1">
+              {isNetProfit ? 'ਸਾਲਾਨਾ ਸ਼ੁੱਧ ਬੱਚਤ / ਨਫ਼ਾ (Net Profit / Credit Balance)' : 'ਕਿਸਾਨ ਵੱਲ ਬਕਾਇਆ ਦੇਣਯੋਗ (Due from Farmer / Debit Balance)'}
+            </span>
+            <div className="text-3xl font-black">
+              {formatCurrency(Math.abs(finalBalance))}
+            </div>
+            <p className="text-xs mt-1 font-medium opacity-80">
+              {isNetProfit
+                ? 'ਕਿਸਾਨ ਨੂੰ ਦੇਣਯੋਗ ਬਾਕੀ ਰਕਮ (Payable to Farmer)'
+                : 'ਕਿਸਾਨ ਵੱਲ ਕੁੱਲ ਬਕਾਇਆ (Farmer needs to pay)'}
+            </p>
+          </div>
+        </div>
+
+        {/* Modal Footer */}
+        <div className="bg-slate-50 px-6 py-4 border-t border-slate-200 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={() => window.print()}
+            className="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+          >
+            <Printer className="w-4 h-4 text-amber-400" />
+            <span>ਪ੍ਰਿੰਟ ਕਰੋ (Print)</span>
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-xl text-xs font-bold transition-all cursor-pointer"
+          >
+            ਬੰਦ ਕਰੋ (Close)
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 export const FarmerAccount: React.FC = () => {
   const {
@@ -59,6 +248,7 @@ export const FarmerAccount: React.FC = () => {
     setActiveSection,
     getCompleteFarmerAccount,
     deleteFarmer,
+    updateFarmer,
     deleteBagsEntry,
     deleteDailyPurchase,
     addFarmerPayment,
@@ -66,6 +256,7 @@ export const FarmerAccount: React.FC = () => {
     addFarmerAdvance,
     updateFarmerAdvance,
     deleteFarmerAdvance,
+    activeCrop,
     activeFirm,
     settings,
     language
@@ -94,6 +285,7 @@ export const FarmerAccount: React.FC = () => {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [isAdvanceModalOpen, setIsAdvanceModalOpen] = useState(false);
+  const [isProfitLossModalOpen, setIsProfitLossModalOpen] = useState(false);
   const [showPdfOptionsModal, setShowPdfOptionsModal] = useState(false);
   const [showAdditionalRecords, setShowAdditionalRecords] = useState(false);
   const [editingAdvance, setEditingAdvance] = useState<FarmerAdvanceRecord | null>(null);
@@ -102,17 +294,36 @@ export const FarmerAccount: React.FC = () => {
   const [copiedId, setCopiedId] = useState(false);
   const [isExportingPDF, setIsExportingPDF] = useState(false);
   const [isBulkWhatsAppOpen, setIsBulkWhatsAppOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<'statement' | 'records'>('statement');
+  const [isMiniSlipOpen, setIsMiniSlipOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<'statement' | 'tformat' | 'records'>('statement');
+  const [selectedSeasonFilter, setSelectedSeasonFilter] = useState<'ALL' | 'WHEAT' | 'PADDY'>('ALL');
+  const [isSettlementModalOpen, setIsSettlementModalOpen] = useState(false);
 
   // Print view mode ('simple' or 'full')
   const [printMode, setPrintMode] = useState<'simple' | 'full'>('simple');
+
+  // Repayment & Voucher Modal State
+  const [repaymentModalAdvance, setRepaymentModalAdvance] = useState<FarmerAdvanceRecord | null>(null);
+  const [voucherModalAdvance, setVoucherModalAdvance] = useState<FarmerAdvanceRecord | null>(null);
 
   // Advance Form State
   const [advanceForm, setAdvanceForm] = useState({
     date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }),
     interestTillDate: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }),
     amount: '',
+    category: 'CASH' as AdvanceCategory,
+    itemDescription: '',
+    cropSeason: '' as CropType | '',
+    isInterestFree: false,
+    interestMode: 'MONTHLY' as InterestCalculationMode,
     monthlyInterestRate: '2.0',
+    annualInterestRate: '24.0',
+    compounding: 'SIMPLE' as CompoundingFrequency,
+    guarantorFarmerId: '',
+    guarantorName: '',
+    guarantorMobile: '',
+    voucherPhotoUrl: '',
+    voucherPhotoName: '',
     paymentMode: 'CASH' as const,
     referenceNumber: '',
     remarks: ''
@@ -157,11 +368,36 @@ export const FarmerAccount: React.FC = () => {
     reason: ''
   });
 
-  // Fetch current farmer and complete account
+  // Fetch current farmer and complete account with optional season filter
   const currentFarmer = farmers.find((f) => f.id === selectedFarmerId);
   const accountSummary: FarmerAccountSummary | null = selectedFarmerId
-    ? getCompleteFarmerAccount(selectedFarmerId)
+    ? getCompleteFarmerAccount(selectedFarmerId, selectedSeasonFilter)
     : null;
+
+  // Handle Season Settlement & Carrying forward to opening balance
+  const handleConfirmSettlement = (settlementData: {
+    settlementDate: string;
+    closingBalance: number;
+    targetSeason: string;
+    carryForwardAsOpening: boolean;
+    remarks: string;
+  }) => {
+    if (!currentFarmer) return;
+
+    if (settlementData.carryForwardAsOpening) {
+      updateFarmer(currentFarmer.id, {
+        openingBalance: settlementData.closingBalance,
+        openingBalanceDate: settlementData.settlementDate,
+        openingBalanceSeason: settlementData.targetSeason
+      });
+    }
+
+    notifySaveSuccess({
+      titlePa: 'ਸੀਜ਼ਨ ਖਾਤਾ ਪੱਕਾ ਹੋ ਗਿਆ ਹੈ!',
+      titleEn: 'Season Settlement Saved',
+      messagePa: `${currentFarmer.farmerNamePa} ਦਾ ਅੰਤਿਮ ਬਕਾਇਆ ₹${Math.abs(Math.round(settlementData.closingBalance)).toLocaleString('en-IN')} ${settlementData.carryForwardAsOpening ? 'ਅਗਲੇ ਸੀਜ਼ਨ ਵਿੱਚ ਓਪਨਿੰਗ ਬੈਲੇਂਸ ਵਜੋਂ ਸ਼ਾਮਲ ਕਰ ਦਿੱਤਾ ਗਿਆ ਹੈ।' : 'ਸੇਵ ਕਰ ਲਿਆ ਗਿਆ ਹੈ।'}`
+    });
+  };
 
   // Search dropdown options
   const farmerSelectOptions: SearchableSelectOption[] = useMemo(() => {
@@ -320,7 +556,19 @@ export const FarmerAccount: React.FC = () => {
       date: today,
       interestTillDate: today,
       amount: '',
+      category: 'CASH',
+      itemDescription: '',
+      cropSeason: '',
+      isInterestFree: false,
+      interestMode: 'MONTHLY',
       monthlyInterestRate: '2.0',
+      annualInterestRate: '24.0',
+      compounding: 'SIMPLE',
+      guarantorFarmerId: '',
+      guarantorName: '',
+      guarantorMobile: '',
+      voucherPhotoUrl: '',
+      voucherPhotoName: '',
       paymentMode: 'CASH',
       referenceNumber: '',
       remarks: ''
@@ -332,11 +580,26 @@ export const FarmerAccount: React.FC = () => {
   const handleOpenEditAdvance = (adv: FarmerAdvanceRecord) => {
     setEditingAdvance(adv);
     const today = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const monthlyRate = adv.monthlyInterestRate !== undefined ? String(adv.monthlyInterestRate) : '2.0';
+    const annualRate = adv.annualInterestRate !== undefined ? String(adv.annualInterestRate) : String((Number(monthlyRate) || 2.0) * 12);
+
     setAdvanceForm({
       date: adv.startDate || adv.date,
       interestTillDate: adv.endDate || adv.interestTillDate || today,
       amount: String(adv.principal ?? adv.amount),
-      monthlyInterestRate: String(adv.monthlyInterestRate ?? 2.0),
+      category: adv.category || 'CASH',
+      itemDescription: adv.itemDescription || '',
+      cropSeason: adv.cropSeason || '',
+      isInterestFree: Boolean(adv.isInterestFree),
+      interestMode: adv.interestMode || 'MONTHLY',
+      monthlyInterestRate: monthlyRate,
+      annualInterestRate: annualRate,
+      compounding: adv.compounding || 'SIMPLE',
+      guarantorFarmerId: adv.guarantorFarmerId || '',
+      guarantorName: adv.guarantorName || '',
+      guarantorMobile: adv.guarantorMobile || '',
+      voucherPhotoUrl: adv.voucherPhotoUrl || '',
+      voucherPhotoName: adv.voucherPhotoName || '',
       paymentMode: (adv.paymentMode as any) || 'CASH',
       referenceNumber: adv.referenceNumber || '',
       remarks: adv.remarks || ''
@@ -350,7 +613,8 @@ export const FarmerAccount: React.FC = () => {
     if (!currentFarmer) return;
 
     const amt = parseFloat(advanceForm.amount);
-    const rate = parseFloat(advanceForm.monthlyInterestRate) || 0;
+    const monthlyRate = parseFloat(advanceForm.monthlyInterestRate) || 0;
+    const annualRate = parseFloat(advanceForm.annualInterestRate) || (monthlyRate * 12);
     const startDate = advanceForm.date.trim();
     const endDate = advanceForm.interestTillDate.trim() || new Date().toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
@@ -364,19 +628,33 @@ export const FarmerAccount: React.FC = () => {
       return;
     }
 
+    const payload: Partial<FarmerAdvanceRecord> = {
+      date: startDate,
+      startDate: startDate,
+      interestTillDate: endDate,
+      endDate: endDate,
+      amount: amt,
+      principal: amt,
+      category: advanceForm.category,
+      itemDescription: advanceForm.itemDescription.trim(),
+      cropSeason: (advanceForm.cropSeason as CropType) || undefined,
+      isInterestFree: advanceForm.isInterestFree,
+      interestMode: advanceForm.interestMode,
+      monthlyInterestRate: monthlyRate,
+      annualInterestRate: annualRate,
+      compounding: advanceForm.compounding,
+      guarantorFarmerId: advanceForm.guarantorFarmerId || undefined,
+      guarantorName: advanceForm.guarantorName.trim() || undefined,
+      guarantorMobile: advanceForm.guarantorMobile.trim() || undefined,
+      voucherPhotoUrl: advanceForm.voucherPhotoUrl || undefined,
+      voucherPhotoName: advanceForm.voucherPhotoName || undefined,
+      paymentMode: advanceForm.paymentMode,
+      referenceNumber: advanceForm.referenceNumber.trim(),
+      remarks: advanceForm.remarks.trim()
+    };
+
     if (editingAdvance) {
-      updateFarmerAdvance(editingAdvance.id, {
-        date: startDate,
-        startDate: startDate,
-        interestTillDate: endDate,
-        endDate: endDate,
-        amount: amt,
-        principal: amt,
-        monthlyInterestRate: rate,
-        paymentMode: advanceForm.paymentMode,
-        referenceNumber: advanceForm.referenceNumber.trim(),
-        remarks: advanceForm.remarks.trim()
-      });
+      updateFarmerAdvance(editingAdvance.id, payload);
       notifySaveSuccess({
         titleEn: 'Advance Updated',
         titlePa: 'ਪੇਸ਼ਗੀ ਰਿਕਾਰਡ ਅਪਡੇਟ ਹੋ ਗਿਆ',
@@ -388,18 +666,9 @@ export const FarmerAccount: React.FC = () => {
         farmerId: currentFarmer.id,
         farmerName: currentFarmer.farmerName,
         farmerNamePa: currentFarmer.farmerNamePa,
-        date: startDate,
-        startDate: startDate,
-        interestTillDate: endDate,
-        endDate: endDate,
-        amount: amt,
-        principal: amt,
-        monthlyInterestRate: rate,
-        paymentMode: advanceForm.paymentMode,
-        referenceNumber: advanceForm.referenceNumber.trim(),
-        remarks: advanceForm.remarks.trim(),
+        ...payload,
         status: 'ACTIVE'
-      });
+      } as any);
       notifySaveSuccess({
         titleEn: 'Advance Recorded',
         titlePa: 'ਨਵੀਂ ਪੇਸ਼ਗੀ ਦਰਜ ਹੋ ਗਈ',
@@ -409,6 +678,19 @@ export const FarmerAccount: React.FC = () => {
     }
 
     setIsAdvanceModalOpen(false);
+  };
+
+  // WhatsApp Share for specific Advance
+  const handleShareAdvanceWhatsApp = (adv: FarmerAdvanceRecord) => {
+    if (!currentFarmer) return;
+    const farmerName = currentFarmer.farmerNamePa ? `${currentFarmer.farmerNamePa} (${currentFarmer.farmerName})` : currentFarmer.farmerName;
+    const msg = generateAdvanceWhatsAppMessage({
+      advance: adv,
+      farmerName,
+      firm: activeFirm,
+      settings
+    });
+    openWhatsApp(currentFarmer.mobile || '', msg);
   };
 
   // Save Payment
@@ -459,7 +741,6 @@ export const FarmerAccount: React.FC = () => {
   // Advance Live Calculator Preview in Modal
   const previewCalculation = (() => {
     const amt = parseFloat(advanceForm.amount) || 0;
-    const rate = parseFloat(advanceForm.monthlyInterestRate) || 0;
     const startDateStr = advanceForm.date.trim();
     const endDateStr = advanceForm.interestTillDate.trim() || new Date().toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
     if (amt <= 0 || !startDateStr) {
@@ -467,9 +748,13 @@ export const FarmerAccount: React.FC = () => {
     }
     const res = calculateAdvanceInterest({
       principal: amt,
-      startDateStr: startDateStr,
-      endDateStr: endDateStr,
-      monthlyInterestRate: rate
+      startDate: startDateStr,
+      endDate: endDateStr,
+      monthlyInterestRate: parseFloat(advanceForm.monthlyInterestRate) || 0,
+      annualInterestRate: parseFloat(advanceForm.annualInterestRate) || 0,
+      interestMode: advanceForm.interestMode,
+      compounding: advanceForm.compounding,
+      isInterestFree: advanceForm.isInterestFree
     });
     return {
       totalDays: res.totalDays,
@@ -499,6 +784,23 @@ export const FarmerAccount: React.FC = () => {
 
           {/* Search & Select Farmer + Bulk Broadcast Action */}
           <div className="flex flex-col sm:flex-row items-center gap-2.5 w-full md:w-auto">
+            {/* Season Filter Dropdown */}
+            <div className="flex items-center gap-1.5 bg-amber-50 border border-amber-300 rounded-xl px-2.5 py-1.5 shadow-2xs">
+              <span className="text-[11px] font-black text-amber-950 flex items-center gap-1">
+                <span>🌾</span>
+                <span className="hidden sm:inline">ਸੀਜ਼ਨ:</span>
+              </span>
+              <select
+                value={selectedSeasonFilter}
+                onChange={(e) => setSelectedSeasonFilter(e.target.value as 'ALL' | 'WHEAT' | 'PADDY')}
+                className="bg-transparent text-xs font-black text-amber-950 focus:outline-none cursor-pointer"
+              >
+                <option value="ALL">ਸਾਰਾ ਹਿਸਾਬ (All Seasons)</option>
+                <option value="WHEAT">ਹਾੜ੍ਹੀ (Wheat Season)</option>
+                <option value="PADDY">ਸਾਉਣੀ (Paddy Season)</option>
+              </select>
+            </div>
+
             <button
               onClick={() => setIsBulkWhatsAppOpen(true)}
               className="w-full sm:w-auto px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black flex items-center justify-center gap-2 shadow-xs transition active:scale-95 cursor-pointer shrink-0"
@@ -609,6 +911,32 @@ export const FarmerAccount: React.FC = () => {
                     <span>Simple Print / ਸਧਾਰਨ ਪ੍ਰਿੰਟ</span>
                   </button>
 
+                  {/* One-Click Mini Slip Button */}
+                  <button
+                    type="button"
+                    onClick={() => setIsMiniSlipOpen(true)}
+                    className="px-3.5 py-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black rounded-xl text-xs flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+                    title="ਕਿਸਾਨ ਲਈ ਛੋਟੀ ਮੋਬਾਈਲ/ਥਰਮਲ ਪਰਚੀ (One-Click Mini Slip)"
+                  >
+                    <Receipt className="w-4 h-4 text-slate-950" />
+                    <span>ਛੋਟੀ ਪਰਚੀ (Mini Slip)</span>
+                  </button>
+
+                  {/* T-Format Ledger Button */}
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('tformat')}
+                    className={`px-3.5 py-2.5 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-sm transition-all cursor-pointer ${
+                      activeTab === 'tformat'
+                        ? 'bg-amber-400 text-slate-950 ring-2 ring-amber-500'
+                        : 'bg-amber-700 hover:bg-amber-800 text-white'
+                    }`}
+                    title="ਆਹਮੋ-ਸਾਹਮਣੇ ਨਾਮੇ/ਜਮ੍ਹਾਂ T-ਸ਼ਕਲ ਬਹੀ-ਖਾਤਾ (T-Format Munim Ledger)"
+                  >
+                    <ArrowLeftRight className="w-4 h-4 text-amber-300" />
+                    <span>T-ਬਹੀ ਖਾਤਾ (T-Format)</span>
+                  </button>
+
                   {/* Print Button B: Full Details Print */}
                   <button
                     onClick={() => handleTriggerPrint('full')}
@@ -671,6 +999,28 @@ export const FarmerAccount: React.FC = () => {
                   >
                     <Send className="w-4 h-4 text-white" />
                     <span>WhatsApp Share / ਵ੍ਹਟਸਐਪ</span>
+                  </button>
+
+                  {/* Season Settlement / ਖਾਤਾ ਪੱਕਾ ਕਰਨਾ Button */}
+                  <button
+                    type="button"
+                    onClick={() => setIsSettlementModalOpen(true)}
+                    className="px-3.5 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl text-xs flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+                    title="ਸੀਜ਼ਨ ਅੰਤਿਮ ਖਾਤਾ ਨਿਬੇੜਾ / ਖਾਤਾ ਪੱਕਾ ਕਰਨਾ (Season Settlement Voucher)"
+                  >
+                    <Scale className="w-4 h-4 text-slate-950" />
+                    <span>ਖਾਤਾ ਪੱਕਾ ਕਰੋ (Settlement)</span>
+                  </button>
+
+                  {/* Yearly Profit & Loss (P&L) Button */}
+                  <button
+                    type="button"
+                    onClick={() => setIsProfitLossModalOpen(true)}
+                    className="px-3.5 py-2.5 bg-emerald-800 hover:bg-emerald-900 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+                    title="ਸਾਲਾਨਾ ਬੱਚਤ / ਨਫ਼ਾ (P&L)"
+                  >
+                    <Coins className="w-4 h-4 text-amber-300" />
+                    <span>ਸਾਲਾਨਾ ਬੱਚਤ / ਨਫ਼ਾ (P&L)</span>
                   </button>
 
                   {/* Adjustment & Bag Transfer Button */}
@@ -764,9 +1114,245 @@ export const FarmerAccount: React.FC = () => {
               )}
             </div>
 
-            {/* 2.5 VIEW SWITCHER: EXACT REFERENCE A4 STATEMENT vs DETAILED RECORDS */}
+            {/* ============================================================== */}
+            {/* 2.2 QUICK ACTION BAR (ਤੇਜ਼ ਐਂਟਰੀ ਸ਼ਾਰਟਕੱਟ - 4 ਰੰਗਦਾਰ ਬਟਨ) */}
+            {/* ============================================================== */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {/* 1. Cash Out (ਨਕਦ ਦਿੱਤਾ) */}
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingAdvance(null);
+                  const today = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                  setAdvanceForm({
+                    date: today,
+                    interestTillDate: today,
+                    amount: '',
+                    category: 'CASH',
+                    itemDescription: 'ਨਕਦ ਪੇਸ਼ਗੀ (Cash Out)',
+                    cropSeason: '',
+                    isInterestFree: false,
+                    interestMode: 'MONTHLY',
+                    monthlyInterestRate: '2.0',
+                    annualInterestRate: '24.0',
+                    compounding: 'SIMPLE',
+                    guarantorFarmerId: '',
+                    guarantorName: '',
+                    guarantorMobile: '',
+                    voucherPhotoUrl: '',
+                    voucherPhotoName: '',
+                    paymentMode: 'CASH',
+                    referenceNumber: '',
+                    remarks: ''
+                  });
+                  setIsAdvanceModalOpen(true);
+                }}
+                className="p-3.5 bg-gradient-to-br from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white rounded-2xl shadow-md transition-all active:scale-98 flex items-center gap-3 text-left cursor-pointer group"
+              >
+                <div className="p-2.5 bg-white/20 rounded-xl group-hover:scale-110 transition-transform">
+                  <IndianRupee className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <strong className="block text-xs sm:text-sm font-black text-white leading-tight">
+                    🟢 + ਨਕਦ ਦਿੱਤਾ
+                  </strong>
+                  <span className="text-[11px] text-emerald-100 font-medium">Cash Out (Advance)</span>
+                </div>
+              </button>
+
+              {/* 2. Bank Transfer (ਬੈਂਕ ਟਰਾਂਸਫਰ) */}
+              <button
+                type="button"
+                onClick={() => {
+                  setPaymentForm({
+                    date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+                    amount: '',
+                    paymentMode: 'BANK_TRANSFER',
+                    agency: '',
+                    referenceNumber: '',
+                    remarks: 'ਬੈਂਕ ਟਰਾਂਸਫਰ (RTGS/NEFT)'
+                  });
+                  setIsPaymentModalOpen(true);
+                }}
+                className="p-3.5 bg-gradient-to-br from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-2xl shadow-md transition-all active:scale-98 flex items-center gap-3 text-left cursor-pointer group"
+              >
+                <div className="p-2.5 bg-white/20 rounded-xl group-hover:scale-110 transition-transform">
+                  <ArrowRightLeft className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <strong className="block text-xs sm:text-sm font-black text-white leading-tight">
+                    🔵 + ਬੈਂਕ ਟਰਾਂਸਫਰ
+                  </strong>
+                  <span className="text-[11px] text-blue-100 font-medium">Bank Transfer (Payment)</span>
+                </div>
+              </button>
+
+              {/* 3. Store Item (ਖਾਦ/ਡੀਜ਼ਲ ਪਰਚੀ) */}
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingAdvance(null);
+                  const today = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                  setAdvanceForm({
+                    date: today,
+                    interestTillDate: today,
+                    amount: '',
+                    category: 'FERTILIZER',
+                    itemDescription: 'ਖਾਦ / ਡੀਜ਼ਲ / ਬੀਜ',
+                    cropSeason: '',
+                    isInterestFree: false,
+                    interestMode: 'MONTHLY',
+                    monthlyInterestRate: '2.0',
+                    annualInterestRate: '24.0',
+                    compounding: 'SIMPLE',
+                    guarantorFarmerId: '',
+                    guarantorName: '',
+                    guarantorMobile: '',
+                    voucherPhotoUrl: '',
+                    voucherPhotoName: '',
+                    paymentMode: 'CASH',
+                    referenceNumber: '',
+                    remarks: 'ਸਟੋਰ ਖਾਦ/ਤੇਲ'
+                  });
+                  setIsAdvanceModalOpen(true);
+                }}
+                className="p-3.5 bg-gradient-to-br from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 rounded-2xl shadow-md transition-all active:scale-98 flex items-center gap-3 text-left cursor-pointer group"
+              >
+                <div className="p-2.5 bg-white/30 rounded-xl group-hover:scale-110 transition-transform">
+                  <Package className="w-5 h-5 text-slate-950" />
+                </div>
+                <div>
+                  <strong className="block text-xs sm:text-sm font-black text-slate-950 leading-tight">
+                    🟡 + ਖਾਦ/ਡੀਜ਼ਲ ਪਰਚੀ
+                  </strong>
+                  <span className="text-[11px] text-amber-950 font-bold">Store Item (Fertilizer/Diesel)</span>
+                </div>
+              </button>
+
+              {/* 4. Cash Received / Repayment (ਕਿਸ਼ਤ ਵਾਪਸ ਆਈ) */}
+              <button
+                type="button"
+                onClick={() => {
+                  if (accountSummary.advances.length > 0) {
+                    setRepaymentModalAdvance(accountSummary.advances[0]);
+                  } else {
+                    notifyError({
+                      titlePa: 'ਕੋਈ ਪੇਸ਼ਗੀ ਮੌਜੂਦ ਨਹੀਂ',
+                      titleEn: 'No Advance Exists',
+                      messagePa: 'ਕਿਸਾਨ ਵੱਲ ਪਹਿਲਾਂ ਹੀ ਕੋਈ ਐਡਵਾਂਸ ਬਕਾਇਆ ਨਹੀਂ ਹੈ।'
+                    });
+                  }
+                }}
+                className="p-3.5 bg-gradient-to-br from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white rounded-2xl shadow-md transition-all active:scale-98 flex items-center gap-3 text-left cursor-pointer group"
+              >
+                <div className="p-2.5 bg-white/20 rounded-xl group-hover:scale-110 transition-transform">
+                  <CheckCircle2 className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <strong className="block text-xs sm:text-sm font-black text-white leading-tight">
+                    🟣 + ਕਿਸ਼ਤ ਵਾਪਸ ਆਈ
+                  </strong>
+                  <span className="text-[11px] text-purple-100 font-medium">Repayment Received</span>
+                </div>
+              </button>
+            </div>
+
+            {/* ============================================================== */}
+            {/* 2.3 CREDIT LIMIT & LAND PROFILE ALERT CARD */}
+            {/* ============================================================== */}
+            <div className="space-y-3">
+              {/* Credit Limit Alert Banner (Red if exceeded, or normal summary) */}
+              {accountSummary.creditLimitExceeded && (
+                <div className="bg-rose-50 border-2 border-rose-500 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-rose-950 shadow-sm animate-pulse">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-rose-600 text-white rounded-xl">
+                      <AlertTriangle className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <strong className="text-sm font-black block">
+                        ⚠️ ਚੇਤਾਵਨੀ: ਉਧਾਰ ਲਿਮਿਟ ਪਾਰ ਹੋ ਚੁੱਕੀ ਹੈ! (Credit Limit Exceeded)
+                      </strong>
+                      <p className="text-xs text-rose-900 mt-0.5">
+                        ਕਿਸਾਨ ਨੂੰ ਦਿੱਤਾ ਕੁੱਲ ਐਡਵਾਂਸ ਤੇ ਵਿਆਜ ({formatCurrency(accountSummary.totalAdvanceAmount)}) ਤੈਅ ਕੀਤੀ ਉਧਾਰ ਲਿਮਿਟ ({formatCurrency(accountSummary.creditLimit || 0)}) ਤੋਂ 
+                        <strong className="font-mono text-rose-950 font-black"> {formatCurrency(Math.abs(accountSummary.creditLimitRemaining || 0))}</strong> ਵੱਧ ਚੁੱਕਾ ਹੈ।
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsEditModalOpen(true)}
+                    className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shrink-0 cursor-pointer shadow-xs"
+                  >
+                    ਲਿਮਿਟ ਵਧਾਓ (Edit Limit)
+                  </button>
+                </div>
+              )}
+
+              {/* Land Profile & Credit Limit Overview Strip */}
+              {(currentFarmer.ownedLandAcres || currentFarmer.leasedLandAcres || currentFarmer.creditLimit || currentFarmer.openingBalance !== undefined) && (
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-3.5 flex flex-wrap items-center justify-between gap-3 text-xs">
+                  <div className="flex items-center gap-4 flex-wrap">
+                    <span className="font-black text-slate-800 flex items-center gap-1.5">
+                      <span>🌾</span>
+                      <span>ਜ਼ਮੀਨ ਤੇ ਲਿਮਿਟ ਵੇਰਵਾ:</span>
+                    </span>
+
+                    {currentFarmer.ownedLandAcres !== undefined && (
+                      <span className="text-slate-600">
+                        ਆਪਣੀ: <strong className="text-slate-900 font-bold">{currentFarmer.ownedLandAcres} ਏਕੜ</strong>
+                      </span>
+                    )}
+
+                    {currentFarmer.leasedLandAcres !== undefined && (
+                      <span className="text-slate-600">
+                        ਠੇਕਾ: <strong className="text-slate-900 font-bold">{currentFarmer.leasedLandAcres} ਕਿੱਲੇ</strong>
+                      </span>
+                    )}
+
+                    {currentFarmer.expectedWheatBags !== undefined && (
+                      <span className="text-amber-800">
+                        ਅੰਦਾਜ਼ਨ ਕਣਕ: <strong className="font-mono font-bold">{currentFarmer.expectedWheatBags} ਬੋਰੀਆਂ</strong>
+                      </span>
+                    )}
+
+                    {currentFarmer.expectedPaddyBags !== undefined && (
+                      <span className="text-emerald-800">
+                        ਅੰਦਾਜ਼ਨ ਝੋਨਾ: <strong className="font-mono font-bold">{currentFarmer.expectedPaddyBags} ਬੋਰੀਆਂ</strong>
+                      </span>
+                    )}
+
+                    {currentFarmer.creditLimit ? (
+                      <span className={`px-2 py-0.5 rounded font-mono font-black ${
+                        accountSummary.creditLimitExceeded ? 'bg-rose-100 text-rose-800 border border-rose-300' : 'bg-slate-100 text-slate-800 border border-slate-200'
+                      }`}>
+                        ਲਿਮਿਟ: ₹{currentFarmer.creditLimit.toLocaleString('en-IN')}
+                      </span>
+                    ) : null}
+
+                    {currentFarmer.openingBalance !== undefined && currentFarmer.openingBalance !== 0 && (
+                      <span className="text-slate-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                        ਓਪਨਿੰਗ ਬੈਲੇਂਸ: <strong className={currentFarmer.openingBalance >= 0 ? 'text-emerald-700' : 'text-rose-700'}>
+                          {currentFarmer.openingBalance >= 0 ? '+' : '-'}₹{Math.abs(currentFarmer.openingBalance).toLocaleString('en-IN')}
+                        </strong>
+                      </span>
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsEditModalOpen(true)}
+                    className="text-xs text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-1 cursor-pointer"
+                  >
+                    <Edit className="w-3 h-3" />
+                    <span>ਵੇਰਵਾ ਸੋਧੋ</span>
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* 2.5 VIEW SWITCHER: EXACT REFERENCE A4 STATEMENT vs T-FORMAT LEDGER vs DETAILED RECORDS */}
             <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3 rounded-2xl border border-slate-200 shadow-xs">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <button
                   type="button"
                   onClick={() => setActiveTab('statement')}
@@ -777,8 +1363,22 @@ export const FarmerAccount: React.FC = () => {
                   }`}
                 >
                   <FileText className="w-4 h-4" />
-                  <span>Exact Reference A4 Statement / ਹੂ-ਬ-ਹੂ A4 ਸਟੇਟਮੈਂਟ</span>
+                  <span>Exact A4 Statement / ਹੂ-ਬ-ਹੂ A4 ਸਟੇਟਮੈਂਟ</span>
                 </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('tformat')}
+                  className={`px-4 py-2.5 rounded-xl text-xs font-black flex items-center gap-2 transition-all cursor-pointer ${
+                    activeTab === 'tformat'
+                      ? 'bg-amber-500 text-slate-950 shadow-md ring-2 ring-amber-500'
+                      : 'bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200'
+                  }`}
+                >
+                  <ArrowLeftRight className="w-4 h-4" />
+                  <span>⚖️ T-Format Ledger / T-ਸ਼ਕਲ ਬਹੀ-ਖਾਤਾ</span>
+                </button>
+
                 <button
                   type="button"
                   onClick={() => setActiveTab('records')}
@@ -816,7 +1416,7 @@ export const FarmerAccount: React.FC = () => {
               )}
             </div>
 
-            {/* EXACT REFERENCE A4 STATEMENT DISPLAY */}
+            {/* TAB VIEW DISPLAY */}
             {activeTab === 'statement' ? (
               <div className="bg-slate-100/90 p-3 sm:p-6 rounded-3xl overflow-x-auto flex flex-col items-center border border-slate-300/80 shadow-inner">
                 <div className="mb-3 text-xs text-slate-500 font-medium flex items-center gap-2">
@@ -835,8 +1435,34 @@ export const FarmerAccount: React.FC = () => {
                   />
                 </div>
               </div>
+            ) : activeTab === 'tformat' ? (
+              <div className="bg-slate-100/90 p-3 sm:p-6 rounded-3xl overflow-x-auto border border-slate-300/80 shadow-inner">
+                <FarmerTFormatLedger
+                  farmer={currentFarmer}
+                  account={accountSummary}
+                  settings={settings}
+                  firmName={activeFirm?.namePa || activeFirm?.name || settings.firmNamePa || settings.firmNameEn}
+                  firmMobile={activeFirm?.mobile || settings.firmMobile}
+                  onOpenMiniSlip={() => setIsMiniSlipOpen(true)}
+                />
+              </div>
             ) : (
               <div className="space-y-6">
+                {/* 1. NEW: 4-STEP SIMPLE SUMMARY CARD + AUDIO ASSISTANT (Highest prominence for easy farmer understanding) */}
+                <FarmerSimpleSummaryCard
+                  farmer={currentFarmer}
+                  summary={accountSummary}
+                  onOpenMiniSlip={() => setIsMiniSlipOpen(true)}
+                  onOpenPL={() => setIsProfitLossModalOpen(true)}
+                  onOpenTFormat={() => setActiveTab('tformat')}
+                />
+
+                {/* 2. NEW: BARDANA CLEARANCE STATUS BOX */}
+                <BardanaClearanceCard
+                  summary={accountSummary}
+                  onNavigateToBardana={() => setActiveSection('bardana')}
+                />
+
                 {/* 3. SAB TON PEHLA: 7 KEY METRICS SUMMARY (Large, Bold, Bilingual) */}
                 <div>
                   <div className="flex items-center justify-between mb-3">
@@ -1338,53 +1964,199 @@ export const FarmerAccount: React.FC = () => {
                         <table className="w-full text-left text-xs border border-slate-200 rounded-xl overflow-hidden">
                           <thead className="bg-amber-50 text-amber-950 font-bold border-b border-slate-200">
                             <tr>
-                              <th className="p-2.5">Date / ਮਿਤੀ</th>
-                              <th className="p-2.5">Principal / ਮੂਲ</th>
-                              <th className="p-2.5">Rate / ਦਰ</th>
+                              <th className="p-2.5">Date & Category / ਮਿਤੀ ਤੇ ਮੱਦ</th>
+                              <th className="p-2.5">Details & Guarantor / ਵੇਰਵਾ ਤੇ ਜ਼ਾਮਨ</th>
+                              <th className="p-2.5">Principal & Repaid / ਮੂਲ ਤੇ ਵਾਪਸੀ</th>
+                              <th className="p-2.5">Rate & Rule / ਵਿਆਜ ਦਰ</th>
                               <th className="p-2.5">Duration / ਦਿਨ</th>
                               <th className="p-2.5">Interest / ਵਿਆਜ</th>
-                              <th className="p-2.5 text-right">Total / ਕੁੱਲ ਦੇਣਯੋਗ</th>
-                              <th className="p-2.5 text-center">ਕਾਰਵਾਈ</th>
+                              <th className="p-2.5 text-right">Net Payable / ਕੁੱਲ ਦੇਣਯੋਗ</th>
+                              <th className="p-2.5 text-center">ਕਾਰਵਾਈ / Actions</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-100 font-mono">
-                            {accountSummary.advances.map((adv) => (
-                              <tr key={adv.id} className="hover:bg-amber-50/30">
-                                <td className="p-2.5 font-sans font-medium text-slate-900">{adv.startDate || adv.date}</td>
-                                <td className="p-2.5 font-bold text-slate-900">{formatCurrencyINR(adv.principal ?? adv.amount)}</td>
-                                <td className="p-2.5 text-amber-800">{adv.monthlyInterestRate ?? 2.0}%/ਮਹੀਨਾ</td>
-                                <td className="p-2.5 font-sans text-slate-600">{adv.totalDays || 0} ਦਿਨ</td>
-                                <td className="p-2.5 font-bold text-amber-700">{formatCurrencyINR(adv.interestAmount || 0)}</td>
-                                <td className="p-2.5 font-black text-rose-950 text-right">
-                                  {formatCurrencyINR(adv.totalPayableWithInterest || ((adv.principal ?? adv.amount) + (adv.interestAmount || 0)))}
-                                </td>
-                                <td className="p-2.5 text-center font-sans">
-                                  <div className="flex items-center justify-center gap-1">
-                                    <button
-                                      onClick={() => setViewingAdvance(adv)}
-                                      className="p-1 text-slate-400 hover:text-amber-700 rounded"
-                                      title="View Interest Breakdown"
-                                    >
-                                      <Eye className="w-3.5 h-3.5" />
-                                    </button>
-                                    <button
-                                      onClick={() => handleOpenEditAdvance(adv)}
-                                      className="p-1 text-slate-400 hover:text-indigo-700 rounded"
-                                      title="Edit Advance"
-                                    >
-                                      <Edit className="w-3.5 h-3.5" />
-                                    </button>
-                                    <button
-                                      onClick={() => deleteFarmerAdvance(adv.id)}
-                                      className="p-1 text-slate-400 hover:text-rose-700 rounded"
-                                      title="Delete Advance"
-                                    >
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    </button>
-                                  </div>
-                                </td>
-                              </tr>
-                            ))}
+                            {accountSummary.advances.map((adv) => {
+                              const repayments = Array.isArray(adv.repayments) ? adv.repayments : [];
+                              const totalRepaid = adv.totalRepaid || repayments.reduce((s, r) => s + (Number(r.amount) || 0), 0);
+                              const origPrincipal = Number(adv.principal ?? adv.amount) || 0;
+                              const netPrincipal = adv.netPrincipalRemaining !== undefined ? adv.netPrincipalRemaining : Math.max(0, origPrincipal - totalRepaid);
+                              const interestAmount = Number(adv.interestAmount) || 0;
+                              const totalPayable = adv.totalPayableWithInterest ?? (netPrincipal + interestAmount);
+
+                              const catBadgeStyle: Record<string, { label: string; cls: string }> = {
+                                CASH: { label: 'ਨਕਦ (Cash)', cls: 'bg-emerald-100 text-emerald-800' },
+                                FERTILIZER: { label: 'ਖਾਦ/ਦਵਾਈ (Fertilizer)', cls: 'bg-indigo-100 text-indigo-800' },
+                                SEED: { label: 'ਬੀਜ (Seed)', cls: 'bg-teal-100 text-teal-800' },
+                                DIESEL: { label: 'ਡੀਜ਼ਲ (Diesel)', cls: 'bg-amber-100 text-amber-800' },
+                                MACHINERY: { label: 'ਮਸ਼ੀਨਰੀ (Machinery)', cls: 'bg-purple-100 text-purple-800' },
+                                PREVIOUS_BALANCE: { label: 'ਪਿਛਲਾ ਬਕਾਇਆ (Prev Bal)', cls: 'bg-rose-100 text-rose-800' },
+                                OTHER: { label: 'ਹੋਰ (Other)', cls: 'bg-slate-100 text-slate-800' }
+                              };
+                              const catInfo = catBadgeStyle[adv.category || 'CASH'] || catBadgeStyle['CASH'];
+
+                              return (
+                                <tr key={adv.id} className="hover:bg-amber-50/30">
+                                  {/* Date & Category */}
+                                  <td className="p-2.5 font-sans">
+                                    <div className="font-semibold text-slate-900">{adv.startDate || adv.date}</div>
+                                    <div className="flex items-center gap-1.5 mt-0.5">
+                                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${catInfo.cls}`}>
+                                        {catInfo.label}
+                                      </span>
+                                      {adv.cropSeason && (
+                                        <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-700">
+                                          {adv.cropSeason}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </td>
+
+                                  {/* Details & Guarantor */}
+                                  <td className="p-2.5 font-sans max-w-xs">
+                                    {adv.itemDescription ? (
+                                      <div className="text-slate-800 font-medium truncate" title={adv.itemDescription}>
+                                        {adv.itemDescription}
+                                      </div>
+                                    ) : (
+                                      <span className="text-slate-400 italic text-[11px]">—</span>
+                                    )}
+
+                                    {adv.guarantorName && (
+                                      <div className="flex items-center gap-1 text-[11px] text-indigo-700 font-medium mt-0.5">
+                                        <ShieldCheck className="w-3 h-3 shrink-0" />
+                                        <span>ਜ਼ਾਮਨ: {adv.guarantorName}</span>
+                                      </div>
+                                    )}
+
+                                    {adv.voucherPhotoUrl && (
+                                      <button
+                                        type="button"
+                                        onClick={() => setVoucherModalAdvance(adv)}
+                                        className="inline-flex items-center gap-1 text-[10px] text-emerald-700 font-bold mt-0.5 hover:underline"
+                                      >
+                                        <Receipt className="w-3 h-3 text-emerald-600" />
+                                        <span>ਪਰਚੀ ਫੋਟੋ ਮੌਜੂਦ (View Slip)</span>
+                                      </button>
+                                    )}
+                                  </td>
+
+                                  {/* Principal & Repaid */}
+                                  <td className="p-2.5">
+                                    <div className="font-bold text-slate-900">{formatCurrencyINR(origPrincipal)}</div>
+                                    {totalRepaid > 0 && (
+                                      <div className="text-[11px] mt-0.5">
+                                        <span className="text-emerald-700 font-medium">ਵਾਪਸੀ: -{formatCurrencyINR(totalRepaid)}</span>
+                                        <div className="text-slate-500 font-semibold">ਬਾਕੀ: {formatCurrencyINR(netPrincipal)}</div>
+                                      </div>
+                                    )}
+                                  </td>
+
+                                  {/* Rate & Rule */}
+                                  <td className="p-2.5 font-sans">
+                                    {adv.isInterestFree || adv.interestMode === 'INTEREST_FREE' ? (
+                                      <span className="px-1.5 py-0.5 rounded text-[11px] font-bold bg-emerald-100 text-emerald-800">
+                                        0% ਬਿਨਾਂ ਵਿਆਜ
+                                      </span>
+                                    ) : (
+                                      <div>
+                                        <div className="text-amber-800 font-bold">
+                                          {adv.monthlyInterestRate ?? 2.0}%/ਮਹੀਨਾ
+                                        </div>
+                                        <div className="text-[10px] text-slate-500">
+                                          {adv.compounding === 'HALF_YEARLY' ? 'ਛਿਮਾਹੀ ਚੱਕਰਵਰਤੀ' : 'ਸਾਧਾਰਨ ਵਿਆਜ'}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </td>
+
+                                  {/* Duration */}
+                                  <td className="p-2.5 font-sans text-slate-600">
+                                    <div className="font-bold text-slate-800">{adv.totalDays || 0} ਦਿਨ</div>
+                                    {adv.monthsElapsed !== undefined && (
+                                      <div className="text-[10px] text-slate-400">
+                                        {adv.monthsElapsed} ਮਹੀਨੇ, {adv.daysElapsed || 0} ਦਿਨ
+                                      </div>
+                                    )}
+                                  </td>
+
+                                  {/* Interest */}
+                                  <td className="p-2.5 font-sans">
+                                    <div className="font-bold text-amber-800">
+                                      {formatCurrencyINR(interestAmount)}
+                                    </div>
+                                    {!adv.isInterestFree && interestAmount > 0 && (
+                                      <div className="text-[10px] text-slate-500 font-mono" title="ਵਿਆਜ ਹਿਸਾਬ: ਮੂਲ × ਦਰ% × ਸਮਾਂ">
+                                        ({netPrincipal} × {adv.monthlyInterestRate ?? 2}%)
+                                      </div>
+                                    )}
+                                  </td>
+
+                                  {/* Total Net Payable */}
+                                  <td className="p-2.5 font-black text-rose-950 text-right text-sm">
+                                    {formatCurrencyINR(totalPayable)}
+                                  </td>
+
+                                  {/* Actions */}
+                                  <td className="p-2.5 text-center font-sans">
+                                    <div className="flex items-center justify-center gap-1">
+                                      {/* Voucher Print Button */}
+                                      <button
+                                        onClick={() => setVoucherModalAdvance(adv)}
+                                        className="p-1.5 text-slate-500 hover:text-indigo-700 hover:bg-indigo-50 rounded-lg transition-colors"
+                                        title="ਵਾਊਚਰ / ਪ੍ਰੋਨੋਟ ਪਰਚੀ ਪ੍ਰਿੰਟ ਕਰੋ (Print Voucher)"
+                                      >
+                                        <Receipt className="w-4 h-4" />
+                                      </button>
+
+                                      {/* Repayment Modal Button */}
+                                      <button
+                                        onClick={() => setRepaymentModalAdvance(adv)}
+                                        className="p-1.5 text-emerald-600 hover:text-emerald-800 hover:bg-emerald-50 rounded-lg transition-colors"
+                                        title="ਕਿਸ਼ਤ ਵਾਪਸੀ / ਅੰਸ਼ਕ ਅਦਾਇਗੀ (Manage Repayments)"
+                                      >
+                                        <Coins className="w-4 h-4" />
+                                      </button>
+
+                                      {/* WhatsApp Share Button */}
+                                      <button
+                                        onClick={() => handleShareAdvanceWhatsApp(adv)}
+                                        className="p-1.5 text-emerald-600 hover:text-emerald-800 hover:bg-emerald-50 rounded-lg transition-colors"
+                                        title="WhatsApp 'ਤੇ ਪੇਸ਼ਗੀ ਹਿਸਾਬ ਭੇਜੋ (Share on WhatsApp)"
+                                      >
+                                        <Share2 className="w-4 h-4" />
+                                      </button>
+
+                                      {/* Breakdown Button */}
+                                      <button
+                                        onClick={() => setViewingAdvance(adv)}
+                                        className="p-1.5 text-slate-400 hover:text-amber-700 hover:bg-amber-50 rounded-lg transition-colors"
+                                        title="ਵਿਆਜ ਗਣਨਾ ਵੇਰਵਾ (View Breakdown)"
+                                      >
+                                        <Eye className="w-4 h-4" />
+                                      </button>
+
+                                      {/* Edit Button */}
+                                      <button
+                                        onClick={() => handleOpenEditAdvance(adv)}
+                                        className="p-1.5 text-slate-400 hover:text-indigo-700 hover:bg-indigo-50 rounded-lg transition-colors"
+                                        title="ਸੋਧੋ (Edit Advance)"
+                                      >
+                                        <Edit className="w-4 h-4" />
+                                      </button>
+
+                                      {/* Delete Button */}
+                                      <button
+                                        onClick={() => deleteFarmerAdvance(adv.id)}
+                                        className="p-1.5 text-slate-400 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors"
+                                        title="ਹਟਾਓ (Delete Advance)"
+                                      >
+                                        <Trash2 className="w-4 h-4" />
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })}
                           </tbody>
                         </table>
                       </div>
@@ -1427,8 +2199,32 @@ export const FarmerAccount: React.FC = () => {
                             {accountSummary.paymentRecords.map((pay) => (
                               <tr key={pay.id} className="hover:bg-slate-50">
                                 <td className="p-2.5 font-sans font-medium text-slate-900">{pay.date}</td>
-                                <td className="p-2.5 font-sans font-bold text-slate-800">{pay.paymentMode}</td>
-                                <td className="p-2.5 text-slate-600">{pay.referenceNumber || '—'}</td>
+                                <td className="p-2.5 font-sans">
+                                  <span className={`px-2 py-0.5 rounded-md text-[11px] font-bold ${
+                                    pay.paymentMode === 'CASH'
+                                      ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                      : pay.paymentMode === 'BANK_TRANSFER' || (pay.paymentMode as string) === 'RTGS' || (pay.paymentMode as string) === 'NEFT'
+                                      ? 'bg-blue-100 text-blue-800 border border-blue-300'
+                                      : pay.paymentMode === 'CHEQUE'
+                                      ? 'bg-purple-100 text-purple-800 border border-purple-300'
+                                      : 'bg-slate-100 text-slate-800'
+                                  }`}>
+                                    {pay.paymentMode === 'CASH' ? '💵 ਨਕਦ (Cash)' :
+                                     pay.paymentMode === 'BANK_TRANSFER' ? '🏦 ਬੈਂਕ (Bank)' :
+                                     (pay.paymentMode as string) === 'RTGS' || (pay.paymentMode as string) === 'NEFT' ? '⚡ RTGS/NEFT' :
+                                     pay.paymentMode === 'CHEQUE' ? '📝 ਚੈੱਕ (Cheque)' :
+                                     pay.paymentMode}
+                                  </span>
+                                </td>
+                                <td className="p-2.5">
+                                  {pay.referenceNumber ? (
+                                    <span className="font-mono text-slate-800 bg-slate-100 px-1.5 py-0.5 rounded text-[11px]">
+                                      {pay.referenceNumber}
+                                    </span>
+                                  ) : (
+                                    <span className="text-slate-400 italic text-[11px]">ਕੋਈ UTR ਨਹੀਂ</span>
+                                  )}
+                                </td>
                                 <td className="p-2.5 font-sans text-slate-700">{pay.agency || '—'}</td>
                                 <td className="p-2.5 text-right font-black text-emerald-900">{formatCurrencyINR(pay.amount)}</td>
                                 <td className="p-2.5 text-center font-sans">
@@ -1602,29 +2398,78 @@ export const FarmerAccount: React.FC = () => {
       {/* ADVANCE MODAL */}
       {isAdvanceModalOpen && currentFarmer && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
-              <div className="flex items-center gap-2">
-                <Coins className="w-5 h-5 text-amber-600" />
+          <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-slate-200 max-h-[92vh] flex flex-col">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-amber-100 text-amber-800">
+                  <Coins className="w-5 h-5" />
+                </div>
                 <div>
-                  <h3 className="text-base font-bold text-slate-900">
+                  <h3 className="text-base font-black text-slate-900">
                     {editingAdvance ? 'ਪੇਸ਼ਗੀ ਸੋਧੋ (Edit Advance)' : 'ਨਵੀਂ ਪੇਸ਼ਗੀ ਦਰਜ ਕਰੋ (Record Advance)'}
                   </h3>
                   <p className="text-xs text-slate-500">
-                    ਕਿਸਾਨ: {currentFarmer.farmerNamePa} ({currentFarmer.id})
+                    ਕਿਸਾਨ: {currentFarmer.farmerNamePa} ({currentFarmer.farmerName}) • ਖਾਤਾ: {currentFarmer.id}
                   </p>
                 </div>
               </div>
               <button
+                type="button"
                 onClick={() => setIsAdvanceModalOpen(false)}
-                className="text-slate-400 hover:text-slate-700 text-sm font-bold"
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100"
               >
-                ✕
+                <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleSaveAdvance} className="mt-4 space-y-4 text-xs">
-              <div className="grid grid-cols-2 gap-3">
+            <form onSubmit={handleSaveAdvance} className="mt-4 space-y-4 text-xs overflow-y-auto flex-1 pr-1">
+              {/* Category / Purpose Selector */}
+              <div>
+                <label className="block font-bold text-slate-700 mb-1.5">
+                  ਪੇਸ਼ਗੀ ਦੀ ਕਿਸਮ / ਮੰਤਵ (Advance Category / Purpose) <span className="text-rose-500">*</span>
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                  {[
+                    { id: 'CASH', label: 'ਨਕਦ (Cash)' },
+                    { id: 'FERTILIZER', label: 'ਖਾਦ/ਸਪਰੇਅ (Fertilizer)' },
+                    { id: 'SEED', label: 'ਬੀਜ (Seed)' },
+                    { id: 'DIESEL', label: 'ਡੀਜ਼ਲ (Diesel)' },
+                    { id: 'MACHINERY', label: 'ਮਸ਼ੀਨਰੀ (Machinery)' },
+                    { id: 'PREVIOUS_BALANCE', label: 'ਪਿਛਲਾ ਬਕਾਇਆ (Prev Bal)' },
+                    { id: 'OTHER', label: 'ਹੋਰ ਖਰਚਾ (Other)' }
+                  ].map((cat) => (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      onClick={() => setAdvanceForm({ ...advanceForm, category: cat.id as AdvanceCategory })}
+                      className={`px-2.5 py-2 rounded-xl border text-center font-bold text-xs transition-all ${
+                        advanceForm.category === cat.id
+                          ? 'bg-amber-600 text-white border-amber-600 shadow-xs scale-102'
+                          : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      {cat.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Item / Specification Description */}
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  ਵੇਰਵਾ / ਸਮਾਨ ਦਾ ਨਾਮ (Item / Expense Specifications)
+                </label>
+                <input
+                  type="text"
+                  value={advanceForm.itemDescription || ''}
+                  onChange={(e) => setAdvanceForm({ ...advanceForm, itemDescription: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-xl font-medium focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                  placeholder="e.g. 10 Bags Urea @ 270, 50 Litre Diesel pump slip #452"
+                />
+              </div>
+
+              {/* Dates & Crop Season */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">
                     ਸ਼ੁਰੂਆਤੀ ਮਿਤੀ (Start Date) <span className="text-rose-500">*</span>
@@ -1670,9 +2515,26 @@ export const FarmerAccount: React.FC = () => {
                     </button>
                   </div>
                 </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    ਫਸਲ / ਸੀਜ਼ਨ (Crop Season)
+                  </label>
+                  <select
+                    value={advanceForm.cropSeason || ''}
+                    onChange={(e) => setAdvanceForm({ ...advanceForm, cropSeason: e.target.value as any })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl font-medium focus:ring-2 focus:ring-amber-500 focus:outline-none bg-white"
+                  >
+                    <option value="">ਸਾਰੇ ਸੀਜ਼ਨ (General / All)</option>
+                    <option value="WHEAT">ਹਾੜ੍ਹੀ / ਕਣਕ (Wheat)</option>
+                    <option value="PADDY">ਸਾਉਣੀ / ਝੋਨਾ (Paddy)</option>
+                    <option value="MAIZE">ਮੱਕੀ (Maize)</option>
+                  </select>
+                </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              {/* Principal Amount & Payment Mode */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">
                     ਮੂਲ ਰਕਮ (Principal Amount ₹) <span className="text-rose-500">*</span>
@@ -1683,63 +2545,310 @@ export const FarmerAccount: React.FC = () => {
                     required
                     value={advanceForm.amount || ''}
                     onChange={(e) => setAdvanceForm({ ...advanceForm, amount: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-xl font-bold text-sm text-slate-900 focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl font-black text-sm text-slate-900 focus:ring-2 focus:ring-amber-500 focus:outline-none"
                     placeholder="e.g. 50000"
                   />
                 </div>
 
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">
-                    ਮਾਸਿਕ ਵਿਆਜ ਦਰ (% Rate / Month) <span className="text-rose-500">*</span>
+                    ਭੁਗਤਾਨ ਢੰਗ (Payment Mode)
                   </label>
+                  <SearchableSelect
+                    id="advance-payment-mode-select"
+                    value={advanceForm.paymentMode || 'CASH'}
+                    onChange={(val) => setAdvanceForm({ ...advanceForm, paymentMode: val as any })}
+                    options={[
+                      { value: 'CASH', label: 'Cash (ਨਕਦ)' },
+                      { value: 'BANK_TRANSFER', label: 'Bank Transfer (ਬੈਂਕ)' },
+                      { value: 'CHEQUE', label: 'Cheque (ਚੈੱਕ)' },
+                      { value: 'RTGS', label: 'RTGS' },
+                      { value: 'NEFT', label: 'NEFT' }
+                    ]}
+                    placeholder="ਢੰਗ ਚੁਣੋ..."
+                  />
+                </div>
+              </div>
+
+              {/* Interest Rules Box */}
+              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-slate-800 flex items-center gap-1.5">
+                    <Percent className="w-4 h-4 text-amber-600" />
+                    ਵਿਆਜ ਦੀਆਂ ਸ਼ਰਤਾਂ (Interest Calculation Rules)
+                  </span>
+
+                  <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-emerald-800 bg-emerald-50 px-3 py-1 rounded-lg border border-emerald-200">
+                    <input
+                      type="checkbox"
+                      checked={advanceForm.isInterestFree}
+                      onChange={(e) => setAdvanceForm({ ...advanceForm, isInterestFree: e.target.checked })}
+                      className="rounded text-emerald-600 focus:ring-emerald-500"
+                    />
+                    <span>ਬਿਨਾਂ ਵਿਆਜ (0% Interest-Free)</span>
+                  </label>
+                </div>
+
+                {!advanceForm.isInterestFree && (
+                  <div className="space-y-3 pt-2 border-t border-slate-200">
+                    {/* Rate Presets & Input */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block font-semibold text-slate-700 mb-1">
+                          ਮਾਸਿਕ ਵਿਆਜ ਦਰ (% Rate / Month) <span className="text-rose-500">*</span>
+                        </label>
+                        <input
+                          type="number"
+                          step="0.05"
+                          required
+                          value={advanceForm.monthlyInterestRate || ''}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            const num = parseFloat(val) || 0;
+                            setAdvanceForm({
+                              ...advanceForm,
+                              monthlyInterestRate: val,
+                              annualInterestRate: String(num * 12)
+                            });
+                          }}
+                          className="w-full px-3 py-2 border border-slate-300 rounded-xl font-bold text-sm text-slate-900 focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                          placeholder="2.0"
+                        />
+                        {/* Quick Presets */}
+                        <div className="flex items-center gap-1.5 mt-1.5">
+                          <span className="text-[10px] text-slate-400 font-semibold">ਸੌਖੇ ਬਟਨ:</span>
+                          {['1.5', '2.0', '2.5', '3.0'].map((preset) => (
+                            <button
+                              key={preset}
+                              type="button"
+                              onClick={() => {
+                                const num = parseFloat(preset);
+                                setAdvanceForm({
+                                  ...advanceForm,
+                                  monthlyInterestRate: preset,
+                                  annualInterestRate: String(num * 12)
+                                });
+                              }}
+                              className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-colors ${
+                                advanceForm.monthlyInterestRate === preset
+                                  ? 'bg-amber-600 text-white border-amber-600'
+                                  : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
+                              }`}
+                            >
+                              {preset}%
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block font-semibold text-slate-700 mb-1">
+                          ਵਿਆਜ ਦਾ ਤਰੀਕਾ (Compounding Rule)
+                        </label>
+                        <select
+                          value={advanceForm.compounding}
+                          onChange={(e) => setAdvanceForm({ ...advanceForm, compounding: e.target.value as CompoundingFrequency })}
+                          className="w-full px-3 py-2 border border-slate-300 rounded-xl font-medium focus:ring-2 focus:ring-amber-500 focus:outline-none bg-white"
+                        >
+                          <option value="SIMPLE">ਸਾਧਾਰਨ ਵਿਆਜ (Simple Interest)</option>
+                          <option value="HALF_YEARLY">ਛਿਮਾਹੀ ਚੱਕਰਵਰਤੀ (Half-Yearly Compounded - 6 Months)</option>
+                          <option value="YEARLY">ਸਾਲਾਨਾ ਚੱਕਰਵਰਤੀ (Yearly Compounded)</option>
+                        </select>
+                        <p className="text-[10px] text-slate-400 mt-1">
+                          * ਪੰਜਾਬ ਮੰਡੀ ਵਿੱਚ ਆਮ ਤੌਰ &apos;ਤੇ ਸਾਧਾਰਨ ਜਾਂ ਛਿਮਾਹੀ ਵਿਆਜ ਲਾਗੂ ਹੁੰਦਾ ਹੈ।
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Guarantor / Reference Farmer Section */}
+              <div className="p-4 bg-indigo-50/60 rounded-2xl border border-indigo-200 space-y-3">
+                <span className="font-bold text-indigo-950 flex items-center gap-1.5">
+                  <ShieldCheck className="w-4 h-4 text-indigo-700" />
+                  ਜ਼ਾਮਨ / ਗਵਾਹ ਕਿਸਾਨ (Guarantor / Reference Farmer)
+                </span>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">
+                      ਮੌਜੂਦਾ ਕਿਸਾਨ ਵਿੱਚੋਂ ਚੁਣੋ (Select Registered Farmer)
+                    </label>
+                    <SearchableSelect
+                      id="advance-guarantor-select"
+                      value={advanceForm.guarantorFarmerId || ''}
+                      onChange={(val) => {
+                        const target = farmers.find((f) => f.id === val);
+                        setAdvanceForm({
+                          ...advanceForm,
+                          guarantorFarmerId: val,
+                          guarantorName: target ? (target.farmerNamePa ? `${target.farmerNamePa} (${target.farmerName})` : target.farmerName) : '',
+                          guarantorMobile: target?.mobile || ''
+                        });
+                      }}
+                      options={farmers
+                        .filter((f) => f.id !== currentFarmer.id)
+                        .map((f) => ({
+                          value: f.id,
+                          label: `${f.farmerNamePa} (${f.farmerName})`,
+                          subLabel: `A/C: ${f.id} • ਪਿੰਡ: ${f.villagePa || f.village}`
+                        }))}
+                      placeholder="ਜ਼ਾਮਨ ਕਿਸਾਨ ਚੁਣੋ..."
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">
+                      ਜ਼ਾਮਨ ਦਾ ਨਾਮ (ਜਾਂ ਸਿੱਧਾ ਨਾਮ ਲਿਖੋ)
+                    </label>
+                    <input
+                      type="text"
+                      value={advanceForm.guarantorName || ''}
+                      onChange={(e) => setAdvanceForm({ ...advanceForm, guarantorName: e.target.value })}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-xl font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                      placeholder="e.g. ਜਗਜੀਤ ਸਿੰਘ (Jagjit Singh)"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Pronote / Signed Slip Photo Upload */}
+              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-2">
+                <span className="font-bold text-slate-800 flex items-center gap-1.5">
+                  <Camera className="w-4 h-4 text-slate-700" />
+                  ਦਸਤਖਤਸ਼ੁਦਾ ਪਰਚੀ / ਪ੍ਰੋਨੋਟ ਫੋਟੋ (Slip / Pronote Photo Upload)
+                </span>
+
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                  <label className="px-3.5 py-2 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 rounded-xl font-bold text-xs flex items-center gap-2 cursor-pointer shadow-xs transition-colors">
+                    <UploadCloud className="w-4 h-4 text-indigo-600" />
+                    <span>ਫੋਟੋ ਅਪਲੋਡ ਕਰੋ (Choose File)</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onloadend = () => {
+                            setAdvanceForm({
+                              ...advanceForm,
+                              voucherPhotoUrl: reader.result as string,
+                              voucherPhotoName: file.name
+                            });
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                    />
+                  </label>
+
+                  {advanceForm.voucherPhotoUrl && (
+                    <div className="flex items-center gap-2 bg-white p-1.5 rounded-xl border border-slate-200">
+                      <img
+                        src={advanceForm.voucherPhotoUrl}
+                        alt="Pronote preview"
+                        className="w-12 h-12 object-cover rounded-lg border border-slate-200"
+                      />
+                      <span className="text-[11px] text-slate-600 font-medium truncate max-w-xs">
+                        {advanceForm.voucherPhotoName || 'Pronote_photo.jpg'}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setAdvanceForm({ ...advanceForm, voucherPhotoUrl: '', voucherPhotoName: '' })}
+                        className="p-1 text-rose-500 hover:text-rose-700 ml-1"
+                        title="ਫੋਟੋ ਹਟਾਓ"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Reference Number & Remarks */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">ਰੈਫਰੈਂਸ / ਪਰਚੀ ਨੰਬਰ (Ref No.)</label>
                   <input
-                    type="number"
-                    step="0.05"
-                    required
-                    value={advanceForm.monthlyInterestRate || ''}
-                    onChange={(e) => setAdvanceForm({ ...advanceForm, monthlyInterestRate: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-xl font-bold text-sm text-slate-900 focus:ring-2 focus:ring-amber-500 focus:outline-none"
-                    placeholder="2.0"
+                    type="text"
+                    value={advanceForm.referenceNumber || ''}
+                    onChange={(e) => setAdvanceForm({ ...advanceForm, referenceNumber: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl font-medium focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                    placeholder="e.g. SLIP-8941"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">ਟਿੱਪਣੀ (Remarks / Note)</label>
+                  <input
+                    type="text"
+                    value={advanceForm.remarks || ''}
+                    onChange={(e) => setAdvanceForm({ ...advanceForm, remarks: e.target.value })}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl font-medium focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                    placeholder="e.g. ਦਿੱਤਾ ਗਿਆ ਨਕਦ ਪੇਸ਼ਗੀ"
                   />
                 </div>
               </div>
 
               {/* Live Interest Preview */}
               {parseFloat(advanceForm.amount) > 0 && (
-                <div className="p-3 bg-amber-50/80 rounded-xl border border-amber-200 space-y-1">
+                <div className="p-3 bg-amber-50/90 rounded-xl border border-amber-200 space-y-1.5">
                   <div className="font-bold text-amber-950 flex items-center justify-between">
-                    <span>ਵਿਆਜ ਗਣਨਾ (Preview):</span>
+                    <span>ਲਾਈਵ ਵਿਆਜ ਗਣਨਾ (Live Preview):</span>
                     <span className="font-mono text-amber-900">
                       {previewCalculation.months} ਮਹੀਨੇ + {previewCalculation.days} ਦਿਨ ({previewCalculation.totalDays} ਦਿਨ)
                     </span>
                   </div>
-                  <div className="flex items-center justify-between text-[11px] text-slate-700 pt-1 border-t border-amber-200">
-                    <span>ਜੁੜਿਆ ਵਿਆਜ: <strong>{formatCurrencyINR(previewCalculation.interest)}</strong></span>
-                    <span className="font-bold text-rose-900">
+                  <div className="flex items-center justify-between text-xs text-slate-700 pt-1 border-t border-amber-200">
+                    <span>
+                      ਮੂਲ: <strong>{formatCurrencyINR(parseFloat(advanceForm.amount) || 0)}</strong> | ਵਿਆਜ: <strong className="text-amber-800">{formatCurrencyINR(previewCalculation.interest)}</strong>
+                    </span>
+                    <span className="font-black text-rose-950 text-sm">
                       ਕੁੱਲ ਦੇਣਯੋਗ: {formatCurrencyINR(previewCalculation.totalPayable)}
                     </span>
                   </div>
                 </div>
               )}
 
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 shrink-0">
                 <button
                   type="button"
                   onClick={() => setIsAdvanceModalOpen(false)}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-medium"
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-medium transition-colors"
                 >
                   ਰੱਦ ਕਰੋ (Cancel)
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-amber-700 hover:bg-amber-800 text-white rounded-xl font-bold shadow-sm"
+                  className="px-5 py-2 bg-amber-700 hover:bg-amber-800 text-white rounded-xl font-bold shadow-sm transition-colors"
                 >
-                  {editingAdvance ? 'ਅਪਡੇਟ ਕਰੋ (Update)' : 'ਦਰਜ ਕਰੋ (Save)'}
+                  {editingAdvance ? 'ਅਪਡੇਟ ਕਰੋ (Update)' : 'ਦਰਜ ਕਰੋ (Save Advance)'}
                 </button>
               </div>
             </form>
           </div>
         </div>
+      )}
+
+      {/* ADVANCE REPAYMENT MODAL */}
+      {repaymentModalAdvance && currentFarmer && (
+        <AdvanceRepaymentModal
+          advance={repaymentModalAdvance}
+          farmer={currentFarmer}
+          onClose={() => setRepaymentModalAdvance(null)}
+        />
+      )}
+
+      {/* ADVANCE VOUCHER / PRONOTE MODAL */}
+      {voucherModalAdvance && currentFarmer && (
+        <AdvanceVoucherModal
+          advance={voucherModalAdvance}
+          farmer={currentFarmer}
+          onClose={() => setVoucherModalAdvance(null)}
+        />
       )}
 
       {/* PAYMENT MODAL */}
@@ -2326,6 +3435,28 @@ export const FarmerAccount: React.FC = () => {
             )}
           </div>
         </div>
+      )}
+
+      {/* Farmer Yearly Profit/Loss (P&L) Modal */}
+      {isProfitLossModalOpen && currentFarmer && (
+        <FarmerYearlyProfitLossModal
+          isOpen={isProfitLossModalOpen}
+          onClose={() => setIsProfitLossModalOpen(false)}
+          farmer={currentFarmer}
+          accountSummary={accountSummary}
+        />
+      )}
+
+      {/* One-Click Mini Slip Modal */}
+      {isMiniSlipOpen && currentFarmer && (
+        <FarmerMiniSlipModal
+          isOpen={isMiniSlipOpen}
+          onClose={() => setIsMiniSlipOpen(false)}
+          farmer={currentFarmer}
+          summary={accountSummary}
+          firmName={activeFirm?.namePa || activeFirm?.name || settings.firmNamePa || settings.firmNameEn}
+          firmMobile={activeFirm?.mobile || settings.firmMobile}
+        />
       )}
 
       {/* Bulk WhatsApp Broadcast Modal */}

@@ -236,6 +236,62 @@ export const FarmerProfileViewModal: React.FC<FarmerProfileViewModalProps> = ({
             </div>
           </div>
 
+          {/* Land Record & Credit Limit Overview Card */}
+          {(farmer.ownedLandAcres !== undefined || farmer.leasedLandAcres !== undefined || farmer.creditLimit !== undefined || farmer.expectedWheatBags !== undefined || farmer.expectedPaddyBags !== undefined || farmer.openingBalance !== undefined) && (
+            <div className="bg-amber-50/70 border border-amber-200 rounded-2xl p-4 space-y-3">
+              <h4 className="font-black text-xs sm:text-sm text-amber-950 flex items-center justify-between border-b border-amber-200 pb-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-base">🌾</span>
+                  <span>ਜ਼ਮੀਨ, ਫਸਲ ਅੰਦਾਜ਼ਾ ਅਤੇ ਉਧਾਰ ਲਿਮਿਟ (Land, Expected Yield & Credit Limit)</span>
+                </div>
+                {farmer.creditLimit ? (
+                  <span className="text-xs bg-rose-600 text-white font-mono font-bold px-2 py-0.5 rounded-md">
+                    ਲਿਮਿਟ: ₹{farmer.creditLimit.toLocaleString('en-IN')}
+                  </span>
+                ) : null}
+              </h4>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                <div className="bg-white p-2.5 rounded-xl border border-amber-100">
+                  <span className="text-[10px] font-bold text-slate-500 block">ਆਪਣੀ ਜ਼ਮੀਨ:</span>
+                  <strong className="text-slate-900 font-black text-sm">{farmer.ownedLandAcres || 0} ਏਕੜ/ਕਿੱਲੇ</strong>
+                </div>
+
+                <div className="bg-white p-2.5 rounded-xl border border-amber-100">
+                  <span className="text-[10px] font-bold text-slate-500 block">ਠੇਕੇ 'ਤੇ ਜ਼ਮੀਨ:</span>
+                  <strong className="text-slate-900 font-black text-sm">
+                    {farmer.leasedLandAcres || 0} ਕਿੱਲੇ
+                    {farmer.leaseRatePerAcre ? <span className="text-[10px] font-normal text-slate-500 block">(₹{farmer.leaseRatePerAcre}/ਏਕੜ)</span> : null}
+                  </strong>
+                </div>
+
+                <div className="bg-white p-2.5 rounded-xl border border-amber-100">
+                  <span className="text-[10px] font-bold text-slate-500 block">ਅੰਦਾਜ਼ਨ ਕਣਕ:</span>
+                  <strong className="text-amber-900 font-black text-sm font-mono">{farmer.expectedWheatBags || 0} ਬੋਰੀਆਂ</strong>
+                </div>
+
+                <div className="bg-white p-2.5 rounded-xl border border-amber-100">
+                  <span className="text-[10px] font-bold text-slate-500 block">ਅੰਦਾਜ਼ਨ ਝੋਨਾ:</span>
+                  <strong className="text-emerald-900 font-black text-sm font-mono">{farmer.expectedPaddyBags || 0} ਬੋਰੀਆਂ</strong>
+                </div>
+              </div>
+
+              {farmer.openingBalance !== undefined && (
+                <div className="bg-white p-2.5 rounded-xl border border-amber-200 flex items-center justify-between text-xs">
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-500">ਪਿਛਲਾ ਓਪਨਿੰਗ ਬੈਲੇਂਸ (Opening Balance):</span>
+                    <div className="text-xs font-semibold text-slate-700">
+                      {farmer.openingBalance >= 0 ? 'ਕਿਸਾਨ ਨੂੰ ਦੇਣਯੋਗ ਜਮ੍ਹਾਂ' : 'ਕਿਸਾਨ ਵੱਲ ਬਕਾਇਆ ਦੇਣਦਾਰੀ'}
+                    </div>
+                  </div>
+                  <strong className={`font-mono text-sm font-black ${farmer.openingBalance >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                    ₹{Math.abs(farmer.openingBalance).toLocaleString('en-IN')} {farmer.openingBalance >= 0 ? '(Cr)' : '(Dr)'}
+                  </strong>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Aadhaar Documents Section (Front & Back Photos) */}
           <div className="space-y-2">
             <h4 className="font-black text-xs sm:text-sm text-slate-900 flex items-center gap-1.5 border-b border-slate-200 pb-1.5">

@@ -9,6 +9,8 @@ import {
   FarmerPurchaseSummary,
   FarmerPaymentRecord,
   FarmerAdvanceRecord,
+  AdvanceCategory,
+  AdvanceRepayment,
   LinkedPurchaseDetail,
   BoliRecord,
   FarmerAccountSummary,
@@ -248,6 +250,8 @@ interface MandiContextType {
   addFarmerAdvance: (advance: Omit<FarmerAdvanceRecord, 'id' | 'createdAt' | 'interestAmount' | 'totalDays' | 'monthsElapsed' | 'daysElapsed' | 'totalPayableWithInterest'> & { id?: string }) => FarmerAdvanceRecord;
   updateFarmerAdvance: (id: string, updates: Partial<FarmerAdvanceRecord>) => boolean;
   deleteFarmerAdvance: (id: string) => boolean;
+  addAdvanceRepayment: (advanceId: string, repayment: Omit<AdvanceRepayment, 'id' | 'createdAt'>) => boolean;
+  deleteAdvanceRepayment: (advanceId: string, repaymentId: string) => boolean;
 
   // Boli Operations
   addBoliRecord: (record: Omit<BoliRecord, 'id' | 'createdAt'>) => BoliRecord;
@@ -1327,14 +1331,18 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const startDate = (advanceData.date || (advanceData as any).startDate || todayStr).trim();
     const tillDate = (advanceData.interestTillDate || (advanceData as any).endDate || todayStr).trim();
     const amount = Number(advanceData.amount) || 0;
-    const monthlyInterestRate = Number(advanceData.monthlyInterestRate) || 0;
 
-    const interestCalc = calculateAdvanceInterest(
-      amount,
-      monthlyInterestRate,
+    const interestCalc = calculateAdvanceInterest({
+      principal: amount,
+      monthlyInterestRate: advanceData.monthlyInterestRate,
+      annualInterestRate: advanceData.annualInterestRate,
+      interestMode: advanceData.interestMode,
+      compounding: advanceData.compounding,
+      isInterestFree: advanceData.isInterestFree,
+      repayments: advanceData.repayments,
       startDate,
-      tillDate
-    );
+      endDate: tillDate
+    });
 
     const newRecord: FarmerAdvanceRecord = {
       ...advanceData,
@@ -1343,9 +1351,16 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       startDate: startDate,
       amount: amount,
       principal: amount,
-      monthlyInterestRate: monthlyInterestRate,
+      monthlyInterestRate: interestCalc.monthlyInterestRate,
+      annualInterestRate: interestCalc.annualInterestRate,
+      interestMode: interestCalc.interestMode,
+      compounding: interestCalc.compounding,
+      isInterestFree: interestCalc.isInterestFree,
       interestTillDate: tillDate,
       endDate: tillDate,
+      repayments: advanceData.repayments || [],
+      totalRepaid: interestCalc.totalRepaid,
+      netPrincipalRemaining: interestCalc.netPrincipalRemaining,
       interestAmount: interestCalc.interestAmount,
       totalDays: interestCalc.totalDays,
       monthsElapsed: interestCalc.monthsElapsed,
@@ -1371,23 +1386,33 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           const startDate = (merged.date || (merged as any).startDate || todayStr).trim();
           const tillDate = (merged.interestTillDate || (merged as any).endDate || todayStr).trim();
           const amount = Number(merged.amount) || 0;
-          const monthlyInterestRate = Number(merged.monthlyInterestRate) || 0;
 
-          const interestCalc = calculateAdvanceInterest(
-            amount,
-            monthlyInterestRate,
+          const interestCalc = calculateAdvanceInterest({
+            principal: amount,
+            monthlyInterestRate: merged.monthlyInterestRate,
+            annualInterestRate: merged.annualInterestRate,
+            interestMode: merged.interestMode,
+            compounding: merged.compounding,
+            isInterestFree: merged.isInterestFree,
+            repayments: merged.repayments,
             startDate,
-            tillDate
-          );
+            endDate: tillDate
+          });
           return {
             ...merged,
             date: startDate,
             startDate: startDate,
             amount: amount,
             principal: amount,
-            monthlyInterestRate: monthlyInterestRate,
+            monthlyInterestRate: interestCalc.monthlyInterestRate,
+            annualInterestRate: interestCalc.annualInterestRate,
+            interestMode: interestCalc.interestMode,
+            compounding: interestCalc.compounding,
+            isInterestFree: interestCalc.isInterestFree,
             interestTillDate: tillDate,
             endDate: tillDate,
+            totalRepaid: interestCalc.totalRepaid,
+            netPrincipalRemaining: interestCalc.netPrincipalRemaining,
             interestAmount: interestCalc.interestAmount,
             totalDays: interestCalc.totalDays,
             monthsElapsed: interestCalc.monthsElapsed,
@@ -1404,6 +1429,112 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       return updatedList;
     });
     return updated;
+  };
+
+  const addAdvanceRepayment = (
+    advanceId: string,
+    repaymentData: Omit<AdvanceRepayment, 'id' | 'createdAt'>
+  ): boolean => {
+    let success = false;
+    setFarmerAdvances((prev) => {
+      const updatedList = prev.map((item) => {
+        if (item.id === advanceId) {
+          success = true;
+          const newRepayment: AdvanceRepayment = {
+            ...repaymentData,
+            id: `REP-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+            createdAt: new Date().toISOString()
+          };
+          const existingRepayments = Array.isArray(item.repayments) ? item.repayments : [];
+          const repayments = [...existingRepayments, newRepayment];
+
+          const todayStr = formatDateToDDMMYYYY(new Date());
+          const startDate = (item.date || item.startDate || todayStr).trim();
+          const tillDate = (item.interestTillDate || item.endDate || todayStr).trim();
+          const amount = Number(item.amount) || 0;
+
+          const calc = calculateAdvanceInterest({
+            principal: amount,
+            monthlyInterestRate: item.monthlyInterestRate,
+            annualInterestRate: item.annualInterestRate,
+            interestMode: item.interestMode,
+            compounding: item.compounding,
+            isInterestFree: item.isInterestFree,
+            repayments,
+            startDate,
+            endDate: tillDate
+          });
+
+          return {
+            ...item,
+            repayments,
+            totalRepaid: calc.totalRepaid,
+            netPrincipalRemaining: calc.netPrincipalRemaining,
+            interestAmount: calc.interestAmount,
+            totalDays: calc.totalDays,
+            monthsElapsed: calc.monthsElapsed,
+            daysElapsed: calc.daysElapsed,
+            totalPayableWithInterest: calc.totalPayableWithInterest,
+            totalPayable: calc.totalPayableWithInterest,
+            status: calc.totalPayableWithInterest <= 0 ? 'SETTLED' : item.status,
+            updatedAt: new Date().toISOString()
+          };
+        }
+        return item;
+      });
+      const target = updatedList.find((a) => a.id === advanceId);
+      if (target) supabaseUpsertAdvance(target, activeFirmId, activeFiscalYear).catch(console.error);
+      return updatedList;
+    });
+    return success;
+  };
+
+  const deleteAdvanceRepayment = (advanceId: string, repaymentId: string): boolean => {
+    let success = false;
+    setFarmerAdvances((prev) => {
+      const updatedList = prev.map((item) => {
+        if (item.id === advanceId && Array.isArray(item.repayments)) {
+          success = true;
+          const repayments = item.repayments.filter((r) => r.id !== repaymentId);
+          const todayStr = formatDateToDDMMYYYY(new Date());
+          const startDate = (item.date || item.startDate || todayStr).trim();
+          const tillDate = (item.interestTillDate || item.endDate || todayStr).trim();
+          const amount = Number(item.amount) || 0;
+
+          const calc = calculateAdvanceInterest({
+            principal: amount,
+            monthlyInterestRate: item.monthlyInterestRate,
+            annualInterestRate: item.annualInterestRate,
+            interestMode: item.interestMode,
+            compounding: item.compounding,
+            isInterestFree: item.isInterestFree,
+            repayments,
+            startDate,
+            endDate: tillDate
+          });
+
+          return {
+            ...item,
+            repayments,
+            totalRepaid: calc.totalRepaid,
+            netPrincipalRemaining: calc.netPrincipalRemaining,
+            interestAmount: calc.interestAmount,
+            totalDays: calc.totalDays,
+            monthsElapsed: calc.monthsElapsed,
+            daysElapsed: calc.daysElapsed,
+            totalPayableWithInterest: calc.totalPayableWithInterest,
+            totalPayable: calc.totalPayableWithInterest,
+            status: calc.totalPayableWithInterest <= 0 ? 'SETTLED' : 'ACTIVE',
+            updatedAt: new Date().toISOString()
+          };
+        }
+        return item;
+      });
+      const target = updatedList.find((a) => a.id === advanceId);
+      if (target) supabaseUpsertAdvance(target, activeFirmId, activeFiscalYear).catch(console.error);
+      return updatedList;
+    });
+    return success;
   };
 
   const deleteFarmerAdvance = (id: string): boolean => {
@@ -1595,10 +1726,11 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     let linkedPurchasedBags = 0;
     let linkedPurchasedWeightKg = 0;
     let linkedPurchasedAmount = 0;
+    let subPurchases: DailyPurchaseRecord[] = [];
 
     if (isMainFarmer) {
       const subFarmerIds = linkedSubFarmers.map((s) => s.id);
-      const subPurchases = dailyPurchaseRecords.filter((p) => {
+      subPurchases = dailyPurchaseRecords.filter((p) => {
         if (!subFarmerIds.includes(p.farmerId)) return false;
         if (shouldFilterCrop) {
           const itemCrop = p.cropType || 'PADDY';
@@ -1643,7 +1775,7 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     // 6. Agency-wise Breakdown (Includes both direct and linked purchases)
     const agencyMap = new Map<string, { bags: number; weightKg: number; amount: number; agencyPa?: string }>();
     const allRelevantPurchases = isMainFarmer
-      ? [...farmerPurchaseEntries, ...dailyPurchaseRecords.filter((p) => linkedSubFarmers.some((s) => s.id === p.farmerId))]
+      ? [...farmerPurchaseEntries, ...subPurchases]
       : farmerPurchaseEntries;
 
     allRelevantPurchases.forEach((p) => {
@@ -1688,7 +1820,14 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const totalBardanaUsed = newBardanaUsed + oldBardanaUsed;
 
     // 8. Boli Records
-    const customBoli = boliRecords.filter((b) => b.farmerId === farmerId);
+    const customBoli = boliRecords.filter((b) => {
+      if (b.farmerId !== farmerId) return false;
+      if (shouldFilterCrop) {
+        const itemCrop = b.crop || 'PADDY';
+        return itemCrop === targetCrop;
+      }
+      return true;
+    });
     const combinedBoli: (BoliRecord | DailyPurchaseRecord)[] = [...customBoli, ...farmerPurchaseEntries];
 
     // 9. Labour Deductions Calculation (From Bags Weighment)
@@ -1737,16 +1876,33 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const tillDate = adv.interestTillDate || adv.endDate || todayStr;
       const amount = Number(adv.amount) || 0;
       const monthlyInterestRate = Number(adv.monthlyInterestRate) || 0;
-      const calc = calculateAdvanceInterest(amount, monthlyInterestRate, startDate, tillDate);
+      const calc = calculateAdvanceInterest({
+        principal: amount,
+        monthlyInterestRate,
+        annualInterestRate: adv.annualInterestRate,
+        interestMode: adv.interestMode,
+        compounding: adv.compounding,
+        isInterestFree: adv.isInterestFree,
+        repayments: adv.repayments,
+        startDate,
+        endDate: tillDate
+      });
       return {
         ...adv,
         date: startDate,
         startDate,
         amount,
         principal: amount,
-        monthlyInterestRate,
+        monthlyInterestRate: calc.monthlyInterestRate,
+        annualInterestRate: calc.annualInterestRate,
+        interestMode: calc.interestMode,
+        compounding: calc.compounding,
+        isInterestFree: calc.isInterestFree,
         interestTillDate: tillDate,
         endDate: tillDate,
+        repayments: adv.repayments || [],
+        totalRepaid: calc.totalRepaid,
+        netPrincipalRemaining: calc.netPrincipalRemaining,
         interestAmount: calc.interestAmount,
         totalDays: calc.totalDays,
         monthsElapsed: calc.monthsElapsed,
@@ -1756,13 +1912,19 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       };
     });
 
-    const totalAdvancePrincipal = Math.round(recalculatedAdvances.reduce((sum, a) => sum + (Number(a.amount) || 0), 0) * 100) / 100;
+    const totalAdvancePrincipal = Math.round(recalculatedAdvances.reduce((sum, a) => sum + (Number(a.netPrincipalRemaining !== undefined ? a.netPrincipalRemaining : a.amount) || 0), 0) * 100) / 100;
     const totalAdvanceInterest = Math.round(recalculatedAdvances.reduce((sum, a) => sum + (Number(a.interestAmount) || 0), 0) * 100) / 100;
-    const totalAdvanceAmount = Math.round((totalAdvancePrincipal + totalAdvanceInterest) * 100) / 100;
+    const totalAdvanceAmount = Math.round(recalculatedAdvances.reduce((sum, a) => sum + (Number(a.totalPayableWithInterest) || 0), 0) * 100) / 100;
 
-    // 14. Final Balance (Net Payable - Total Advance with Interest)
-    const finalBalance = Math.round((netPayableAmount - totalAdvanceAmount) * 100) / 100;
+    // 14. Final Balance (Net Payable - Total Advance with Interest + Opening Balance if any)
+    const farmerOpeningBalance = Number(farmer.openingBalance) || 0;
+    const finalBalance = Math.round((netPayableAmount - totalAdvanceAmount + farmerOpeningBalance) * 100) / 100;
     const pendingAmount = Math.max(0, finalBalance);
+
+    // Credit limit check
+    const farmerCreditLimit = Number(farmer.creditLimit) || 0;
+    const creditLimitExceeded = farmerCreditLimit > 0 && totalAdvanceAmount > farmerCreditLimit;
+    const creditLimitRemaining = farmerCreditLimit > 0 ? Math.max(0, farmerCreditLimit - totalAdvanceAmount) : undefined;
 
     // 15. Unified Chronological Transactions
     const transactions: FarmerAccountSummary['transactions'] = [];
@@ -1985,7 +2147,11 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       paidAmount,
       pendingAmount,
       paymentRecords: farmerPaymentEntries,
-      transactions
+      transactions,
+      openingBalance: farmerOpeningBalance,
+      creditLimit: farmerCreditLimit,
+      creditLimitExceeded,
+      creditLimitRemaining
     };
   };
 
@@ -2397,7 +2563,7 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
     });
 
-    bagsEntries.forEach((b) => {
+    relevantBagsEntries.forEach((b) => {
       if (b.agency) {
         if (!agencyMap.has(b.agency)) {
           agencyMap.set(b.agency, { newRec: 0, newRet: 0, oldRec: 0, oldRet: 0, newIss: 0, oldIss: 0 });
@@ -3497,6 +3663,8 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         addFarmerAdvance,
         updateFarmerAdvance,
         deleteFarmerAdvance,
+        addAdvanceRepayment,
+        deleteAdvanceRepayment,
         addBoliRecord,
         updateBoliRecord,
         deleteBoliRecord,
