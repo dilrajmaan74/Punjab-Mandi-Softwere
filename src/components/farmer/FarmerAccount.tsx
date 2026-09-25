@@ -52,10 +52,11 @@ import {
   Volume2,
   VolumeX,
   Package,
-  ArrowLeftRight
+  ArrowLeftRight,
+  AlertTriangle
 } from 'lucide-react';
 import { formatCurrencyINR, maskAadhaarNumber, calculateAdvanceInterest, formatCurrency } from '../../utils/calculations';
-import { exportFarmerAccountPDF, exportSimpleFarmerAccountPDF } from '../../utils/farmerAccountPdfExport';
+import { exportFarmerAccountPDF, exportSimpleFarmerAccountPDF, exportThreePageLedgerPDF } from '../../utils/farmerAccountPdfExport';
 import { FarmerProfileViewModal } from './FarmerProfileViewModal';
 import { FarmerEditModal } from './FarmerEditModal';
 import { FarmerAccountStatementA4 } from './FarmerAccountStatementA4';
@@ -67,6 +68,7 @@ import { FarmerMiniSlipModal } from './FarmerMiniSlipModal';
 import { BardanaClearanceCard } from './BardanaClearanceCard';
 import { FarmerTFormatLedger } from './FarmerTFormatLedger';
 import { SeasonSettlementModal } from './SeasonSettlementModal';
+import { FarmerThreePageAccount } from './FarmerThreePageAccount';
 import {
   savePaymentTransfer,
   saveSameFarmerAdjustment,
@@ -251,6 +253,7 @@ export const FarmerAccount: React.FC = () => {
     updateFarmer,
     deleteBagsEntry,
     deleteDailyPurchase,
+    farmerPayments,
     addFarmerPayment,
     deleteFarmerPayment,
     addFarmerAdvance,
@@ -295,7 +298,7 @@ export const FarmerAccount: React.FC = () => {
   const [isExportingPDF, setIsExportingPDF] = useState(false);
   const [isBulkWhatsAppOpen, setIsBulkWhatsAppOpen] = useState(false);
   const [isMiniSlipOpen, setIsMiniSlipOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<'statement' | 'tformat' | 'records'>('statement');
+  const [activeTab, setActiveTab] = useState<'threepage' | 'statement' | 'tformat' | 'records'>('threepage');
   const [selectedSeasonFilter, setSelectedSeasonFilter] = useState<'ALL' | 'WHEAT' | 'PADDY'>('ALL');
   const [isSettlementModalOpen, setIsSettlementModalOpen] = useState(false);
 
@@ -467,12 +470,30 @@ export const FarmerAccount: React.FC = () => {
   };
 
   // PDF Export Handlers
-  const handleExportPDF = async (type: 'simple' | 'full') => {
+  const handleExportPDF = async (type: 'simple' | 'full' | 'threepage') => {
     if (!accountSummary) return;
     try {
       setIsExportingPDF(true);
       setShowPdfOptionsModal(false);
-      if (type === 'simple') {
+      if (type === 'threepage') {
+        await exportThreePageLedgerPDF({
+          account: accountSummary,
+          settings,
+          activeCropSeason:
+            selectedSeasonFilter === 'WHEAT'
+              ? 'ਹਾੜ੍ਹੀ (Wheat) 2026'
+              : selectedSeasonFilter === 'PADDY'
+              ? 'ਸਾਉਣੀ (Paddy) 2026'
+              : 'ਸਾਉਣੀ / ਹਾੜ੍ਹੀ 2026',
+          mode: 'all'
+        });
+        notifySaveSuccess({
+          titleEn: '3-Page Mandi Ledger PDF Exported',
+          titlePa: '3-ਪੇਜ ਬਹੀ-ਖਾਤਾ PDF ਡਾਊਨਲੋਡ ਹੋ ਗਿਆ',
+          messageEn: `3-Page Mandi Ledger PDF for ${accountSummary.farmer.farmerName} generated.`,
+          messagePa: `ਕਿਸਾਨ ${accountSummary.farmer.farmerNamePa || accountSummary.farmer.farmerName} ਦਾ 3-ਪੇਜ ਬਹੀ-ਖਾਤਾ PDF ਡਾਊਨਲੋਡ ਹੋ ਗਿਆ ਹੈ।`
+        });
+      } else if (type === 'simple') {
         await exportSimpleFarmerAccountPDF(accountSummary, settings, {
           labourExpense,
           ratePerBag: bagRate,
@@ -691,6 +712,55 @@ export const FarmerAccount: React.FC = () => {
       settings
     });
     openWhatsApp(currentFarmer.mobile || '', msg);
+  };
+
+  // Delete Advance Record with Confirmation
+  const handleDeleteAdvanceRecord = (advId: string) => {
+    confirmDelete({
+      recordNameEn: `Advance Record`,
+      recordNamePa: `ਐਡਵਾਂਸ ਰਿਕਾਰਡ`,
+      recordId: advId,
+      itemDetails: [
+        { labelEn: 'Record ID', labelPa: 'ਰਿਕਾਰਡ ਨੰਬਰ', value: advId }
+      ],
+      onConfirm: () => {
+        deleteFarmerAdvance(advId);
+        notifyDeleteSuccess({
+          titleEn: 'Advance Deleted',
+          titlePa: 'ਐਡਵਾਂਸ ਰਿਕਾਰਡ ਹਟਾ ਦਿੱਤਾ ਗਿਆ',
+          messageEn: 'The advance record has been removed.',
+          messagePa: 'ਐਡਵਾਂਸ ਰਿਕਾਰਡ ਸਫਲਤਾਪੂਰਵਕ ਹਟਾ ਦਿੱਤਾ ਗਿਆ ਹੈ।'
+        });
+      }
+    });
+  };
+
+  // Delete Payment / Receiving Record with Confirmation
+  const handleDeletePaymentRecord = (paymentId: string) => {
+    const pay = accountSummary?.paymentRecords.find((p) => p.id === paymentId) ||
+                farmerPayments.find((p) => p.id === paymentId);
+    const amountStr = pay ? `₹${Math.round(pay.amount).toLocaleString('en-IN')}` : '';
+    confirmDelete({
+      recordNameEn: `Payment / Recovery Record`,
+      recordNamePa: `ਭੁਗਤਾਨ / ਰਿਕਵਰੀ ਰਸੀਦ`,
+      recordId: paymentId,
+      itemDetails: [
+        { labelEn: 'Record ID', labelPa: 'ਰਿਕਾਰਡ ਨੰਬਰ', value: paymentId },
+        { labelEn: 'Amount', labelPa: 'ਭੁਗਤਾਨ ਰਕਮ', value: amountStr },
+        { labelEn: 'Date', labelPa: 'ਮਿਤੀ', value: pay?.date || '—' },
+        { labelEn: 'Mode', labelPa: 'ਢੰਗ', value: pay?.paymentMode || '—' },
+        { labelEn: 'Agency', labelPa: 'ਏਜੰਸੀ', value: pay?.agency || '—' }
+      ],
+      onConfirm: () => {
+        deleteFarmerPayment(paymentId);
+        notifyDeleteSuccess({
+          titleEn: 'Payment Deleted',
+          titlePa: 'ਭੁਗਤਾਨ / ਰਿਕਵਰੀ ਰਿਕਾਰਡ ਹਟਾ ਦਿੱਤਾ ਗਿਆ',
+          messageEn: `Payment of ${amountStr} has been removed.`,
+          messagePa: `${amountStr} ਦਾ ਭੁਗਤਾਨ ਰਿਕਾਰਡ ਸਫਲਤਾਪੂਰਵਕ ਹਟਾ ਦਿੱਤਾ ਗਿਆ ਹੈ।`
+        });
+      }
+    });
   };
 
   // Save Payment
@@ -1355,6 +1425,19 @@ export const FarmerAccount: React.FC = () => {
               <div className="flex items-center gap-2 flex-wrap">
                 <button
                   type="button"
+                  onClick={() => setActiveTab('threepage')}
+                  className={`px-4 py-2.5 rounded-xl text-xs font-black flex items-center gap-2 transition-all cursor-pointer ${
+                    activeTab === 'threepage'
+                      ? 'bg-emerald-700 text-white shadow-md ring-2 ring-emerald-500 scale-[1.02]'
+                      : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-950 border border-emerald-300'
+                  }`}
+                >
+                  <Scale className="w-4 h-4 text-amber-300" />
+                  <span>3-ਪੇਜ ਬਹੀ-ਖਾਤਾ (ਫਸਲ / ਐਡਵਾਂਸ / ਨਿਬੇੜਾ)</span>
+                </button>
+
+                <button
+                  type="button"
                   onClick={() => setActiveTab('statement')}
                   className={`px-4 py-2.5 rounded-xl text-xs font-black flex items-center gap-2 transition-all cursor-pointer ${
                     activeTab === 'statement'
@@ -1417,7 +1500,28 @@ export const FarmerAccount: React.FC = () => {
             </div>
 
             {/* TAB VIEW DISPLAY */}
-            {activeTab === 'statement' ? (
+            {activeTab === 'threepage' ? (
+              <FarmerThreePageAccount
+                farmer={currentFarmer}
+                summary={accountSummary}
+                settings={settings}
+                activeCropSeason={
+                  selectedSeasonFilter === 'WHEAT'
+                    ? 'ਹਾੜ੍ਹੀ (Wheat) 2026'
+                    : selectedSeasonFilter === 'PADDY'
+                    ? 'ਸਾਉਣੀ (Paddy) 2026'
+                    : 'ਹਾੜ੍ਹੀ (Wheat) 2026'
+                }
+                onOpenAdvanceModal={handleOpenAddAdvance}
+                onOpenPaymentModal={() => setIsPaymentModalOpen(true)}
+                onOpenSettlementModal={() => setIsSettlementModalOpen(true)}
+                onDeleteAdvance={handleDeleteAdvanceRecord}
+                onDeletePayment={handleDeletePaymentRecord}
+                onEditAdvance={handleOpenEditAdvance}
+                onViewVoucher={(adv) => setVoucherModalAdvance(adv)}
+                onOpenRepayment={(adv) => setRepaymentModalAdvance(adv)}
+              />
+            ) : activeTab === 'statement' ? (
               <div className="bg-slate-100/90 p-3 sm:p-6 rounded-3xl overflow-x-auto flex flex-col items-center border border-slate-300/80 shadow-inner">
                 <div className="mb-3 text-xs text-slate-500 font-medium flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block animate-pulse"></span>
@@ -2229,8 +2333,8 @@ export const FarmerAccount: React.FC = () => {
                                 <td className="p-2.5 text-right font-black text-emerald-900">{formatCurrencyINR(pay.amount)}</td>
                                 <td className="p-2.5 text-center font-sans">
                                   <button
-                                    onClick={() => deleteFarmerPayment(pay.id)}
-                                    className="p-1 text-slate-400 hover:text-rose-700 rounded"
+                                    onClick={() => handleDeletePaymentRecord(pay.id)}
+                                    className="p-1 text-slate-400 hover:text-rose-700 rounded cursor-pointer"
                                     title="Delete Payment"
                                   >
                                     <Trash2 className="w-3.5 h-3.5" />
@@ -2278,6 +2382,23 @@ export const FarmerAccount: React.FC = () => {
             </p>
 
             <div className="space-y-3">
+              {/* Option 0: Complete 3-Page Mandi Ledger PDF */}
+              <button
+                onClick={() => handleExportPDF('threepage')}
+                className="w-full p-3.5 bg-gradient-to-r from-rose-50 to-pink-50 hover:from-rose-100 hover:to-pink-100 text-left rounded-xl border-2 border-rose-400 shadow-xs transition-all flex items-center justify-between cursor-pointer"
+              >
+                <div>
+                  <div className="font-bold text-sm text-rose-950 flex items-center gap-1.5">
+                    <span className="px-2 py-0.5 bg-rose-600 text-white rounded text-[10px] font-black uppercase">ਨਵਾਂ / ਸਿਫਾਰਿਸ਼ੀ</span>
+                    <span>3-ਪੇਜ ਬਹੀ-ਖਾਤਾ PDF (3-Page Ledger)</span>
+                  </div>
+                  <div className="text-[11px] text-rose-800 mt-0.5">
+                    ਪੇਜ 1 (ਫਸਲ ਤੇ ਲੇਬਰ) + ਪੇਜ 2 (ਐਡਵਾਂਸ ਤੇ ਵਿਆਜ) + ਪੇਜ 3 (ਅੰਤਿਮ ਨਿਬੇੜਾ ਤੇ ਦਸਤਖਤ)
+                  </div>
+                </div>
+                <FileDown className="w-5 h-5 text-rose-700 shrink-0" />
+              </button>
+
               {/* Option 1: Exact Reference A4 Statement PDF */}
               <button
                 onClick={() => handleExportPDF('full')}
@@ -3465,6 +3586,25 @@ export const FarmerAccount: React.FC = () => {
         onClose={() => setIsBulkWhatsAppOpen(false)}
         preSelectedFarmerId={currentFarmer?.id}
       />
+
+      {/* Season Settlement Modal */}
+      {isSettlementModalOpen && currentFarmer && accountSummary && (
+        <SeasonSettlementModal
+          isOpen={isSettlementModalOpen}
+          onClose={() => setIsSettlementModalOpen(false)}
+          farmer={currentFarmer}
+          summary={accountSummary}
+          settings={settings}
+          activeCropSeason={
+            selectedSeasonFilter === 'WHEAT'
+              ? 'ਹਾੜ੍ਹੀ (Wheat) 2026'
+              : selectedSeasonFilter === 'PADDY'
+              ? 'ਸਾਉਣੀ (Paddy) 2026'
+              : 'ਹਾੜ੍ਹੀ (Wheat) 2026'
+          }
+          onConfirmSettlement={handleConfirmSettlement}
+        />
+      )}
     </>
   );
 };

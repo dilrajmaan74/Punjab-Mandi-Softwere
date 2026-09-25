@@ -548,10 +548,74 @@ export async function exportFarmerAccountPDF(
   const totalBardanaUsed = account.totalBardanaUsed || (newBardanaUsed + oldBardanaUsed);
 
   const totalGrossAmount = account.totalGrossAmount ?? directPurchasedAmount;
-  const totalPakkiLabour = account.totalPakkiLabour ?? (account as any).totalLabourCharges ?? (account.totalLabourDeductions || 0);
-  const totalPakkaDoubleLabour = account.totalPakkaDoubleLabour || 0;
-  const totalSukhiLabour = account.totalSukhiLabour || 0;
-  const totalLabourDeductions = account.totalLabourDeductions ?? totalPakkiLabour;
+
+  // Labour Bags and Rates Calculation
+  const defaultPakkiRate = settings.defaultPakkiLabourRate ?? 8;
+  const defaultDoubleRate = settings.defaultPakkaDoubleLabourRate ?? 14;
+  const defaultSukhiRate = settings.defaultSukhiLabourRate ?? 5;
+
+  let pakkiBags = 0;
+  let doubleBags = 0;
+  let sukkiBags = 0;
+  let customPakkiAmt = 0;
+  let customDoubleAmt = 0;
+  let customSukkiAmt = 0;
+  let foundPakkiRate = defaultPakkiRate;
+  let foundDoubleRate = defaultDoubleRate;
+  let foundSukhiRate = defaultSukhiRate;
+
+  mandiArrivalEntries.forEach((e: any) => {
+    const entryBags = Number(e.bags || (e.newBags + e.oldBags) || 0);
+    const ld = e.labourDeductions;
+    if (ld) {
+      if (ld.pakkiLabourEnabled || (ld.pakkiLabourAmount && ld.pakkiLabourAmount > 0)) {
+        const b = ld.pakkiBagsCount !== undefined ? Number(ld.pakkiBagsCount) : entryBags;
+        pakkiBags += b;
+        customPakkiAmt += Number(ld.pakkiLabourAmount) || 0;
+        if (ld.pakkiLabourRate) foundPakkiRate = Number(ld.pakkiLabourRate);
+      }
+      if (ld.pakkaDoubleLabourEnabled || (ld.pakkaDoubleLabourAmount && ld.pakkaDoubleLabourAmount > 0)) {
+        const b = ld.doubleBagsCount !== undefined ? Number(ld.doubleBagsCount) : 0;
+        doubleBags += b;
+        customDoubleAmt += Number(ld.pakkaDoubleLabourAmount) || 0;
+        if (ld.pakkaDoubleLabourRate) foundDoubleRate = Number(ld.pakkaDoubleLabourRate);
+      }
+      if (ld.sukhiLabourEnabled || (ld.sukhiLabourAmount && ld.sukhiLabourAmount > 0)) {
+        const b = ld.sukkiBagsCount !== undefined ? Number(ld.sukkiBagsCount) : 0;
+        sukkiBags += b;
+        customSukkiAmt += Number(ld.sukhiLabourAmount) || 0;
+        if (ld.sukhiLabourRate) foundSukhiRate = Number(ld.sukhiLabourRate);
+      }
+    } else if (e.conditionBreakdown) {
+      pakkiBags += Number(e.conditionBreakdown.pakkiBags ?? entryBags);
+      doubleBags += Number(e.conditionBreakdown.doubleBags ?? 0);
+      sukkiBags += Number(e.conditionBreakdown.sukkiBags ?? 0);
+      customPakkiAmt += Number(e.conditionBreakdown.pakkiAmount ?? 0);
+      customDoubleAmt += Number(e.conditionBreakdown.doubleAmount ?? 0);
+      customSukkiAmt += Number(e.conditionBreakdown.sukkiAmount ?? 0);
+    } else {
+      pakkiBags += entryBags;
+    }
+  });
+
+  if (pakkiBags === 0 && (account.totalPakkiLabour || 0) > 0) {
+    pakkiBags = purchasedBags || mandiArrivalBags;
+  }
+  if (doubleBags === 0 && (account.totalPakkaDoubleLabour || 0) > 0) {
+    doubleBags = Math.round((account.totalPakkaDoubleLabour || 0) / foundDoubleRate);
+  }
+  if (sukkiBags === 0 && (account.totalSukhiLabour || 0) > 0) {
+    sukkiBags = Math.round((account.totalSukhiLabour || 0) / foundSukhiRate);
+  }
+
+  const pakkiRate = foundPakkiRate;
+  const doubleRate = foundDoubleRate;
+  const sukkiRate = foundSukhiRate;
+
+  const totalPakkiLabour = customPakkiAmt > 0 ? customPakkiAmt : (account.totalPakkiLabour ?? (pakkiBags * pakkiRate));
+  const totalPakkaDoubleLabour = customDoubleAmt > 0 ? customDoubleAmt : (account.totalPakkaDoubleLabour ?? (doubleBags * doubleRate));
+  const totalSukhiLabour = customSukkiAmt > 0 ? customSukkiAmt : (account.totalSukhiLabour ?? (sukkiBags * sukkiRate));
+  const totalLabourDeductions = account.totalLabourDeductions ?? (totalPakkiLabour + totalPakkaDoubleLabour + totalSukhiLabour);
   const totalAgencyPurchasePayment = account.totalAgencyPurchasePayment ?? directPurchasedAmount;
   const netPayableAmount = account.netPayableAmount ?? (account as any).netPayableToFarmer ?? (totalGrossAmount - totalLabourDeductions);
 
@@ -1028,19 +1092,19 @@ export async function exportFarmerAccountPDF(
   crY += 6;
   doc.setFont('NotoSansGurmukhi', 'normal');
   doc.setTextColor(185, 28, 28);
-  doc.text('Less: Pakki Labour / ਪੱਕੀ ਲੇਬਰ (Rs. 7/Qtl):', margin + 6, crY);
+  doc.text(`Less: Pakki Labour / ਪੱਕੀ ਲੇਬਰ (${pakkiBags} Bags @ Rs. ${pakkiRate}):`, margin + 6, crY);
   doc.setFont('NotoSansGurmukhi', 'bold');
   doc.text(`- ${formatPdfCurrency(totalPakkiLabour)}`, margin + 76, crY);
 
   crY += 6;
   doc.setFont('NotoSansGurmukhi', 'normal');
-  doc.text('Less: Double Labour / ਡਬਲ ਲੇਬਰ (Rs. 14/Qtl):', margin + 6, crY);
+  doc.text(`Less: Double Labour / ਡਬਲ ਲੇਬਰ (${doubleBags} Bags @ Rs. ${doubleRate}):`, margin + 6, crY);
   doc.setFont('NotoSansGurmukhi', 'bold');
   doc.text(`- ${formatPdfCurrency(totalPakkaDoubleLabour)}`, margin + 76, crY);
 
   crY += 6;
   doc.setFont('NotoSansGurmukhi', 'normal');
-  doc.text('Less: Sukhi Labour / ਸੁੱਕੀ ਲੇਬਰ (Rs. 5/Qtl):', margin + 6, crY);
+  doc.text(`Less: Sukhi Labour / ਸੁੱਕੀ ਲੇਬਰ (${sukkiBags} Bags @ Rs. ${sukkiRate}):`, margin + 6, crY);
   doc.setFont('NotoSansGurmukhi', 'bold');
   doc.text(`- ${formatPdfCurrency(totalSukhiLabour)}`, margin + 76, crY);
 
@@ -1158,6 +1222,71 @@ export async function exportFarmerAccountPDF(
     doc.setTextColor(159, 18, 57);
     doc.text('Total Recoverable / ਕੁੱਲ ਵਾਪਸੀ:', margin + 134, y + 5);
     doc.text(formatPdfCurrency(totalAdvanceRecoverable), pageWidth - margin - 3, y + 5, { align: 'right' });
+    y += 8.5;
+  }
+
+  // ==========================================
+  // SECTION 5B: PAYMENT RECEIPTS & RECOVERIES
+  // ==========================================
+  const paymentRecords = account.paymentRecords || [];
+  checkPageBreak(38);
+  doc.setFont('NotoSansGurmukhi', 'bold');
+  doc.setFontSize(9.5);
+  doc.setTextColor(20, 83, 45);
+  doc.text('5B. PAYMENT RECEIPTS & RECOVERIES / ਪ੍ਰਾਪਤ ਰਕਮ ਅਤੇ ਭੁਗਤਾਨ ਰਸੀਦਾਂ ਦਾ ਵੇਰਵਾ', margin, y);
+  y += 4;
+
+  const s5bHeaderHeight = 8.5;
+  doc.setFillColor(226, 232, 240);
+  doc.rect(margin, y, contentWidth, s5bHeaderHeight, 'F');
+  doc.setFont('NotoSansGurmukhi', 'bold');
+  doc.setFontSize(7.2);
+  doc.setTextColor(30, 41, 59);
+  doc.text('Date / ਮਿਤੀ', margin + 2, y + 5.2);
+  doc.text('Mode / ਢੰਗ', margin + 28, y + 5.2);
+  doc.text('Ref / UTR / ਰੈਫਰੈਂਸ', margin + 62, y + 5.2);
+  doc.text('Agency / ਏਜੰਸੀ', margin + 100, y + 5.2);
+  doc.text('Remarks / ਵੇਰਵਾ', margin + 132, y + 5.2);
+  doc.text('Amount / ਰਕਮ', pageWidth - margin - 3, y + 5.2, { align: 'right' });
+  y += s5bHeaderHeight;
+
+  if (paymentRecords.length === 0) {
+    doc.setFont('NotoSansGurmukhi', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(148, 163, 184);
+    doc.text('No payment receipts or recoveries recorded / ਕੋਈ ਪ੍ਰਾਪਤ ਰਕਮ ਜਾਂ ਰਸੀਦ ਰਿਕਾਰਡ ਨਹੀਂ ਹੈ।', margin + 3, y + 5);
+    y += 8;
+  } else {
+    paymentRecords.forEach((pay, idx) => {
+      checkPageBreak(8);
+      const rowH = 7;
+      if (idx % 2 === 1) {
+        doc.setFillColor(248, 250, 252);
+        doc.rect(margin, y, contentWidth, rowH, 'F');
+      }
+      doc.setFont('NotoSansGurmukhi', 'normal');
+      doc.setFontSize(7.5);
+      doc.setTextColor(51, 65, 85);
+      doc.text(safeText(pay.date), margin + 2, y + 4.8);
+      doc.text(safeText(pay.paymentMode), margin + 28, y + 4.8);
+      doc.text(safeText(pay.referenceNumber || '—'), margin + 62, y + 4.8);
+      doc.text(safeText(pay.agency || '—'), margin + 100, y + 4.8);
+      doc.text(safeText(pay.remarks || '—'), margin + 132, y + 4.8);
+      doc.setFont('NotoSansGurmukhi', 'bold');
+      doc.setTextColor(20, 83, 45);
+      doc.text(formatPdfCurrency(pay.amount), pageWidth - margin - 3, y + 4.8, { align: 'right' });
+      y += rowH;
+    });
+
+    // Total row
+    doc.setDrawColor(203, 213, 225);
+    doc.line(margin, y, pageWidth - margin, y);
+    doc.setFont('NotoSansGurmukhi', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(15, 23, 42);
+    doc.text('Total Payments Received / ਕੁੱਲ ਪ੍ਰਾਪਤ ਰਕਮ:', margin + 2, y + 5);
+    doc.setTextColor(20, 83, 45);
+    doc.text(formatPdfCurrency(paidAmount), pageWidth - margin - 3, y + 5, { align: 'right' });
     y += 8.5;
   }
 
@@ -1289,5 +1418,126 @@ export async function exportFarmerAccountPDF(
   const cleanName = safeText(account.farmer.farmerName).replace(/\s+/g, '_') || 'Farmer';
   const filename = `Farmer_Account_${account.farmer.id}_${cleanName}.pdf`;
   doc.save(filename);
+}
+
+export interface ExportThreePageLedgerOptions {
+  account: FarmerAccountSummary;
+  settings: MandiSettings;
+  activeCropSeason?: string;
+  mode?: 'all' | 'page1' | 'page2' | 'page3';
+}
+
+/**
+ * Export 3-Page Mandi Ledger to PDF (All 3 pages or active page)
+ * Page 1: ਮੰਡੀ ਫਸਲ, ਤੁਲਾਈ, ਖਰੀਦ ਅਤੇ ਲੇਬਰ ਕਟੌਤੀ ਖਾਤਾ
+ * Page 2: ਕਿਸਾਨ ਐਡਵਾਂਸ, ਵਿਆਜ ਅਤੇ ਰੋਕੜ ਖਾਤਾ
+ * Page 3: ਸੀਜ਼ਨ ਅੰਤਿਮ ਖਾਤਾ ਨਿਬੇੜਾ ਤੇ ਲੈਣ-ਦੇਣ ਫੈਸਲਾ
+ */
+export async function exportThreePageLedgerPDF({
+  account,
+  settings,
+  activeCropSeason = 'ਸਾਉਣੀ / ਹਾੜ੍ਹੀ 2026',
+  mode = 'all'
+}: ExportThreePageLedgerOptions): Promise<boolean> {
+  if (typeof document === 'undefined') return false;
+
+  try {
+    const { toPng } = await import('html-to-image');
+    const { jsPDF } = await import('jspdf');
+
+    const offscreenWrapper = document.getElementById('farmer-three-page-offscreen-wrapper');
+    const prevLeft = offscreenWrapper?.style.left;
+    const prevZIndex = offscreenWrapper?.style.zIndex;
+    if (offscreenWrapper) {
+      offscreenWrapper.style.left = '0px';
+      offscreenWrapper.style.zIndex = '-1';
+    }
+
+    const pagesToExport: { id: string; title: string }[] = [];
+    if (mode === 'all') {
+      pagesToExport.push(
+        { id: 'farmer-three-page-p1-export', title: 'Page 1' },
+        { id: 'farmer-three-page-p2-export', title: 'Page 2' },
+        { id: 'farmer-three-page-p3-export', title: 'Page 3' }
+      );
+    } else if (mode === 'page1') {
+      pagesToExport.push({ id: 'farmer-three-page-p1-export', title: 'Page 1' });
+    } else if (mode === 'page2') {
+      pagesToExport.push({ id: 'farmer-three-page-p2-export', title: 'Page 2' });
+    } else if (mode === 'page3') {
+      pagesToExport.push({ id: 'farmer-three-page-p3-export', title: 'Page 3' });
+    }
+
+    const pdf = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: 'a4',
+      compress: true
+    });
+
+    let renderedCount = 0;
+
+    for (let i = 0; i < pagesToExport.length; i++) {
+      const pageInfo = pagesToExport[i];
+      let el = document.getElementById(pageInfo.id);
+
+      // Fallback to active screen element if offscreen element isn't found
+      if (!el && mode !== 'all') {
+        el = document.getElementById('farmer-three-page-active');
+      }
+
+      if (!el) continue;
+
+      const imgData = await toPng(el, {
+        pixelRatio: 2.2,
+        backgroundColor: '#ffffff',
+        cacheBust: true,
+        skipFonts: true,
+      });
+
+      if (renderedCount > 0) {
+        pdf.addPage();
+      }
+
+      const imgProps = pdf.getImageProperties(imgData);
+      const pdfWidth = 210;
+      const calculatedHeight = (imgProps.height * pdfWidth) / imgProps.width;
+
+      if (calculatedHeight <= 297) {
+        pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, calculatedHeight, undefined, 'FAST');
+      } else {
+        // Fit within A4 margins
+        const scale = 290 / calculatedHeight;
+        const fittedWidth = pdfWidth * scale;
+        const offsetX = (210 - fittedWidth) / 2;
+        pdf.addImage(imgData, 'PNG', offsetX, 3.5, fittedWidth, 290, undefined, 'FAST');
+      }
+
+      renderedCount++;
+    }
+
+    if (offscreenWrapper && prevLeft !== undefined) {
+      offscreenWrapper.style.left = prevLeft;
+      offscreenWrapper.style.zIndex = prevZIndex || '-100';
+    }
+
+    if (renderedCount > 0) {
+      const safeFarmerName = (account.farmer.farmerName || 'Farmer').replace(/[^a-zA-Z0-9_-]/g, '_');
+      const suffix = mode === 'all' ? '3Page_Ledger' : mode.toUpperCase();
+      pdf.save(`Farmer_${suffix}_${account.farmer.id}_${safeFarmerName}.pdf`);
+      return true;
+    }
+  } catch (err) {
+    console.error('Failed to export 3-page ledger PDF via html-to-image:', err);
+  }
+
+  // Fallback to standard PDF generator if DOM capture was unsuccessful
+  try {
+    await exportFarmerAccountPDF(account, settings);
+    return true;
+  } catch (fallbackErr) {
+    console.error('Fallback PDF export failed:', fallbackErr);
+    return false;
+  }
 }
 

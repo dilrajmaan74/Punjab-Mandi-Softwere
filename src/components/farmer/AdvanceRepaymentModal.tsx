@@ -32,7 +32,7 @@ export const AdvanceRepaymentModal: React.FC<AdvanceRepaymentModalProps> = ({
   onRepaymentUpdated
 }) => {
   const { addAdvanceRepayment, deleteAdvanceRepayment, language } = useMandi();
-  const { notifySaveSuccess, notifyDeleteSuccess, notifyError } = useNotification();
+  const { notifySaveSuccess, notifyDeleteSuccess, notifyError, confirmDelete } = useNotification();
 
   const isPa = language === 'pa';
   const todayStr = formatDateToDDMMYYYY(new Date());
@@ -119,23 +119,26 @@ export const AdvanceRepaymentModal: React.FC<AdvanceRepaymentModalProps> = ({
   };
 
   const handleDeleteRepayment = (repId: string, repAmount: number) => {
-    const confirmDelete = window.confirm(
-      isPa
-        ? `ਕੀ ਤੁਸੀਂ ₹${repAmount.toLocaleString('en-IN')} ਦੀ ਇਸ ਕਿਸ਼ਤ ਨੂੰ ਹਟਾਉਣਾ ਚਾਹੁੰਦੇ ਹੋ?`
-        : `Are you sure you want to delete this repayment of ₹${repAmount.toLocaleString('en-IN')}?`
-    );
-    if (!confirmDelete) return;
-
-    const success = deleteAdvanceRepayment(advance.id, repId);
-    if (success) {
-      notifyDeleteSuccess({
-        titleEn: 'Repayment Deleted',
-        titlePa: 'ਕਿਸ਼ਤ ਹਟਾਈ ਗਈ',
-        messageEn: `Repayment of ₹${repAmount.toLocaleString('en-IN')} deleted.`,
-        messagePa: `₹${repAmount.toLocaleString('en-IN')} ਦੀ ਕਿਸ਼ਤ ਹਟਾ ਦਿੱਤੀ ਗਈ ਹੈ।`
-      });
-      if (onRepaymentUpdated) onRepaymentUpdated();
-    }
+    confirmDelete({
+      recordNameEn: 'Advance Repayment',
+      recordNamePa: 'ਪੇਸ਼ਗੀ ਕਿਸ਼ਤ ਵਾਪਸੀ',
+      recordId: repId,
+      itemDetails: [
+        { labelEn: 'Amount', labelPa: 'ਰਕਮ', value: `₹${repAmount.toLocaleString('en-IN')}` }
+      ],
+      onConfirm: () => {
+        const success = deleteAdvanceRepayment(advance.id, repId);
+        if (success) {
+          notifyDeleteSuccess({
+            titleEn: 'Repayment Deleted',
+            titlePa: 'ਕਿਸ਼ਤ ਹਟਾਈ ਗਈ',
+            messageEn: `Repayment of ₹${repAmount.toLocaleString('en-IN')} deleted.`,
+            messagePa: `₹${repAmount.toLocaleString('en-IN')} ਦੀ ਕਿਸ਼ਤ ਹਟਾ ਦਿੱਤੀ ਗਈ ਹੈ।`
+          });
+          if (onRepaymentUpdated) onRepaymentUpdated();
+        }
+      }
+    });
   };
 
   return (

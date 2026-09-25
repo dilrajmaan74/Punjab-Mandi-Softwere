@@ -791,6 +791,69 @@ export const FarmerAccountStatementA4: React.FC<FarmerAccountStatementA4Props> =
       </div>
 
       {/* ===================================================================== */}
+      {/* 7B. DIRECT PAYMENTS & RECOVERIES / ਪ੍ਰਾਪਤ ਰਕਮ ਅਤੇ ਸਿੱਧਾ ਭੁਗਤਾਨ          */}
+      {/* ===================================================================== */}
+      <div className="mb-2">
+        <div className="bg-slate-100 border border-slate-300 px-2 py-0.5 text-[9.5px] font-black uppercase tracking-wide flex justify-between items-center text-slate-900">
+          <span>7B. DIRECT PAYMENTS & RECOVERIES / ਪ੍ਰਾਪਤ ਰਕਮ ਅਤੇ ਸਿੱਧਾ ਭੁਗਤਾਨ</span>
+          <span className="text-[8px] font-semibold text-emerald-800">
+            Total Paid: {fmtINR(account.paidAmount || 0)}
+          </span>
+        </div>
+        <table className="w-full border-collapse border-l border-r border-b border-slate-300 text-[8.5px]">
+          <thead>
+            <tr className="bg-slate-50 border-b border-slate-300 text-slate-800 font-bold text-center">
+              <th className="py-0.5 px-1.5 border-r border-slate-300 w-[16%]">Date / ਮਿਤੀ</th>
+              <th className="py-0.5 px-1.5 border-r border-slate-300 w-[20%]">Payment Mode / ਢੰਗ</th>
+              <th className="py-0.5 px-1.5 border-r border-slate-300 w-[22%]">Ref / UTR / ਰੈਫਰੈਂਸ</th>
+              <th className="py-0.5 px-1.5 border-r border-slate-300 w-[20%]">Agency / ਏਜੰਸੀ</th>
+              <th className="py-0.5 px-1.5 text-right w-[22%]">Amount / ਰਕਮ</th>
+            </tr>
+          </thead>
+          <tbody>
+            {!account.paymentRecords || account.paymentRecords.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="py-1 text-center text-slate-500 italic border-b border-slate-200">
+                  ਕੋਈ ਸਿੱਧਾ ਭੁਗਤਾਨ ਜਾਂ ਰਿਕਵਰੀ ਦਰਜ ਨਹੀਂ / No direct payments recorded
+                </td>
+              </tr>
+            ) : (
+              account.paymentRecords.map((pay, idx) => (
+                <tr key={pay.id || idx} className="border-b border-slate-200 text-center">
+                  <td className="py-0.5 px-1.5 border-r border-slate-200 font-mono text-slate-800">
+                    {pay.date}
+                  </td>
+                  <td className="py-0.5 px-1.5 border-r border-slate-200 font-bold text-slate-900">
+                    {pay.paymentMode === 'CASH' ? 'Cash / ਨਕਦ' :
+                     pay.paymentMode === 'BANK_TRANSFER' ? 'Bank / ਬੈਂਕ' :
+                     (pay.paymentMode as string) === 'RTGS' || (pay.paymentMode as string) === 'NEFT' ? 'RTGS/NEFT' :
+                     pay.paymentMode === 'CHEQUE' ? 'Cheque / ਚੈੱਕ' : pay.paymentMode}
+                  </td>
+                  <td className="py-0.5 px-1.5 border-r border-slate-200 font-mono text-slate-700">
+                    {pay.referenceNumber || '—'}
+                  </td>
+                  <td className="py-0.5 px-1.5 border-r border-slate-200 text-slate-700">
+                    {pay.agency || '—'}
+                  </td>
+                  <td className="py-0.5 px-1.5 text-right font-bold font-mono text-emerald-900">
+                    {fmtINR(pay.amount)}
+                  </td>
+                </tr>
+              ))
+            )}
+            <tr className="bg-slate-100 font-black text-slate-950 border-t border-slate-300 text-center">
+              <td colSpan={4} className="py-0.5 px-1.5 border-r border-slate-300 text-left uppercase">
+                TOTAL PAYMENTS RECEIVED / ਕੁੱਲ ਪ੍ਰਾਪਤ ਰਕਮ:
+              </td>
+              <td className="py-0.5 px-1.5 text-right font-mono text-emerald-950">
+                {fmtINR(account.paidAmount || 0)}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      {/* ===================================================================== */}
       {/* 8. PAYMENT ADJUSTMENT / ਪੇਮੈਂਟ ਐਡਜਸਟਮੈਂਟ (Two Separate Options)         */}
       {/* ===================================================================== */}
       <div className="mb-2">
