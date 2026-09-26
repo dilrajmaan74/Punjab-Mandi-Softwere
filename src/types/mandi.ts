@@ -680,7 +680,7 @@ export interface FarmerAccountSummary {
   transactions: {
     id: string;
     date: string;
-    type: 'MANDI_ARRIVAL' | 'BOLI' | 'DAILY_PURCHASE' | 'LINKED_PURCHASE' | 'BARDANA' | 'PAYMENT' | 'ADVANCE' | 'ADJUSTMENT';
+    type: 'MANDI_ARRIVAL' | 'BOLI' | 'DAILY_PURCHASE' | 'LINKED_PURCHASE' | 'BARDANA' | 'PAYMENT' | 'ADVANCE' | 'ADJUSTMENT' | 'REPAYMENT';
     typeLabelEn: string;
     typeLabelPa: string;
     agency?: string;

@@ -53,6 +53,7 @@ interface FarmerThreePageAccountProps {
   onOpenSettlementModal: () => void;
   onDeleteAdvance?: (id: string) => void;
   onDeletePayment?: (id: string) => void;
+  onDeleteRepayment?: (advanceId: string, repaymentId: string, amount?: number) => void;
   onEditAdvance?: (advance: FarmerAdvanceRecord) => void;
   onViewVoucher?: (advance: FarmerAdvanceRecord) => void;
   onOpenRepayment?: (advance: FarmerAdvanceRecord) => void;
@@ -68,6 +69,7 @@ export const FarmerThreePageAccount: React.FC<FarmerThreePageAccountProps> = ({
   onOpenSettlementModal,
   onDeleteAdvance,
   onDeletePayment,
+  onDeleteRepayment,
   onEditAdvance,
   onViewVoucher,
   onOpenRepayment
@@ -179,6 +181,45 @@ export const FarmerThreePageAccount: React.FC<FarmerThreePageAccountProps> = ({
   const totalAdvancePayable = summary.totalAdvanceAmount || (totalAdvancePrincipal + totalAdvanceInterest);
   const openingBalance = summary.openingBalance || 0;
   const directPayments = summary.paidAmount || payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+
+  // Unified recoveries & repayments with exact dates
+  const allRecoveries = React.useMemo(() => {
+    const direct = payments.map((p) => ({
+      id: p.id,
+      advanceId: undefined as string | undefined,
+      isRepayment: false,
+      date: p.date,
+      typeLabel: 'ਸਿੱਧਾ ਭੁਗਤਾਨ / ਰਿਕਵਰੀ',
+      mode: p.paymentMode,
+      ref: p.referenceNumber || '—',
+      agency: p.agency || '—',
+      remarks: p.remarks || '—',
+      amount: p.amount
+    }));
+
+    const reps = advances.flatMap((adv) =>
+      (adv.repayments || []).map((r) => ({
+        id: r.id,
+        advanceId: adv.id,
+        isRepayment: true,
+        date: r.date,
+        typeLabel: `ਕਿਸ਼ਤ ਵਾਪਸੀ (ਪੇਸ਼ਗੀ #${adv.id})`,
+        mode: r.paymentMode,
+        ref: r.referenceNumber || r.referenceNo || adv.id,
+        agency: '—',
+        remarks: r.remarks || `ਐਡਵਾਂਸ #${adv.id} ਖ਼ਿਲਾਫ਼ ਵਾਪਸ`,
+        amount: r.amount
+      }))
+    );
+
+    return [...direct, ...reps].sort((a, b) => {
+      const dateA = a.date.split('/').reverse().join('-');
+      const dateB = b.date.split('/').reverse().join('-');
+      return dateB.localeCompare(dateA);
+    });
+  }, [payments, advances]);
+
+  const totalRecoveriesAmount = allRecoveries.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
 
   // Page 3 Data: Final Settlement Decision
   // Net Crop Proceeds (Cr) - Advances (Dr) - Direct Payments (Dr) + Opening Balance (+/-)
@@ -937,13 +978,13 @@ export const FarmerThreePageAccount: React.FC<FarmerThreePageAccountProps> = ({
             {/* Total Recoveries & Direct Payments Received */}
             <div className="bg-white border-2 border-emerald-300 rounded-xl p-3.5 shadow-2xs">
               <span className="text-[11px] font-bold text-emerald-800 uppercase block">
-                ਕੁੱਲ ਪ੍ਰਾਪਤ / ਰਿਕਵਰੀ (Paid)
+                ਕੁੱਲ ਪ੍ਰਾਪਤ / ਵਾਪਸ ਆਏ ਪੈਸੇ (Total Recovered)
               </span>
               <strong className="text-base sm:text-lg font-black text-emerald-700 font-mono block mt-1">
-                ₹{Math.round(directPayments).toLocaleString('en-IN')}
+                ₹{Math.round(totalRecoveriesAmount).toLocaleString('en-IN')}
               </strong>
               <span className="text-[10px] text-emerald-600 font-semibold">
-                {payments.length} ਰਸੀਦਾਂ ਦਰਜ
+                {allRecoveries.length} ਵਾਪਸੀਆਂ / ਰਸੀਦਾਂ ਦਰਜ
               </span>
             </div>
           </div>
@@ -987,97 +1028,158 @@ export const FarmerThreePageAccount: React.FC<FarmerThreePageAccountProps> = ({
                     {advances.map((adv) => {
                       const netPayable = adv.totalPayableWithInterest || (adv.amount + (adv.interestAmount || 0));
                       return (
-                        <tr key={adv.id} className="hover:bg-amber-50/40 transition">
-                          <td className="py-2.5 px-2 font-mono font-bold text-slate-800">
-                            {adv.date}
-                          </td>
-                          <td className="py-2.5 px-2">
-                            <span className="font-bold text-slate-900 block">
-                              {adv.category === 'CASH' ? '💵 ਨਕਦ (Cash)' :
-                               adv.category === 'FERTILIZER' ? '🌱 ਖਾਦ (Fertilizer)' :
-                               adv.category === 'DIESEL' ? '⛽ ਡੀਜ਼ਲ (Diesel)' :
-                               adv.category === 'PESTICIDE' ? '🧪 ਦਵਾਈਆਂ (Pesticide)' :
-                               adv.category === 'BANK_TRANSFER' ? '🏦 ਬੈਂਕ (Transfer)' :
-                               adv.category === 'CHEQUE' ? '🧾 ਚੈੱਕ (Cheque)' : adv.category}
-                            </span>
-                            {adv.itemDescription && (
-                              <span className="text-[10px] text-slate-500 block">{adv.itemDescription}</span>
-                            )}
-                            {adv.repayments && adv.repayments.length > 0 && (
-                              <span className="inline-block mt-0.5 px-1.5 py-0.5 bg-emerald-100 text-emerald-800 text-[9px] font-bold rounded">
-                                ₹{(adv.totalRepaid || 0).toLocaleString('en-IN')} ਵਾਪਸ ({adv.repayments.length} ਕਿਸ਼ਤਾਂ)
+                        <React.Fragment key={adv.id}>
+                          <tr className="hover:bg-amber-50/40 transition">
+                            <td className="py-2.5 px-2 font-mono font-bold text-slate-800">
+                              {adv.date}
+                            </td>
+                            <td className="py-2.5 px-2">
+                              <span className="font-bold text-slate-900 block">
+                                {adv.category === 'CASH' ? '💵 ਨਕਦ (Cash)' :
+                                 adv.category === 'FERTILIZER' ? '🌱 ਖਾਦ (Fertilizer)' :
+                                 adv.category === 'DIESEL' ? '⛽ ਡੀਜ਼ਲ (Diesel)' :
+                                 adv.category === 'PESTICIDE' ? '🧪 ਦਵਾਈਆਂ (Pesticide)' :
+                                 adv.category === 'BANK_TRANSFER' ? '🏦 ਬੈਂਕ (Transfer)' :
+                                 adv.category === 'CHEQUE' ? '🧾 ਚੈੱਕ (Cheque)' : adv.category}
                               </span>
-                            )}
-                          </td>
-                          <td className="py-2.5 px-2 text-right font-mono font-black text-slate-900">
-                            ₹{Math.round(adv.amount).toLocaleString('en-IN')}
-                          </td>
-                          <td className="py-2.5 px-2 text-center">
-                            {adv.isInterestFree ? (
-                              <span className="px-2 py-0.5 rounded text-[10px] font-black bg-emerald-100 text-emerald-800">
-                                ਬਿਨਾਂ ਵਿਆਜ
-                              </span>
-                            ) : (
-                              <span className="text-xs font-mono font-bold text-slate-700">
-                                {adv.monthlyInterestRate || 2}% / ਮਹੀਨਾ
-                              </span>
-                            )}
-                          </td>
-                          <td className="py-2.5 px-2 text-center text-slate-600 font-mono text-[11px]">
-                            {adv.totalDays ? `${adv.totalDays} ਦਿਨ` : '-'}
-                            {adv.monthsElapsed ? ` (${adv.monthsElapsed} ਮਹੀਨੇ)` : ''}
-                          </td>
-                          <td className="py-2.5 px-2 text-right font-mono font-bold text-rose-700">
-                            ₹{Math.round(adv.interestAmount || 0).toLocaleString('en-IN')}
-                          </td>
-                          <td className="py-2.5 px-2 text-right font-mono font-black text-amber-900 text-xs">
-                            ₹{Math.round(netPayable).toLocaleString('en-IN')}
-                          </td>
-                          <td className="py-2.5 px-2 text-center">
-                            <div className="flex items-center justify-center gap-1.5">
-                              {onViewVoucher && (
-                                <button
-                                  type="button"
-                                  onClick={() => onViewVoucher(adv)}
-                                  className="p-1 hover:bg-slate-200 rounded text-slate-600 cursor-pointer"
-                                  title="ਵਾਊਚਰ ਦੇਖੋ"
-                                >
-                                  <Eye className="w-3.5 h-3.5" />
-                                </button>
+                              {adv.itemDescription && (
+                                <span className="text-[10px] text-slate-500 block">{adv.itemDescription}</span>
                               )}
-                              {onOpenRepayment && (
-                                <button
-                                  type="button"
-                                  onClick={() => onOpenRepayment(adv)}
-                                  className="p-1 hover:bg-emerald-100 rounded text-emerald-700 cursor-pointer"
-                                  title="ਕਿਸ਼ਤ ਵਾਪਸੀ / ਰਿਕਵਰੀ ਦਰਜ ਕਰੋ"
-                                >
-                                  <Receipt className="w-3.5 h-3.5" />
-                                </button>
+                              {adv.repayments && adv.repayments.length > 0 && (
+                                <div className="mt-1 space-y-0.5">
+                                  {adv.repayments.map((rep, rIdx) => (
+                                    <span key={rIdx} className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-100 text-emerald-900 text-[10px] font-bold rounded border border-emerald-300 mr-1">
+                                      <span>📅 ਵਾਪਸੀ ਮਿਤੀ: {rep.date}</span>
+                                      <span className="text-emerald-950 font-black">₹{Math.round(rep.amount).toLocaleString('en-IN')} ਵਾਪਸ</span>
+                                    </span>
+                                  ))}
+                                </div>
                               )}
-                              {onEditAdvance && (
-                                <button
-                                  type="button"
-                                  onClick={() => onEditAdvance(adv)}
-                                  className="p-1 hover:bg-indigo-100 rounded text-indigo-700 cursor-pointer"
-                                  title="ਸੋਧੋ"
-                                >
-                                  <Edit className="w-3.5 h-3.5" />
-                                </button>
+                            </td>
+                            <td className="py-2.5 px-2 text-right font-mono font-black text-slate-900">
+                              ₹{Math.round(adv.amount).toLocaleString('en-IN')}
+                            </td>
+                            <td className="py-2.5 px-2 text-center">
+                              {adv.isInterestFree ? (
+                                <span className="px-2 py-0.5 rounded text-[10px] font-black bg-emerald-100 text-emerald-800">
+                                  ਬਿਨਾਂ ਵਿਆਜ
+                                </span>
+                              ) : (
+                                <span className="text-xs font-mono font-bold text-slate-700">
+                                  {adv.monthlyInterestRate || 2}% / ਮਹੀਨਾ
+                                </span>
                               )}
-                              {onDeleteAdvance && (
-                                <button
-                                  type="button"
-                                  onClick={() => onDeleteAdvance(adv.id)}
-                                  className="p-1 hover:bg-rose-100 rounded text-rose-700 cursor-pointer"
-                                  title="ਡਿਲੀਟ ਕਰੋ"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
+                            </td>
+                            <td className="py-2.5 px-2 text-center text-slate-600 font-mono text-[11px]">
+                              {adv.totalDays ? `${adv.totalDays} ਦਿਨ` : '-'}
+                              {adv.monthsElapsed ? ` (${adv.monthsElapsed} ਮਹੀਨੇ)` : ''}
+                            </td>
+                            <td className="py-2.5 px-2 text-right font-mono font-bold text-rose-700">
+                              ₹{Math.round(adv.interestAmount || 0).toLocaleString('en-IN')}
+                            </td>
+                            <td className="py-2.5 px-2 text-right font-mono font-black text-amber-900 text-xs">
+                              ₹{Math.round(netPayable).toLocaleString('en-IN')}
+                            </td>
+                            <td className="py-2.5 px-2 text-center">
+                              <div className="flex items-center justify-center gap-1.5">
+                                {onViewVoucher && (
+                                  <button
+                                    type="button"
+                                    onClick={() => onViewVoucher(adv)}
+                                    className="p-1 hover:bg-slate-200 rounded text-slate-600 cursor-pointer"
+                                    title="ਵਾਊਚਰ ਦੇਖੋ"
+                                  >
+                                    <Eye className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                                {onOpenRepayment && (
+                                  <button
+                                    type="button"
+                                    onClick={() => onOpenRepayment(adv)}
+                                    className="p-1 hover:bg-emerald-100 rounded text-emerald-700 cursor-pointer"
+                                    title="ਕਿਸ਼ਤ ਵਾਪਸੀ / ਰਿਕਵਰੀ ਦਰਜ ਕਰੋ"
+                                  >
+                                    <Receipt className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                                {onEditAdvance && (
+                                  <button
+                                    type="button"
+                                    onClick={() => onEditAdvance(adv)}
+                                    className="p-1 hover:bg-indigo-100 rounded text-indigo-700 cursor-pointer"
+                                    title="ਸੋਧੋ"
+                                  >
+                                    <Edit className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                                {onDeleteAdvance && (
+                                  <button
+                                    type="button"
+                                    onClick={() => onDeleteAdvance(adv.id)}
+                                    className="p-1 hover:bg-rose-100 rounded text-rose-700 cursor-pointer"
+                                    title="ਡਿਲੀਟ ਕਰੋ"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+
+                          {/* Detailed Farmer Repayment Sub-Rows showing Exact Date and Amount returned */}
+                          {adv.repayments && adv.repayments.length > 0 && adv.repayments.map((rep, rIdx) => (
+                            <tr key={`adv-rep-${adv.id}-${rep.id || rIdx}`} className="bg-emerald-50/80 border-b border-emerald-100 text-xs">
+                              <td className="py-2 px-2 font-mono font-bold text-emerald-900 text-center bg-emerald-100/50">
+                                ↳ ਵਾਪਸੀ: {rep.date}
+                              </td>
+                              <td className="py-2 px-2" colSpan={2}>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="font-bold text-emerald-950">
+                                    ਕਿਸਾਨ ਵੱਲੋਂ ਕਿਸ਼ਤ ਵਾਪਸ:
+                                  </span>
+                                  <span className="font-black font-mono text-emerald-800 text-sm">
+                                    -₹{Math.round(rep.amount).toLocaleString('en-IN')}
+                                  </span>
+                                  <span className="px-1.5 py-0.5 rounded bg-emerald-200 text-emerald-900 text-[10px] font-bold">
+                                    {rep.paymentMode === 'CASH' ? '💵 ਨਕਦ (Cash)' :
+                                     rep.paymentMode === 'BANK_TRANSFER' ? '🏦 ਬੈਂਕ' :
+                                     (rep.paymentMode as string) === 'RTGS' || (rep.paymentMode as string) === 'NEFT' ? '⚡ RTGS/NEFT' :
+                                     rep.paymentMode === 'CHEQUE' ? '📝 ਚੈੱਕ' : rep.paymentMode}
+                                  </span>
+                                  {rep.remarks && (
+                                    <span className="text-[11px] text-emerald-700 italic">
+                                      • {rep.remarks}
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="py-2 px-2 text-center text-[11px] text-emerald-800 font-bold">
+                                ਕਿਸ਼ਤ #{rIdx + 1}
+                              </td>
+                              <td className="py-2 px-2 text-center font-mono text-slate-700 text-[11px]">
+                                ਮਿਤੀ: <strong className="text-emerald-950">{rep.date}</strong>
+                              </td>
+                              <td className="py-2 px-2 text-right font-mono text-slate-700 text-xs">
+                                ਬਾਕੀ ਮੂਲ: <strong className="text-slate-950">₹{Math.round(adv.netPrincipalRemaining ?? (adv.amount - (adv.totalRepaid || 0))).toLocaleString('en-IN')}</strong>
+                              </td>
+                              <td className="py-2 px-2 text-right font-mono font-black text-emerald-900">
+                                -₹{Math.round(rep.amount).toLocaleString('en-IN')}
+                              </td>
+                              <td className="py-2 px-2 text-center">
+                                {onDeleteRepayment && (
+                                  <button
+                                    type="button"
+                                    onClick={() => onDeleteRepayment(adv.id, rep.id, rep.amount)}
+                                    className="p-1 hover:bg-rose-100 rounded text-rose-600 cursor-pointer"
+                                    title="ਇਹ ਵਾਪਸੀ ਕਿਸ਼ਤ ਹਟਾਓ (Delete Repayment)"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </React.Fragment>
                       );
                     })}
                   </tbody>

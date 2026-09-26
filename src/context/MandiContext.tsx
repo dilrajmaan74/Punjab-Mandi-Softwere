@@ -2066,6 +2066,27 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         details: `ਵਿਆਜ ਦਰ: ${adv.monthlyInterestRate}% ਮਹੀਨਾਵਾਰ • ਦਿਨ: ${adv.totalDays} • ਵਿਆਜ: ₹${adv.interestAmount.toLocaleString('en-IN')}${adv.remarks ? ` • ${adv.remarks}` : ''}`,
         rawRecord: adv
       });
+
+      // Individual Advance Repayment Transactions (so repayment date shows up in statement!)
+      if (Array.isArray(adv.repayments)) {
+        adv.repayments.forEach((rep) => {
+          transactions.push({
+            id: rep.id,
+            date: rep.date,
+            type: 'REPAYMENT',
+            typeLabelEn: 'Advance Repayment',
+            typeLabelPa: 'ਪੇਸ਼ਗੀ ਕਿਸ਼ਤ ਵਾਪਸੀ',
+            agency: '—',
+            reference: rep.referenceNumber || rep.referenceNo || adv.id,
+            totalAmount: rep.amount,
+            grossAmount: rep.amount,
+            netAmount: rep.amount,
+            status: 'RECEIVED',
+            details: `ਐਡਵਾਂਸ #${adv.id} ਦੇ ਖ਼ਿਲਾਫ਼ ਵਾਪਸੀ • ਢੰਗ: ${rep.paymentMode}${rep.remarks ? ` • ${rep.remarks}` : ''}`,
+            rawRecord: rep
+          });
+        });
+      }
     });
 
     // Sort transactions by date (newest first)

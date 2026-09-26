@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { FarmerAccountSummary, MandiSettings } from '../../types/mandi';
 import {
   getPaymentTransfers,
@@ -155,6 +155,41 @@ export const FarmerAccountStatementA4: React.FC<FarmerAccountStatementA4Props> =
   const totalAdvancePrincipal = advances.reduce((s, a) => s + (Number(a.amount) || Number(a.principal) || 0), 0);
   const totalAdvanceInterest = advances.reduce((s, a) => s + (Number(a.interestAmount) || 0), 0);
   const totalAdvanceWithInterest = totalAdvancePrincipal + totalAdvanceInterest;
+
+  // Gather all repayments & direct payments with exact dates
+  const allRecoveries = useMemo(() => {
+    const direct = (account.paymentRecords || []).map((p) => ({
+      id: p.id,
+      date: p.date,
+      typePa: 'ਸਿੱਧਾ ਭੁਗਤਾਨ / ਰਿਕਵਰੀ',
+      mode: p.paymentMode,
+      ref: p.referenceNumber || '—',
+      agency: p.agency || '—',
+      amount: p.amount,
+      remarks: p.remarks || '—'
+    }));
+
+    const advanceReps = advances.flatMap((adv) =>
+      (adv.repayments || []).map((r) => ({
+        id: r.id,
+        date: r.date,
+        typePa: `ਕਿਸ਼ਤ ਵਾਪਸੀ (Adv #${adv.id})`,
+        mode: r.paymentMode,
+        ref: r.referenceNumber || r.referenceNo || adv.id,
+        agency: '—',
+        amount: r.amount,
+        remarks: r.remarks || `ਪੇਸ਼ਗੀ #${adv.id} ਖ਼ਿਲਾਫ਼ ਵਾਪਸ`
+      }))
+    );
+
+    return [...direct, ...advanceReps].sort((a, b) => {
+      const dateA = a.date.split('/').reverse().join('-');
+      const dateB = b.date.split('/').reverse().join('-');
+      return dateB.localeCompare(dateA);
+    });
+  }, [account.paymentRecords, advances]);
+
+  const totalRecoveriesAmount = allRecoveries.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
 
   // 8. Payment Adjustments & Transfers
   const allPaymentTransfers = getPaymentTransfers();
@@ -749,23 +784,42 @@ export const FarmerAccountStatementA4: React.FC<FarmerAccountStatementA4Props> =
               </tr>
             ) : (
               advances.map((adv, idx) => (
-                <tr key={adv.id || idx} className="border-b border-slate-200 text-center">
-                  <td className="py-0.5 px-1.5 border-r border-slate-200 font-mono text-slate-800">
-                    {adv.date || adv.startDate}
-                  </td>
-                  <td className="py-0.5 px-1.5 border-r border-slate-200 font-bold font-mono text-slate-950">
-                    {fmtINR(adv.amount || adv.principal)}
-                  </td>
-                  <td className="py-0.5 px-1.5 border-r border-slate-200 font-mono text-slate-800">
-                    {adv.monthlyInterestRate}% / ਮਹੀਨਾ
-                  </td>
-                  <td className="py-0.5 px-1.5 border-r border-slate-200 font-mono text-slate-800">
-                    {adv.totalDays || 0} ਦਿਨ ({adv.monthsElapsed || 0}m {adv.daysElapsed || 0}d)
-                  </td>
-                  <td className="py-0.5 px-1.5 text-right font-bold font-mono text-slate-950">
-                    {fmtINR(adv.interestAmount || 0)}
-                  </td>
-                </tr>
+                <React.Fragment key={adv.id || idx}>
+                  <tr className="border-b border-slate-200 text-center">
+                    <td className="py-0.5 px-1.5 border-r border-slate-200 font-mono text-slate-800">
+                      {adv.date || adv.startDate}
+                    </td>
+                    <td className="py-0.5 px-1.5 border-r border-slate-200 font-bold font-mono text-slate-950">
+                      {fmtINR(adv.amount || adv.principal)}
+                    </td>
+                    <td className="py-0.5 px-1.5 border-r border-slate-200 font-mono text-slate-800">
+                      {adv.monthlyInterestRate}% / ਮਹੀਨਾ
+                    </td>
+                    <td className="py-0.5 px-1.5 border-r border-slate-200 font-mono text-slate-800">
+                      {adv.totalDays || 0} ਦਿਨ ({adv.monthsElapsed || 0}m {adv.daysElapsed || 0}d)
+                    </td>
+                    <td className="py-0.5 px-1.5 text-right font-bold font-mono text-slate-950">
+                      {fmtINR(adv.interestAmount || 0)}
+                    </td>
+                  </tr>
+                  {/* Detailed Farmer Repayment Dates & Amounts against this advance */}
+                  {adv.repayments && adv.repayments.length > 0 && adv.repayments.map((rep, rIdx) => (
+                    <tr key={`rep-${rep.id || rIdx}`} className="bg-emerald-50/70 border-b border-slate-200 text-[8px]">
+                      <td className="py-0.5 px-1.5 border-r border-slate-200 font-mono text-emerald-900 font-bold text-center">
+                        ↳ ਵਾਪਸੀ: {rep.date}
+                      </td>
+                      <td colSpan={2} className="py-0.5 px-1.5 border-r border-slate-200 text-emerald-950 font-bold text-left">
+                        ਕਿਸਾਨ ਵੱਲੋਂ ਕਿਸ਼ਤ ਵਾਪਸ: -{fmtINR(rep.amount)} ({rep.paymentMode}) {rep.remarks ? `• ${rep.remarks}` : ''}
+                      </td>
+                      <td className="py-0.5 px-1.5 border-r border-slate-200 font-mono text-slate-700 text-center">
+                        ਬਾਕੀ ਮੂਲ: {fmtINR(adv.netPrincipalRemaining !== undefined ? adv.netPrincipalRemaining : (adv.amount - (adv.totalRepaid || 0)))}
+                      </td>
+                      <td className="py-0.5 px-1.5 text-right font-mono text-emerald-900 font-bold">
+                        ਕਿਸ਼ਤ #{rIdx + 1}
+                      </td>
+                    </tr>
+                  ))}
+                </React.Fragment>
               ))
             )}
             {/* TOTALS ROW */}
@@ -795,58 +849,58 @@ export const FarmerAccountStatementA4: React.FC<FarmerAccountStatementA4Props> =
       {/* ===================================================================== */}
       <div className="mb-2">
         <div className="bg-slate-100 border border-slate-300 px-2 py-0.5 text-[9.5px] font-black uppercase tracking-wide flex justify-between items-center text-slate-900">
-          <span>7B. DIRECT PAYMENTS & RECOVERIES / ਪ੍ਰਾਪਤ ਰਕਮ ਅਤੇ ਸਿੱਧਾ ਭੁਗਤਾਨ</span>
+          <span>7B. FARMER REPAYMENTS & RECOVERIES / ਕਿਸਾਨ ਵੱਲੋਂ ਵਾਪਸ ਆਏ ਪੈਸੇ ਤੇ ਰਸੀਦਾਂ</span>
           <span className="text-[8px] font-semibold text-emerald-800">
-            Total Paid: {fmtINR(account.paidAmount || 0)}
+            ਕੁੱਲ ਪ੍ਰਾਪਤ / ਵਾਪਸ: {fmtINR(totalRecoveriesAmount)}
           </span>
         </div>
         <table className="w-full border-collapse border-l border-r border-b border-slate-300 text-[8.5px]">
           <thead>
             <tr className="bg-slate-50 border-b border-slate-300 text-slate-800 font-bold text-center">
-              <th className="py-0.5 px-1.5 border-r border-slate-300 w-[16%]">Date / ਮਿਤੀ</th>
-              <th className="py-0.5 px-1.5 border-r border-slate-300 w-[20%]">Payment Mode / ਢੰਗ</th>
-              <th className="py-0.5 px-1.5 border-r border-slate-300 w-[22%]">Ref / UTR / ਰੈਫਰੈਂਸ</th>
-              <th className="py-0.5 px-1.5 border-r border-slate-300 w-[20%]">Agency / ਏਜੰਸੀ</th>
-              <th className="py-0.5 px-1.5 text-right w-[22%]">Amount / ਰਕਮ</th>
+              <th className="py-0.5 px-1.5 border-r border-slate-300 w-[15%]">ਵਾਪਸੀ ਮਿਤੀ (Date)</th>
+              <th className="py-0.5 px-1.5 border-r border-slate-300 w-[22%]">ਕਿਸਮ / ਵੇਰਵਾ (Category)</th>
+              <th className="py-0.5 px-1.5 border-r border-slate-300 w-[15%]">ਢੰਗ (Mode)</th>
+              <th className="py-0.5 px-1.5 border-r border-slate-300 w-[18%]">ਰਸੀਦ / UTR / ਰੈਫ.</th>
+              <th className="py-0.5 px-1.5 text-right w-[18%]">ਵਾਪਸ ਰਕਮ (Amount)</th>
             </tr>
           </thead>
           <tbody>
-            {!account.paymentRecords || account.paymentRecords.length === 0 ? (
+            {allRecoveries.length === 0 ? (
               <tr>
                 <td colSpan={5} className="py-1 text-center text-slate-500 italic border-b border-slate-200">
-                  ਕੋਈ ਸਿੱਧਾ ਭੁਗਤਾਨ ਜਾਂ ਰਿਕਵਰੀ ਦਰਜ ਨਹੀਂ / No direct payments recorded
+                  ਕੋਈ ਵਾਪਸ ਆਏ ਪੈਸੇ ਜਾਂ ਰਿਕਵਰੀ ਦਰਜ ਨਹੀਂ / No repayments recorded
                 </td>
               </tr>
             ) : (
-              account.paymentRecords.map((pay, idx) => (
-                <tr key={pay.id || idx} className="border-b border-slate-200 text-center">
-                  <td className="py-0.5 px-1.5 border-r border-slate-200 font-mono text-slate-800">
-                    {pay.date}
+              allRecoveries.map((rec, idx) => (
+                <tr key={rec.id || idx} className="border-b border-slate-200 text-center">
+                  <td className="py-0.5 px-1.5 border-r border-slate-200 font-mono text-emerald-950 font-bold">
+                    {rec.date}
                   </td>
-                  <td className="py-0.5 px-1.5 border-r border-slate-200 font-bold text-slate-900">
-                    {pay.paymentMode === 'CASH' ? 'Cash / ਨਕਦ' :
-                     pay.paymentMode === 'BANK_TRANSFER' ? 'Bank / ਬੈਂਕ' :
-                     (pay.paymentMode as string) === 'RTGS' || (pay.paymentMode as string) === 'NEFT' ? 'RTGS/NEFT' :
-                     pay.paymentMode === 'CHEQUE' ? 'Cheque / ਚੈੱਕ' : pay.paymentMode}
+                  <td className="py-0.5 px-1.5 border-r border-slate-200 font-medium text-slate-900 text-left">
+                    {rec.typePa} {rec.remarks && rec.remarks !== '—' ? `(${rec.remarks})` : ''}
+                  </td>
+                  <td className="py-0.5 px-1.5 border-r border-slate-200 text-slate-800 font-semibold">
+                    {rec.mode === 'CASH' ? 'Cash / ਨਕਦ' :
+                     rec.mode === 'BANK_TRANSFER' ? 'Bank / ਬੈਂਕ' :
+                     (rec.mode as string) === 'RTGS' || (rec.mode as string) === 'NEFT' ? 'RTGS/NEFT' :
+                     rec.mode === 'CHEQUE' ? 'Cheque / ਚੈੱਕ' : rec.mode}
                   </td>
                   <td className="py-0.5 px-1.5 border-r border-slate-200 font-mono text-slate-700">
-                    {pay.referenceNumber || '—'}
+                    {rec.ref}
                   </td>
-                  <td className="py-0.5 px-1.5 border-r border-slate-200 text-slate-700">
-                    {pay.agency || '—'}
-                  </td>
-                  <td className="py-0.5 px-1.5 text-right font-bold font-mono text-emerald-900">
-                    {fmtINR(pay.amount)}
+                  <td className="py-0.5 px-1.5 text-right font-black font-mono text-emerald-900">
+                    {fmtINR(rec.amount)}
                   </td>
                 </tr>
               ))
             )}
             <tr className="bg-slate-100 font-black text-slate-950 border-t border-slate-300 text-center">
               <td colSpan={4} className="py-0.5 px-1.5 border-r border-slate-300 text-left uppercase">
-                TOTAL PAYMENTS RECEIVED / ਕੁੱਲ ਪ੍ਰਾਪਤ ਰਕਮ:
+                TOTAL RECOVERIES & PAYMENTS RECEIVED / ਕੁੱਲ ਵਾਪਸ ਆਈ ਰਕਮ:
               </td>
               <td className="py-0.5 px-1.5 text-right font-mono text-emerald-950">
-                {fmtINR(account.paidAmount || 0)}
+                {fmtINR(totalRecoveriesAmount)}
               </td>
             </tr>
           </tbody>
