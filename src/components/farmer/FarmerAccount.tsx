@@ -6,6 +6,7 @@ import {
   FarmerAccountSummary,
   FarmerAdvanceRecord,
   AdvanceCategory,
+  AdvancePaymentMode,
   InterestCalculationMode,
   CompoundingFrequency,
   CropType
@@ -53,7 +54,11 @@ import {
   VolumeX,
   Package,
   ArrowLeftRight,
-  AlertTriangle
+  AlertTriangle,
+  Building2,
+  Smartphone,
+  CreditCard,
+  ArrowRight
 } from 'lucide-react';
 import { formatCurrencyINR, maskAadhaarNumber, calculateAdvanceInterest, formatCurrency } from '../../utils/calculations';
 import { exportFarmerAccountPDF, exportSimpleFarmerAccountPDF, exportThreePageLedgerPDF } from '../../utils/farmerAccountPdfExport';
@@ -63,6 +68,7 @@ import { FarmerAccountStatementA4 } from './FarmerAccountStatementA4';
 import { BulkWhatsAppModal } from './BulkWhatsAppModal';
 import { AdvanceRepaymentModal } from './AdvanceRepaymentModal';
 import { AdvanceVoucherModal } from './AdvanceVoucherModal';
+import { FarmerPaymentRecoveryModal } from './FarmerPaymentRecoveryModal';
 import { FarmerSimpleSummaryCard } from './FarmerSimpleSummaryCard';
 import { FarmerMiniSlipModal } from './FarmerMiniSlipModal';
 import { BardanaClearanceCard } from './BardanaClearanceCard';
@@ -259,6 +265,7 @@ export const FarmerAccount: React.FC = () => {
     addFarmerAdvance,
     updateFarmerAdvance,
     deleteFarmerAdvance,
+    deleteAdvanceRepayment,
     activeCrop,
     activeFirm,
     settings,
@@ -327,8 +334,19 @@ export const FarmerAccount: React.FC = () => {
     guarantorMobile: '',
     voucherPhotoUrl: '',
     voucherPhotoName: '',
-    paymentMode: 'CASH' as const,
+    paymentMode: 'CASH' as AdvancePaymentMode,
     referenceNumber: '',
+    chequeNumber: '',
+    chequeDate: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+    chequeBank: '',
+    chequePayee: '',
+    transactionId: '',
+    upiId: '',
+    fromBankName: '',
+    fromAccountNumber: '',
+    toBankName: '',
+    toAccountNumber: '',
+    toIfscCode: '',
     remarks: ''
   });
 
@@ -592,6 +610,17 @@ export const FarmerAccount: React.FC = () => {
       voucherPhotoName: '',
       paymentMode: 'CASH',
       referenceNumber: '',
+      chequeNumber: '',
+      chequeDate: today,
+      chequeBank: activeFirm?.bankName || '',
+      chequePayee: currentFarmer?.farmerNamePa ? `${currentFarmer.farmerNamePa} (${currentFarmer.farmerName})` : (currentFarmer?.farmerName || ''),
+      transactionId: '',
+      upiId: '',
+      fromBankName: activeFirm?.bankName || '',
+      fromAccountNumber: activeFirm?.bankAccountNo || '',
+      toBankName: currentFarmer?.bankDetails?.bankName || '',
+      toAccountNumber: currentFarmer?.bankDetails?.accountNumber || '',
+      toIfscCode: currentFarmer?.bankDetails?.ifscCode || '',
       remarks: ''
     });
     setIsAdvanceModalOpen(true);
@@ -623,6 +652,17 @@ export const FarmerAccount: React.FC = () => {
       voucherPhotoName: adv.voucherPhotoName || '',
       paymentMode: (adv.paymentMode as any) || 'CASH',
       referenceNumber: adv.referenceNumber || '',
+      chequeNumber: adv.chequeNumber || '',
+      chequeDate: adv.chequeDate || today,
+      chequeBank: adv.chequeBank || activeFirm?.bankName || '',
+      chequePayee: currentFarmer?.farmerNamePa ? `${currentFarmer.farmerNamePa} (${currentFarmer.farmerName})` : (currentFarmer?.farmerName || ''),
+      transactionId: adv.transactionId || '',
+      upiId: adv.upiId || '',
+      fromBankName: adv.fromBankName || activeFirm?.bankName || '',
+      fromAccountNumber: adv.fromAccountNumber || activeFirm?.bankAccountNo || '',
+      toBankName: adv.toBankName || currentFarmer?.bankDetails?.bankName || '',
+      toAccountNumber: adv.toAccountNumber || currentFarmer?.bankDetails?.accountNumber || '',
+      toIfscCode: adv.toIfscCode || currentFarmer?.bankDetails?.ifscCode || '',
       remarks: adv.remarks || ''
     });
     setIsAdvanceModalOpen(true);
@@ -671,6 +711,16 @@ export const FarmerAccount: React.FC = () => {
       voucherPhotoName: advanceForm.voucherPhotoName || undefined,
       paymentMode: advanceForm.paymentMode,
       referenceNumber: advanceForm.referenceNumber.trim(),
+      chequeNumber: advanceForm.chequeNumber.trim() || undefined,
+      chequeDate: advanceForm.chequeDate.trim() || undefined,
+      chequeBank: advanceForm.chequeBank.trim() || undefined,
+      transactionId: advanceForm.transactionId.trim() || undefined,
+      upiId: advanceForm.upiId.trim() || undefined,
+      fromBankName: advanceForm.fromBankName.trim() || undefined,
+      fromAccountNumber: advanceForm.fromAccountNumber.trim() || undefined,
+      toBankName: advanceForm.toBankName.trim() || undefined,
+      toAccountNumber: advanceForm.toAccountNumber.trim() || undefined,
+      toIfscCode: advanceForm.toIfscCode.trim() || undefined,
       remarks: advanceForm.remarks.trim()
     };
 
@@ -758,6 +808,36 @@ export const FarmerAccount: React.FC = () => {
           titlePa: 'ਭੁਗਤਾਨ / ਰਿਕਵਰੀ ਰਿਕਾਰਡ ਹਟਾ ਦਿੱਤਾ ਗਿਆ',
           messageEn: `Payment of ${amountStr} has been removed.`,
           messagePa: `${amountStr} ਦਾ ਭੁਗਤਾਨ ਰਿਕਾਰਡ ਸਫਲਤਾਪੂਰਵਕ ਹਟਾ ਦਿੱਤਾ ਗਿਆ ਹੈ।`
+        });
+      }
+    });
+  };
+
+  // Delete Advance Repayment Record with Confirmation
+  const handleDeleteRepaymentRecord = (advanceId: string, repaymentId: string, amount?: number) => {
+    const adv = accountSummary?.advances.find((a) => a.id === advanceId);
+    const rep = adv?.repayments?.find((r) => r.id === repaymentId);
+    const amt = amount || rep?.amount || 0;
+    const amountStr = `₹${Math.round(amt).toLocaleString('en-IN')}`;
+
+    confirmDelete({
+      recordNameEn: `Advance Repayment Record`,
+      recordNamePa: `ਐਡਵਾਂਸ ਕਿਸ਼ਤ ਵਾਪਸੀ ਰਿਕਾਰਡ`,
+      recordId: repaymentId,
+      itemDetails: [
+        { labelEn: 'Repayment ID', labelPa: 'ਕਿਸ਼ਤ ਨੰਬਰ', value: repaymentId },
+        { labelEn: 'Advance ID', labelPa: 'ਐਡਵਾਂਸ ਨੰਬਰ', value: advanceId },
+        { labelEn: 'Returned Amount', labelPa: 'ਵਾਪਸ ਰਕਮ', value: amountStr },
+        { labelEn: 'Return Date', labelPa: 'ਵਾਪਸੀ ਮਿਤੀ', value: rep?.date || '—' },
+        { labelEn: 'Payment Mode', labelPa: 'ਭੁਗਤਾਨ ਢੰਗ', value: rep?.paymentMode || '—' }
+      ],
+      onConfirm: () => {
+        deleteAdvanceRepayment(advanceId, repaymentId);
+        notifyDeleteSuccess({
+          titleEn: 'Repayment Deleted',
+          titlePa: 'ਕਿਸ਼ਤ ਵਾਪਸੀ ਰਿਕਾਰਡ ਹਟਾ ਦਿੱਤਾ ਗਿਆ',
+          messageEn: `Repayment of ${amountStr} has been removed.`,
+          messagePa: `${amountStr} ਦੀ ਵਾਪਸੀ ਕਿਸ਼ਤ ਸਫਲਤਾਪੂਰਵਕ ਹਟਾ ਦਿੱਤੀ ਗਈ ਹੈ।`
         });
       }
     });
@@ -1517,6 +1597,7 @@ export const FarmerAccount: React.FC = () => {
                 onOpenSettlementModal={() => setIsSettlementModalOpen(true)}
                 onDeleteAdvance={handleDeleteAdvanceRecord}
                 onDeletePayment={handleDeletePaymentRecord}
+                onDeleteRepayment={handleDeleteRepaymentRecord}
                 onEditAdvance={handleOpenEditAdvance}
                 onViewVoucher={(adv) => setVoucherModalAdvance(adv)}
                 onOpenRepayment={(adv) => setRepaymentModalAdvance(adv)}
@@ -2654,7 +2735,7 @@ export const FarmerAccount: React.FC = () => {
                 </div>
               </div>
 
-              {/* Principal Amount & Payment Mode */}
+              {/* Principal Amount & Payment Mode Selector */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">
@@ -2673,23 +2754,314 @@ export const FarmerAccount: React.FC = () => {
 
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">
-                    ਭੁਗਤਾਨ ਢੰਗ (Payment Mode)
+                    ਭੁਗਤਾਨ ਢੰਗ (Payment Mode) <span className="text-rose-500">*</span>
                   </label>
-                  <SearchableSelect
-                    id="advance-payment-mode-select"
-                    value={advanceForm.paymentMode || 'CASH'}
-                    onChange={(val) => setAdvanceForm({ ...advanceForm, paymentMode: val as any })}
-                    options={[
-                      { value: 'CASH', label: 'Cash (ਨਕਦ)' },
-                      { value: 'BANK_TRANSFER', label: 'Bank Transfer (ਬੈਂਕ)' },
-                      { value: 'CHEQUE', label: 'Cheque (ਚੈੱਕ)' },
-                      { value: 'RTGS', label: 'RTGS' },
-                      { value: 'NEFT', label: 'NEFT' }
-                    ]}
-                    placeholder="ਢੰਗ ਚੁਣੋ..."
-                  />
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setAdvanceForm({ ...advanceForm, paymentMode: 'CASH' })}
+                      className={`py-2 px-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer border ${
+                        advanceForm.paymentMode === 'CASH'
+                          ? 'bg-amber-600 text-white border-amber-600 shadow-sm'
+                          : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                      }`}
+                    >
+                      <span>💵 ਨਕਦ (Cash)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAdvanceForm({ ...advanceForm, paymentMode: 'GOOGLE_PAY' })}
+                      className={`py-2 px-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer border ${
+                        advanceForm.paymentMode === 'GOOGLE_PAY' || advanceForm.paymentMode === 'UPI'
+                          ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                          : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                      }`}
+                    >
+                      <Smartphone className="w-3.5 h-3.5" />
+                      <span>Google Pay / UPI</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAdvanceForm({ ...advanceForm, paymentMode: 'BANK_TRANSFER' })}
+                      className={`py-2 px-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer border ${
+                        advanceForm.paymentMode === 'BANK_TRANSFER' || advanceForm.paymentMode === 'RTGS' || advanceForm.paymentMode === 'NEFT'
+                          ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                          : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                      }`}
+                    >
+                      <Building2 className="w-3.5 h-3.5" />
+                      <span>ਬੈਂਕ ਟਰਾਂਸਫਰ (Bank)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAdvanceForm({ ...advanceForm, paymentMode: 'CHEQUE' })}
+                      className={`py-2 px-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer border ${
+                        advanceForm.paymentMode === 'CHEQUE'
+                          ? 'bg-purple-600 text-white border-purple-600 shadow-sm'
+                          : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                      }`}
+                    >
+                      <FileText className="w-3.5 h-3.5" />
+                      <span>ਚੈੱਕ (Cheque)</span>
+                    </button>
+                  </div>
                 </div>
               </div>
+
+              {/* DYNAMIC PAYMENT DETAILS CARD BASED ON SELECTED PAYMENT MODE */}
+              {/* 1. CHEQUE DETAILS */}
+              {advanceForm.paymentMode === 'CHEQUE' && (
+                <div className="p-3.5 bg-purple-50/70 border-2 border-purple-200 rounded-2xl space-y-3">
+                  <div className="flex items-center justify-between pb-1.5 border-b border-purple-200">
+                    <span className="font-bold text-xs text-purple-950 flex items-center gap-1.5">
+                      <FileText className="w-4 h-4 text-purple-700" />
+                      ਚੈੱਕ ਭੁਗਤਾਨ ਵੇਰਵਾ (Cheque Details)
+                    </span>
+                    <span className="text-[10px] text-purple-700 font-semibold">
+                      ਫਰਮ ਵੱਲੋਂ ਕਿਸਾਨ ਨੂੰ ਚੈੱਕ ਦਿੱਤਾ ਗਿਆ
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-bold text-purple-900 mb-1">
+                        ਚੈੱਕ ਨੰਬਰ (Cheque No.) <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={advanceForm.chequeNumber || ''}
+                        onChange={(e) => setAdvanceForm({ ...advanceForm, chequeNumber: e.target.value })}
+                        placeholder="e.g. 004821"
+                        className="w-full px-3 py-1.5 bg-white border border-purple-300 rounded-xl text-xs font-mono font-bold text-purple-950 focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-purple-900 mb-1">
+                        ਚੈੱਕ ਮਿਤੀ (Cheque Date)
+                      </label>
+                      <input
+                        type="text"
+                        value={advanceForm.chequeDate || ''}
+                        onChange={(e) => setAdvanceForm({ ...advanceForm, chequeDate: e.target.value })}
+                        placeholder="DD/MM/YYYY"
+                        className="w-full px-3 py-1.5 bg-white border border-purple-300 rounded-xl text-xs font-mono text-purple-950 focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-purple-900 mb-1">
+                        ਕਿਸ ਬੈਂਕ ਦਾ ਚੈੱਕ ਹੈ (Drawn On Bank / Firm Bank)
+                      </label>
+                      <input
+                        type="text"
+                        value={advanceForm.chequeBank || ''}
+                        onChange={(e) => setAdvanceForm({ ...advanceForm, chequeBank: e.target.value })}
+                        placeholder="e.g. HDFC Bank, SBI, PNB"
+                        className="w-full px-3 py-1.5 bg-white border border-purple-300 rounded-xl text-xs text-purple-950 focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-purple-900 mb-1">
+                        ਕਿਸ ਦੇ ਨਾਮ ਚੈੱਕ ਕੱਟਿਆ (Payee / Cheque In Favor Of)
+                      </label>
+                      <input
+                        type="text"
+                        value={advanceForm.chequePayee || ''}
+                        onChange={(e) => setAdvanceForm({ ...advanceForm, chequePayee: e.target.value })}
+                        placeholder="ਕਿਸਾਨ ਦਾ ਨਾਮ"
+                        className="w-full px-3 py-1.5 bg-white border border-purple-300 rounded-xl text-xs font-bold text-purple-950 focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 2. BANK TRANSFER DETAILS */}
+              {(advanceForm.paymentMode === 'BANK_TRANSFER' || advanceForm.paymentMode === 'RTGS' || advanceForm.paymentMode === 'NEFT') && (
+                <div className="p-3.5 bg-blue-50/70 border-2 border-blue-200 rounded-2xl space-y-3">
+                  <div className="flex items-center justify-between pb-1.5 border-b border-blue-200">
+                    <span className="font-bold text-xs text-blue-950 flex items-center gap-1.5">
+                      <Building2 className="w-4 h-4 text-blue-700" />
+                      ਬੈਂਕ ਟਰਾਂਸਫਰ ਖਾਤਾ ਵੇਰਵਾ (Bank Transfer Details)
+                    </span>
+                    <span className="text-[10px] text-blue-700 font-semibold">
+                      RTGS / NEFT / IMPS ਟਰਾਂਸਫਰ
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {/* From Account: Firm Account */}
+                    <div className="bg-white p-2.5 rounded-xl border border-blue-200 space-y-2">
+                      <span className="text-[11px] font-bold text-blue-950 flex items-center gap-1">
+                        <span>📤 ਕਿਸ ਖਾਤੇ ਵਿੱਚੋਂ ਟਰਾਂਸਫਰ ਕੀਤੇ (Firm Account)</span>
+                      </span>
+                      <div>
+                        <label className="block text-[10px] text-slate-500 mb-0.5">ਫਰਮ ਦਾ ਬੈਂਕ (Firm Bank)</label>
+                        <input
+                          type="text"
+                          value={advanceForm.fromBankName || ''}
+                          onChange={(e) => setAdvanceForm({ ...advanceForm, fromBankName: e.target.value })}
+                          placeholder="e.g. HDFC Bank, SBI"
+                          className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-medium text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] text-slate-500 mb-0.5">ਫਰਮ ਦਾ ਖਾਤਾ ਨੰਬਰ (Firm A/C No.)</label>
+                        <input
+                          type="text"
+                          value={advanceForm.fromAccountNumber || ''}
+                          onChange={(e) => setAdvanceForm({ ...advanceForm, fromAccountNumber: e.target.value })}
+                          placeholder="e.g. 50200012345678"
+                          className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-mono font-medium text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    {/* To Account: Farmer Account */}
+                    <div className="bg-white p-2.5 rounded-xl border border-blue-200 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold text-emerald-950 flex items-center gap-1">
+                          <span>📥 ਕਿਸਾਨ ਦਾ ਖਾਤਾ ਜਿਸ ਵਿੱਚ ਪੈਸੇ ਆਏ (Farmer Account)</span>
+                        </span>
+                        {currentFarmer?.bankDetails && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (currentFarmer.bankDetails) {
+                                setAdvanceForm({
+                                  ...advanceForm,
+                                  toBankName: currentFarmer.bankDetails.bankName || '',
+                                  toAccountNumber: currentFarmer.bankDetails.accountNumber || '',
+                                  toIfscCode: currentFarmer.bankDetails.ifscCode || ''
+                                });
+                              }
+                            }}
+                            className="text-[9px] font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 px-1.5 py-0.5 rounded border border-blue-200 cursor-pointer"
+                            title="ਕਿਸਾਨ ਦੇ ਪ੍ਰੋਫਾਈਲ ਵਿੱਚੋਂ ਖਾਤਾ ਆਟੋ-ਫਿਲ ਕਰੋ"
+                          >
+                            ਆਟੋ-ਫਿਲ
+                          </button>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[10px] text-slate-500 mb-0.5">ਕਿਸਾਨ ਬੈਂਕ (Bank Name)</label>
+                          <input
+                            type="text"
+                            value={advanceForm.toBankName || ''}
+                            onChange={(e) => setAdvanceForm({ ...advanceForm, toBankName: e.target.value })}
+                            placeholder="e.g. SBI, PNB, HDFC"
+                            className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-medium text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] text-slate-500 mb-0.5">IFSC ਕੋਡ</label>
+                          <input
+                            type="text"
+                            value={advanceForm.toIfscCode || ''}
+                            onChange={(e) => setAdvanceForm({ ...advanceForm, toIfscCode: e.target.value.toUpperCase() })}
+                            placeholder="SBIN0001234"
+                            className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-mono font-medium text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] text-slate-500 mb-0.5">ਕਿਸਾਨ ਦਾ ਖਾਤਾ ਨੰਬਰ (Farmer A/C No.)</label>
+                        <input
+                          type="text"
+                          value={advanceForm.toAccountNumber || ''}
+                          onChange={(e) => setAdvanceForm({ ...advanceForm, toAccountNumber: e.target.value })}
+                          placeholder="e.g. 104829103948"
+                          className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-mono font-bold text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* UTR / Transaction No. */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-blue-950 mb-1">
+                      UTR / ਬੈਂਕ ਟ੍ਰਾਂਜੈਕਸ਼ਨ ਨੰਬਰ (Bank Reference / UTR Number)
+                    </label>
+                    <input
+                      type="text"
+                      value={advanceForm.transactionId || ''}
+                      onChange={(e) => setAdvanceForm({ ...advanceForm, transactionId: e.target.value, referenceNumber: e.target.value })}
+                      placeholder="e.g. UTR1029384756 ਜਾਂ NEFT ਰੈਫ਼ਰੈਂਸ"
+                      className="w-full px-3 py-1.5 bg-white border border-blue-300 rounded-xl text-xs font-mono font-bold text-blue-950 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* 3. GOOGLE PAY / UPI DETAILS */}
+              {(advanceForm.paymentMode === 'GOOGLE_PAY' || advanceForm.paymentMode === 'UPI') && (
+                <div className="p-3.5 bg-emerald-50/70 border-2 border-emerald-200 rounded-2xl space-y-3">
+                  <div className="flex items-center justify-between pb-1.5 border-b border-emerald-200">
+                    <span className="font-bold text-xs text-emerald-950 flex items-center gap-1.5">
+                      <Smartphone className="w-4 h-4 text-emerald-700" />
+                      Google Pay / UPI ਭੁਗਤਾਨ ਵੇਰਵਾ
+                    </span>
+                    <span className="text-[10px] text-emerald-700 font-semibold">
+                      UPI / GPay ਟਰਾਂਸਫਰ
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-bold text-emerald-950 mb-1">
+                        ਕਿਸ ਖਾਤੇ / UPI ਵਿੱਚੋਂ ਭੇਜੇ (Sender Firm Account / UPI)
+                      </label>
+                      <input
+                        type="text"
+                        value={advanceForm.fromBankName || ''}
+                        onChange={(e) => setAdvanceForm({ ...advanceForm, fromBankName: e.target.value })}
+                        placeholder="ਫਰਮ ਦਾ UPI ID ਜਾਂ ਬੈਂਕ (e.g. firm@upi)"
+                        className="w-full px-3 py-1.5 bg-white border border-emerald-300 rounded-xl text-xs font-medium text-emerald-950 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-emerald-950 mb-1">
+                        ਕਿਸਾਨ ਦਾ UPI ID / ਬੈਂਕ ਖਾਤਾ (Receiver Farmer UPI ID / A/C)
+                      </label>
+                      <input
+                        type="text"
+                        value={advanceForm.upiId || advanceForm.toAccountNumber || ''}
+                        onChange={(e) => setAdvanceForm({ ...advanceForm, upiId: e.target.value })}
+                        placeholder="e.g. 9814774651@okaxis ਜਾਂ ਕਿਸਾਨ ਦਾ UPI"
+                        className="w-full px-3 py-1.5 bg-white border border-emerald-300 rounded-xl text-xs font-mono font-medium text-emerald-950 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-emerald-950 mb-1">
+                      UPI ਟ੍ਰਾਂਜੈਕਸ਼ਨ / ਰੈਫ਼ਰੈਂਸ ਨੰਬਰ (UPI Ref / Order ID)
+                    </label>
+                    <input
+                      type="text"
+                      value={advanceForm.transactionId || ''}
+                      onChange={(e) => setAdvanceForm({ ...advanceForm, transactionId: e.target.value, referenceNumber: e.target.value })}
+                      placeholder="e.g. 428192847192 (12-digit UPI Ref)"
+                      className="w-full px-3 py-1.5 bg-white border border-emerald-300 rounded-xl text-xs font-mono font-bold text-emerald-950 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* 4. CASH CONFIRMATION */}
+              {advanceForm.paymentMode === 'CASH' && (
+                <div className="p-3 bg-amber-50/60 border border-amber-200 rounded-xl flex items-center justify-between text-xs text-amber-950">
+                  <span className="font-semibold flex items-center gap-1.5">
+                    <span>💵</span>
+                    <span>ਨਕਦ ਭੁਗਤਾਨ (Cash Handover): ਰਕਮ ਦੁਕਾਨ / ਕਾਊਂਟਰ 'ਤੇ ਕਿਸਾਨ ਨੂੰ ਹੱਥੀਂ ਦਿੱਤੀ ਗਈ ਹੈ।</span>
+                  </span>
+                </div>
+              )}
 
               {/* Interest Rules Box */}
               <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
@@ -2972,117 +3344,16 @@ export const FarmerAccount: React.FC = () => {
         />
       )}
 
-      {/* PAYMENT MODAL */}
+      {/* PAYMENT & RECOVERY MODAL (BOTH OPTIONS: AGAINST SPECIFIC ADVANCE OR GENERAL RECOVERY) */}
       {isPaymentModalOpen && currentFarmer && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
-              <div className="flex items-center gap-2">
-                <IndianRupee className="w-5 h-5 text-emerald-600" />
-                <div>
-                  <h3 className="text-base font-bold text-slate-900">
-                    ਨਵਾਂ ਭੁਗਤਾਨ ਦਰਜ ਕਰੋ (Record Payment)
-                  </h3>
-                  <p className="text-xs text-slate-500">
-                    ਕਿਸਾਨ: {currentFarmer.farmerNamePa} ({currentFarmer.id})
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => setIsPaymentModalOpen(false)}
-                className="text-slate-400 hover:text-slate-700 text-sm font-bold"
-              >
-                ✕
-              </button>
-            </div>
-
-            <form onSubmit={handleSavePayment} className="mt-4 space-y-4 text-xs">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">
-                    ਮਿਤੀ (Date) <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={paymentForm.date || ''}
-                    onChange={(e) => setPaymentForm({ ...paymentForm, date: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-xl font-medium focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                    placeholder="DD/MM/YYYY"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">
-                    ਭੁਗਤਾਨ ਰਕਮ (Amount ₹) <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    step="any"
-                    required
-                    value={paymentForm.amount || ''}
-                    onChange={(e) => setPaymentForm({ ...paymentForm, amount: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-xl font-bold text-sm text-slate-900 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                    placeholder="e.g. 50000"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">
-                    ਢੰਗ (Payment Mode)
-                  </label>
-                  <SearchableSelect
-                    id="farmer-payment-mode-select"
-                    value={paymentForm.paymentMode || 'BANK_TRANSFER'}
-                    onChange={(val) => setPaymentForm({ ...paymentForm, paymentMode: val as any })}
-                    options={paymentModeOptions}
-                    placeholder="ਢੰਗ ਚੁਣੋ..."
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">ਖਰੀਦ ਏਜੰਸੀ (Agency)</label>
-                  <input
-                    type="text"
-                    value={paymentForm.agency || ''}
-                    onChange={(e) => setPaymentForm({ ...paymentForm, agency: e.target.value })}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-xl font-medium focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                    placeholder="e.g. Markfed"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">ਰੈਫਰੈਂਸ / UTR ਨੰਬਰ</label>
-                <input
-                  type="text"
-                  value={paymentForm.referenceNumber || ''}
-                  onChange={(e) => setPaymentForm({ ...paymentForm, referenceNumber: e.target.value })}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-xl font-medium focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                  placeholder="e.g. UTR123456789"
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setIsPaymentModalOpen(false)}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-medium"
-                >
-                  ਰੱਦ ਕਰੋ (Cancel)
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl font-bold shadow-sm"
-                >
-                  ਭੁਗਤਾਨ ਸੇਵ ਕਰੋ (Save)
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <FarmerPaymentRecoveryModal
+          farmer={currentFarmer}
+          advances={accountSummary?.advances || []}
+          onClose={() => setIsPaymentModalOpen(false)}
+          onPaymentSaved={() => {
+            setAdjustmentRefreshKey((k) => k + 1);
+          }}
+        />
       )}
 
       {/* VIEW ADVANCE DETAILS MODAL */}

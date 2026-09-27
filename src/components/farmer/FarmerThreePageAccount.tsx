@@ -1045,6 +1045,47 @@ export const FarmerThreePageAccount: React.FC<FarmerThreePageAccountProps> = ({
                               {adv.itemDescription && (
                                 <span className="text-[10px] text-slate-500 block">{adv.itemDescription}</span>
                               )}
+                              {/* Payment Mode & Transfer Details Badge */}
+                              {adv.paymentMode && (
+                                <div className="mt-1 flex flex-wrap items-center gap-1">
+                                  {adv.paymentMode === 'CHEQUE' && (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-50 text-purple-950 text-[10px] font-bold rounded-md border border-purple-200">
+                                      <span>📝 ਚੈੱਕ</span>
+                                      {adv.chequeNumber && <span className="font-mono">#{adv.chequeNumber}</span>}
+                                      {adv.chequeBank && <span className="text-purple-700">({adv.chequeBank})</span>}
+                                    </span>
+                                  )}
+                                  {(adv.paymentMode === 'BANK_TRANSFER' || adv.paymentMode === 'RTGS' || adv.paymentMode === 'NEFT') && (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-50 text-blue-950 text-[10px] font-bold rounded-md border border-blue-200">
+                                      <span>🏦 ਬੈਂਕ ਟਰਾਂਸਫਰ:</span>
+                                      {adv.fromBankName && <span className="text-slate-600 font-medium">{adv.fromBankName} ➔</span>}
+                                      {adv.toBankName && <span className="text-blue-900">{adv.toBankName}</span>}
+                                      {adv.toAccountNumber && <span className="font-mono text-slate-700">••{adv.toAccountNumber.slice(-4)}</span>}
+                                      {(adv.transactionId || adv.referenceNumber) && (
+                                        <span className="font-mono text-[9px] bg-white px-1 rounded border border-blue-200">
+                                          UTR: {adv.transactionId || adv.referenceNumber}
+                                        </span>
+                                      )}
+                                    </span>
+                                  )}
+                                  {(adv.paymentMode === 'GOOGLE_PAY' || adv.paymentMode === 'UPI') && (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 text-emerald-950 text-[10px] font-bold rounded-md border border-emerald-200">
+                                      <span>📱 Google Pay / UPI</span>
+                                      {adv.upiId && <span className="font-mono text-emerald-800">({adv.upiId})</span>}
+                                      {(adv.transactionId || adv.referenceNumber) && (
+                                        <span className="font-mono text-[9px] bg-white px-1 rounded border border-emerald-200">
+                                          Ref: {adv.transactionId || adv.referenceNumber}
+                                        </span>
+                                      )}
+                                    </span>
+                                  )}
+                                  {adv.paymentMode === 'CASH' && (
+                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.2 bg-slate-100 text-slate-700 text-[10px] font-semibold rounded border border-slate-200">
+                                      💵 ਨਕਦ (Cash)
+                                    </span>
+                                  )}
+                                </div>
+                              )}
                               {adv.repayments && adv.repayments.length > 0 && (
                                 <div className="mt-1 space-y-0.5">
                                   {adv.repayments.map((rep, rIdx) => (
@@ -1221,7 +1262,7 @@ export const FarmerThreePageAccount: React.FC<FarmerThreePageAccountProps> = ({
 
               <div className="flex items-center gap-2">
                 <span className="px-2.5 py-1 bg-white/20 rounded-lg text-xs font-mono font-bold">
-                  {payments.length} ਰਸੀਦਾਂ (ਕੁੱਲ ₹{Math.round(directPayments).toLocaleString('en-IN')})
+                  {allRecoveries.length} ਰਸੀਦਾਂ / ਵਾਪਸੀਆਂ (ਕੁੱਲ ₹{Math.round(totalRecoveriesAmount).toLocaleString('en-IN')})
                 </span>
                 <button
                   type="button"
@@ -1235,7 +1276,7 @@ export const FarmerThreePageAccount: React.FC<FarmerThreePageAccountProps> = ({
             </div>
 
             <div className="p-3 overflow-x-auto">
-              {payments.length === 0 ? (
+              {allRecoveries.length === 0 ? (
                 <div className="py-10 text-center text-slate-400">
                   <Receipt className="w-10 h-10 mx-auto mb-2 opacity-50 text-slate-300" />
                   <p className="text-xs font-bold text-slate-600">ਇਸ ਕਿਸਾਨ ਲਈ ਕੋਈ ਸਿੱਧੀ ਰਿਕਵਰੀ ਜਾਂ ਭੁਗਤਾਨ ਰਸੀਦ ਦਰਜ ਨਹੀਂ ਹੈ।</p>
@@ -1245,7 +1286,8 @@ export const FarmerThreePageAccount: React.FC<FarmerThreePageAccountProps> = ({
                 <table className="w-full text-xs text-left">
                   <thead className="bg-emerald-50 text-emerald-950 font-black uppercase text-[11px] border-b border-emerald-200">
                     <tr>
-                      <th className="py-2.5 px-3">ਮਿਤੀ (Date)</th>
+                      <th className="py-2.5 px-3">ਵਾਪਸੀ ਮਿਤੀ (Date)</th>
+                      <th className="py-2.5 px-3">ਕਿਸਮ / ਖਾਤਾ (Category)</th>
                       <th className="py-2.5 px-3">ਢੰਗ (Payment Mode)</th>
                       <th className="py-2.5 px-3">ਰਸੀਦ / ਰੈਫਰੈਂਸ / UTR</th>
                       <th className="py-2.5 px-3">ਖਰੀਦ ਏਜੰਸੀ (Agency)</th>
@@ -1255,57 +1297,77 @@ export const FarmerThreePageAccount: React.FC<FarmerThreePageAccountProps> = ({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 font-sans">
-                    {payments.map((pay) => (
-                      <tr key={pay.id} className="hover:bg-emerald-50/40 transition">
-                        <td className="py-2.5 px-3 font-mono font-bold text-slate-800">
-                          {pay.date}
-                        </td>
-                        <td className="py-2.5 px-3">
-                          <span className={`px-2 py-0.5 rounded-md text-[11px] font-bold ${
-                            pay.paymentMode === 'CASH'
-                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                              : pay.paymentMode === 'BANK_TRANSFER' || (pay.paymentMode as string) === 'RTGS' || (pay.paymentMode as string) === 'NEFT'
-                              ? 'bg-blue-100 text-blue-800 border border-blue-300'
-                              : pay.paymentMode === 'CHEQUE'
-                              ? 'bg-purple-100 text-purple-800 border border-purple-300'
-                              : 'bg-slate-100 text-slate-800'
-                          }`}>
-                            {pay.paymentMode === 'CASH' ? '💵 ਨਕਦ (Cash)' :
-                             pay.paymentMode === 'BANK_TRANSFER' ? '🏦 ਬੈਂਕ (Bank)' :
-                             (pay.paymentMode as string) === 'RTGS' || (pay.paymentMode as string) === 'NEFT' ? '⚡ RTGS/NEFT' :
-                             pay.paymentMode === 'CHEQUE' ? '📝 ਚੈੱਕ (Cheque)' :
-                             pay.paymentMode}
+                    {allRecoveries.map((rec) => (
+                      <tr key={rec.id} className="hover:bg-emerald-50/40 transition">
+                        <td className="py-2.5 px-3 font-mono font-bold text-emerald-950">
+                          <span className="bg-emerald-100 px-2 py-0.5 rounded border border-emerald-300 inline-block font-mono text-xs">
+                            {rec.date}
                           </span>
                         </td>
                         <td className="py-2.5 px-3">
-                          {pay.referenceNumber ? (
+                          <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${
+                            rec.isRepayment
+                              ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                              : 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                          }`}>
+                            {rec.typeLabel}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3">
+                          <span className={`px-2 py-0.5 rounded-md text-[11px] font-bold ${
+                            rec.mode === 'CASH'
+                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                              : rec.mode === 'BANK_TRANSFER' || (rec.mode as string) === 'RTGS' || (rec.mode as string) === 'NEFT'
+                              ? 'bg-blue-100 text-blue-800 border border-blue-300'
+                              : rec.mode === 'CHEQUE'
+                              ? 'bg-purple-100 text-purple-800 border border-purple-300'
+                              : 'bg-slate-100 text-slate-800'
+                          }`}>
+                            {rec.mode === 'CASH' ? '💵 ਨਕਦ (Cash)' :
+                             rec.mode === 'BANK_TRANSFER' ? '🏦 ਬੈਂਕ (Bank)' :
+                             (rec.mode as string) === 'RTGS' || (rec.mode as string) === 'NEFT' ? '⚡ RTGS/NEFT' :
+                             rec.mode === 'CHEQUE' ? '📝 ਚੈੱਕ (Cheque)' :
+                             rec.mode}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3">
+                          {rec.ref && rec.ref !== '—' ? (
                             <span className="font-mono text-slate-800 bg-slate-100 px-2 py-0.5 rounded text-[11px]">
-                              {pay.referenceNumber}
+                              {rec.ref}
                             </span>
                           ) : (
                             <span className="text-slate-400 italic text-[11px]">ਕੋਈ ਰੈਫਰੈਂਸ ਨਹੀਂ</span>
                           )}
                         </td>
                         <td className="py-2.5 px-3 text-slate-700">
-                          {pay.agency || '—'}
+                          {rec.agency || '—'}
                         </td>
                         <td className="py-2.5 px-3 text-slate-600">
-                          {pay.remarks || '—'}
+                          {rec.remarks || '—'}
                         </td>
                         <td className="py-2.5 px-3 text-right font-mono font-black text-emerald-800 text-sm">
-                          ₹{Math.round(pay.amount).toLocaleString('en-IN')}
+                          ₹{Math.round(rec.amount).toLocaleString('en-IN')}
                         </td>
                         <td className="py-2.5 px-3 text-center">
-                          {onDeletePayment && (
+                          {rec.isRepayment && onDeleteRepayment ? (
                             <button
                               type="button"
-                              onClick={() => onDeletePayment(pay.id)}
+                              onClick={() => onDeleteRepayment(rec.advanceId!, rec.id, rec.amount)}
+                              className="p-1.5 hover:bg-rose-100 rounded-lg text-rose-600 transition cursor-pointer"
+                              title="ਇਹ ਵਾਪਸੀ ਕਿਸ਼ਤ ਹਟਾਓ (Delete Repayment)"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          ) : !rec.isRepayment && onDeletePayment ? (
+                            <button
+                              type="button"
+                              onClick={() => onDeletePayment(rec.id)}
                               className="p-1.5 hover:bg-rose-100 rounded-lg text-rose-600 transition cursor-pointer"
                               title="ਇਹ ਭੁਗਤਾਨ / ਰਿਕਵਰੀ ਰਿਕਾਰਡ ਹਟਾਓ (Delete Payment)"
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
-                          )}
+                          ) : null}
                         </td>
                       </tr>
                     ))}
@@ -1317,13 +1379,13 @@ export const FarmerThreePageAccount: React.FC<FarmerThreePageAccountProps> = ({
             {/* Bottom Sub-Total */}
             <div className="bg-emerald-50 p-3.5 border-t-2 border-emerald-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
               <div className="text-emerald-950 font-bold">
-                ਕੁੱਲ ਪ੍ਰਾਪਤ / ਰਿਕਵਰੀ ਐਂਟਰੀਆਂ: <strong className="font-mono">{payments.length}</strong> | 
-                ਆਖਰੀ ਅੱਪਡੇਟ: <strong className="font-mono text-slate-700">{payments[0]?.date || '—'}</strong>
+                ਕੁੱਲ ਪ੍ਰਾਪਤ / ਰਿਕਵਰੀ ਐਂਟਰੀਆਂ: <strong className="font-mono">{allRecoveries.length}</strong> | 
+                ਆਖਰੀ ਅੱਪਡੇਟ: <strong className="font-mono text-slate-700">{allRecoveries[0]?.date || '—'}</strong>
               </div>
               <div className="text-right">
                 <span className="text-emerald-900 font-bold block">ਕੁੱਲ ਪ੍ਰਾਪਤ ਰਕਮ (Total Paid / Recovered):</span>
                 <span className="text-base font-black text-emerald-950 font-mono">
-                  ₹{Math.round(directPayments).toLocaleString('en-IN')}
+                  ₹{Math.round(totalRecoveriesAmount).toLocaleString('en-IN')}
                 </span>
               </div>
             </div>
@@ -2021,8 +2083,8 @@ export const FarmerThreePageAccount: React.FC<FarmerThreePageAccountProps> = ({
               <strong className="text-amber-950 font-black text-sm">₹{Math.round(totalAdvancePayable).toLocaleString('en-IN')}</strong>
             </div>
             <div className="bg-emerald-50 p-2.5 rounded-lg border border-emerald-300">
-              <span className="text-emerald-800 block text-[10px]">ਕੁੱਲ ਪ੍ਰਾਪਤ / ਰਿਕਵਰੀ</span>
-              <strong className="text-emerald-950 font-black text-sm">₹{Math.round(directPayments).toLocaleString('en-IN')}</strong>
+              <span className="text-emerald-800 block text-[10px]">ਕੁੱਲ ਪ੍ਰਾਪਤ / ਵਾਪਸ</span>
+              <strong className="text-emerald-950 font-black text-sm">₹{Math.round(totalRecoveriesAmount).toLocaleString('en-IN')}</strong>
             </div>
           </div>
 
@@ -2051,22 +2113,42 @@ export const FarmerThreePageAccount: React.FC<FarmerThreePageAccountProps> = ({
                   </tr>
                 ) : (
                   advances.map((adv, idx) => (
-                    <tr key={idx}>
-                      <td className="p-2 font-mono">{adv.date}</td>
-                      <td className="p-2 font-bold text-slate-700">{adv.type || 'ਨਗਦ'}</td>
-                      <td className="p-2 text-slate-600">
-                        {adv.remarks || '-'}
-                        {adv.repayments && adv.repayments.length > 0 && (
-                          <span className="block text-[10px] text-emerald-700 font-bold">
-                            ₹{(adv.totalRepaid || 0).toLocaleString('en-IN')} ਵਾਪਸ ({adv.repayments.length} ਕਿਸ਼ਤਾਂ)
-                          </span>
-                        )}
-                      </td>
-                      <td className="p-2 text-right font-mono font-bold">₹{Math.round(adv.amount || 0).toLocaleString('en-IN')}</td>
-                      <td className="p-2 text-center text-[11px]">{adv.interestRate || adv.monthlyInterestRate || 0}%</td>
-                      <td className="p-2 text-right font-mono text-rose-700">₹{Math.round(adv.calculatedInterest || adv.interestAmount || 0).toLocaleString('en-IN')}</td>
-                      <td className="p-2 text-right font-mono font-black text-amber-950">₹{Math.round(adv.totalPayableWithInterest || ((adv.amount || 0) + (adv.calculatedInterest || adv.interestAmount || 0))).toLocaleString('en-IN')}</td>
-                    </tr>
+                    <React.Fragment key={idx}>
+                      <tr>
+                        <td className="p-2 font-mono">{adv.date}</td>
+                        <td className="p-2 font-bold text-slate-700">{adv.type || 'ਨਗਦ'}</td>
+                        <td className="p-2 text-slate-600">
+                          {adv.remarks || '-'}
+                          {adv.repayments && adv.repayments.length > 0 && (
+                            <span className="block text-[10px] text-emerald-700 font-bold">
+                              ₹{(adv.totalRepaid || 0).toLocaleString('en-IN')} ਵਾਪਸ ({adv.repayments.length} ਕਿਸ਼ਤਾਂ)
+                            </span>
+                          )}
+                        </td>
+                        <td className="p-2 text-right font-mono font-bold">₹{Math.round(adv.amount || 0).toLocaleString('en-IN')}</td>
+                        <td className="p-2 text-center text-[11px]">{adv.interestRate || adv.monthlyInterestRate || 0}%</td>
+                        <td className="p-2 text-right font-mono text-rose-700">₹{Math.round(adv.calculatedInterest || adv.interestAmount || 0).toLocaleString('en-IN')}</td>
+                        <td className="p-2 text-right font-mono font-black text-amber-950">₹{Math.round(adv.totalPayableWithInterest || ((adv.amount || 0) + (adv.calculatedInterest || adv.interestAmount || 0))).toLocaleString('en-IN')}</td>
+                      </tr>
+
+                      {/* Repayment details with exact dates in PDF */}
+                      {adv.repayments && adv.repayments.length > 0 && adv.repayments.map((rep, rIdx) => (
+                        <tr key={`pdf-rep-${idx}-${rIdx}`} className="bg-emerald-50 text-[10px] text-emerald-950">
+                          <td className="p-1.5 font-mono font-bold text-emerald-900">↳ ਵਾਪਸੀ: {rep.date}</td>
+                          <td className="p-1.5 font-bold text-emerald-900">
+                            {rep.paymentMode === 'CASH' ? 'ਨਕਦ (Cash)' :
+                             rep.paymentMode === 'BANK_TRANSFER' ? 'ਬੈਂਕ' :
+                             rep.paymentMode}
+                          </td>
+                          <td className="p-1.5" colSpan={2}>
+                            ਕਿਸਾਨ ਵੱਲੋਂ ਕਿਸ਼ਤ ਵਾਪਸ: -₹{Math.round(rep.amount).toLocaleString('en-IN')} {rep.remarks ? `• ${rep.remarks}` : ''} | ਬਾਕੀ ਮੂਲ: ₹{Math.round(adv.netPrincipalRemaining ?? (adv.amount - (adv.totalRepaid || 0))).toLocaleString('en-IN')}
+                          </td>
+                          <td className="p-1.5 text-center text-slate-600 font-mono">ਮਿਤੀ: {rep.date}</td>
+                          <td className="p-1.5 text-right font-mono text-emerald-800 font-bold">ਕਿਸ਼ਤ #{rIdx + 1}</td>
+                          <td className="p-1.5 text-right font-mono font-black text-emerald-900">-₹{Math.round(rep.amount).toLocaleString('en-IN')}</td>
+                        </tr>
+                      ))}
+                    </React.Fragment>
                   ))
                 )}
               </tbody>
@@ -2077,39 +2159,42 @@ export const FarmerThreePageAccount: React.FC<FarmerThreePageAccountProps> = ({
           <div className="border border-slate-200 rounded-xl overflow-hidden mt-3">
             <div className="bg-emerald-900 text-white p-2 text-xs font-black flex justify-between">
               <span>ਪ੍ਰਾਪਤ ਰਕਮ, ਰਿਕਵਰੀ ਅਤੇ ਸਿੱਧਾ ਭੁਗਤਾਨ ਰਸੀਦਾਂ (Payment Receipts & Recoveries)</span>
-              <span>ਕੁੱਲ ਪ੍ਰਾਪਤ: ₹{Math.round(directPayments).toLocaleString('en-IN')}</span>
+              <span>ਕੁੱਲ ਪ੍ਰਾਪਤ: ₹{Math.round(totalRecoveriesAmount).toLocaleString('en-IN')}</span>
             </div>
             <table className="w-full text-xs text-left">
               <thead className="bg-emerald-50 text-emerald-950 border-b border-emerald-200 font-bold">
                 <tr>
-                  <th className="p-2">ਤਾਰੀਖ਼</th>
+                  <th className="p-2">ਵਾਪਸੀ ਮਿਤੀ</th>
+                  <th className="p-2">ਕਿਸਮ / ਖਾਤਾ</th>
                   <th className="p-2">ਭੁਗਤਾਨ ਢੰਗ</th>
                   <th className="p-2">ਰੈਫਰੈਂਸ / UTR</th>
-                  <th className="p-2">ਏਜੰਸੀ</th>
-                  <th className="p-2">ਵੇਰਵਾ</th>
+                  <th className="p-2">ਏਜੰਸੀ / ਵੇਰਵਾ</th>
                   <th className="p-2 text-right">ਪ੍ਰਾਪਤ ਰਕਮ (₹)</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {payments.length === 0 ? (
+                {allRecoveries.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="p-3 text-center text-slate-400">ਕੋਈ ਵੱਖਰੀ ਰਿਕਵਰੀ ਜਾਂ ਭੁਗਤਾਨ ਰਸੀਦ ਦਰਜ ਨਹੀਂ ਹੈ।</td>
                   </tr>
                 ) : (
-                  payments.map((pay, idx) => (
+                  allRecoveries.map((rec, idx) => (
                     <tr key={idx}>
-                      <td className="p-2 font-mono">{pay.date}</td>
+                      <td className="p-2 font-mono font-bold text-emerald-950">{rec.date}</td>
+                      <td className="p-2 font-semibold text-slate-800">{rec.typeLabel}</td>
                       <td className="p-2 font-bold text-slate-700">
-                        {pay.paymentMode === 'CASH' ? 'ਨਕਦ (Cash)' :
-                         pay.paymentMode === 'BANK_TRANSFER' ? 'ਬੈਂਕ (Bank)' :
-                         (pay.paymentMode as string) === 'RTGS' || (pay.paymentMode as string) === 'NEFT' ? 'RTGS/NEFT' :
-                         pay.paymentMode === 'CHEQUE' ? 'ਚੈੱਕ (Cheque)' : pay.paymentMode}
+                        {rec.mode === 'CASH' ? 'ਨਕਦ (Cash)' :
+                         rec.mode === 'BANK_TRANSFER' ? 'ਬੈਂਕ (Bank)' :
+                         (rec.mode as string) === 'RTGS' || (rec.mode as string) === 'NEFT' ? 'RTGS/NEFT' :
+                         rec.mode === 'CHEQUE' ? 'ਚੈੱਕ (Cheque)' : rec.mode}
                       </td>
-                      <td className="p-2 font-mono text-slate-600">{pay.referenceNumber || '—'}</td>
-                      <td className="p-2 text-slate-600">{pay.agency || '—'}</td>
-                      <td className="p-2 text-slate-600">{pay.remarks || '—'}</td>
+                      <td className="p-2 font-mono text-slate-600">{rec.ref || '—'}</td>
+                      <td className="p-2 text-slate-600">
+                        {rec.agency && rec.agency !== '—' ? `${rec.agency} ` : ''}
+                        {rec.remarks && rec.remarks !== '—' ? `(${rec.remarks})` : ''}
+                      </td>
                       <td className="p-2 text-right font-mono font-black text-emerald-900">
-                        ₹{Math.round(pay.amount || 0).toLocaleString('en-IN')}
+                        ₹{Math.round(rec.amount || 0).toLocaleString('en-IN')}
                       </td>
                     </tr>
                   ))

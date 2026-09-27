@@ -168,6 +168,17 @@ export function generateAdvanceWhatsAppMessage(params: {
   const daysInfo = (advance.totalDays || 0) > 0 ? `⏳ *ਸਮਾਂ:* ${advance.totalDays} ਦਿਨ (${advance.monthsElapsed || 0} ਮਹੀਨੇ ${advance.daysElapsed || 0} ਦਿਨ)` : '';
   const guarantorInfo = advance.guarantorName ? `🤝 *ਜ਼ਾਮਨ/ਗਰੰਟਰ:* ${advance.guarantorName}${advance.guarantorMobile ? ` (${advance.guarantorMobile})` : ''}` : '';
 
+  let paymentModeText = '';
+  if (advance.paymentMode === 'CHEQUE') {
+    paymentModeText = `💳 *ਭੁਗਤਾਨ ਢੰਗ:* ਚੈੱਕ ${advance.chequeNumber ? `#${advance.chequeNumber}` : ''} ${advance.chequeBank ? `(${advance.chequeBank})` : ''}`;
+  } else if (advance.paymentMode === 'BANK_TRANSFER' || advance.paymentMode === 'RTGS' || advance.paymentMode === 'NEFT') {
+    paymentModeText = `🏦 *ਭੁਗਤਾਨ ਢੰਗ:* ਬੈਂਕ ਟਰਾਂਸਫਰ (${advance.fromBankName || 'ਫਰਮ ਖਾਤਾ'} ➔ ${advance.toBankName || 'ਕਿਸਾਨ ਖਾਤਾ'}${advance.transactionId ? ` • UTR: ${advance.transactionId}` : ''})`;
+  } else if (advance.paymentMode === 'GOOGLE_PAY' || advance.paymentMode === 'UPI') {
+    paymentModeText = `📱 *ਭੁਗਤਾਨ ਢੰਗ:* Google Pay / UPI ${advance.transactionId ? `(UTR: ${advance.transactionId})` : ''}`;
+  } else if (advance.paymentMode === 'CASH') {
+    paymentModeText = `💵 *ਭੁਗਤਾਨ ਢੰਗ:* ਨਕਦ (Cash)`;
+  }
+
   const lines = [
     `📜 *ਪੇਸ਼ਗੀ / ਐਡਵਾਂਸ ਵਾਊਚਰ ਰਸੀਦ (Advance Voucher)* 📜`,
     `-----------------------------------`,
@@ -178,6 +189,7 @@ export function generateAdvanceWhatsAppMessage(params: {
     `🧾 *ਵਾਊਚਰ ਨੰਬਰ:* ${advance.id}`,
     `📅 *ਮਿਤੀ:* ${advance.date}`,
     `🏷️ *ਮੰਤਵ/ਕੈਟਾਗਰੀ:* ${catLabel}`,
+    paymentModeText,
     cropLabel,
     itemDesc,
     `-----------------------------------`,

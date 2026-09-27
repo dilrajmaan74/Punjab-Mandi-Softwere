@@ -68,6 +68,8 @@ export type AdvanceCategory =
 export type InterestCalculationMode = 'MONTHLY' | 'YEARLY' | 'INTEREST_FREE';
 export type CompoundingFrequency = 'SIMPLE' | 'HALF_YEARLY' | 'HALF_YEARLY_COMPOUND' | 'YEARLY';
 
+export type AdvancePaymentMode = 'CASH' | 'GOOGLE_PAY' | 'UPI' | 'BANK_TRANSFER' | 'CHEQUE' | 'RTGS' | 'NEFT' | 'OTHER';
+
 export interface AdvanceRepayment {
   id: string;
   date: string; // DD/MM/YYYY
@@ -101,8 +103,18 @@ export interface FarmerAdvanceRecord {
   daysElapsed: number; // Remaining days elapsed
   totalPayableWithInterest: number; // Principal + Interest Amount (minus repayments if any)
   totalPayable?: number;
-  paymentMode?: 'CASH' | 'BANK_TRANSFER' | 'CHEQUE' | 'OTHER';
+  paymentMode?: AdvancePaymentMode | string;
   referenceNumber?: string;
+  chequeNumber?: string;
+  chequeDate?: string;
+  chequeBank?: string;
+  transactionId?: string; // UTR Number or Transaction Ref
+  upiId?: string;
+  fromBankName?: string; // Firm Account
+  fromAccountNumber?: string;
+  toBankName?: string; // Farmer Account
+  toAccountNumber?: string;
+  toIfscCode?: string;
   status?: 'ACTIVE' | 'SETTLED' | 'CANCELLED';
   remarks?: string;
   category?: AdvanceCategory; // Purpose of advance

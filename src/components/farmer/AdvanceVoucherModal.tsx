@@ -18,7 +18,10 @@ import {
   Building,
   Tag,
   Clock,
-  Eye
+  Eye,
+  CreditCard,
+  Smartphone,
+  Building2
 } from 'lucide-react';
 
 interface AdvanceVoucherModalProps {
@@ -284,6 +287,103 @@ export const AdvanceVoucherModal: React.FC<AdvanceVoucherModalProps> = ({
               <p className="text-amber-800">{advance.itemDescription}</p>
             </div>
           )}
+
+          {/* Payment & Transfer Details Card */}
+          <div className="border border-slate-200 rounded-xl p-4 bg-slate-50/70">
+            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-2 flex items-center gap-1.5">
+              <CreditCard className="w-3.5 h-3.5 text-emerald-700" />
+              {isPa ? 'ਭੁਗਤਾਨ ਤੇ ਟਰਾਂਸਫਰ ਵੇਰਵਾ (Payment & Transfer Details)' : 'Payment & Transfer Details'}
+            </span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 text-xs">
+              <div>
+                <span className="text-slate-500 block text-[11px]">{isPa ? 'ਭੁਗਤਾਨ ਢੰਗ (Mode):' : 'Payment Mode:'}</span>
+                <span className="font-bold text-slate-900">
+                  {advance.paymentMode === 'CHEQUE' ? '📝 ਚੈੱਕ (Cheque)' :
+                   advance.paymentMode === 'GOOGLE_PAY' || advance.paymentMode === 'UPI' ? '📱 Google Pay / UPI' :
+                   advance.paymentMode === 'BANK_TRANSFER' || advance.paymentMode === 'RTGS' || advance.paymentMode === 'NEFT' ? '🏦 ਬੈਂਕ ਟਰਾਂਸਫਰ (Bank Transfer)' :
+                   '💵 ਨਕਦ (Cash)'}
+                </span>
+              </div>
+
+              {advance.paymentMode === 'CHEQUE' && (
+                <>
+                  <div>
+                    <span className="text-slate-500 block text-[11px]">{isPa ? 'ਚੈੱਕ ਨੰਬਰ (Cheque No):' : 'Cheque Number:'}</span>
+                    <span className="font-mono font-black text-purple-900 text-sm">{advance.chequeNumber || '—'}</span>
+                  </div>
+                  {advance.chequeDate && (
+                    <div>
+                      <span className="text-slate-500 block text-[11px]">{isPa ? 'ਚੈੱਕ ਮਿਤੀ (Cheque Date):' : 'Cheque Date:'}</span>
+                      <span className="font-mono text-slate-800 font-bold">{advance.chequeDate}</span>
+                    </div>
+                  )}
+                  {advance.chequeBank && (
+                    <div>
+                      <span className="text-slate-500 block text-[11px]">{isPa ? 'ਬੈਂਕ ਜਿਸਦਾ ਚੈੱਕ ਹੈ:' : 'Drawn on Bank:'}</span>
+                      <span className="text-slate-800 font-medium">{advance.chequeBank}</span>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {(advance.paymentMode === 'BANK_TRANSFER' || advance.paymentMode === 'RTGS' || advance.paymentMode === 'NEFT') && (
+                <>
+                  <div>
+                    <span className="text-slate-500 block text-[11px]">{isPa ? 'ਕਿਸ ਖਾਤੇ ਵਿੱਚੋਂ ਟਰਾਂਸਫਰ (From Firm):' : 'From Firm Account:'}</span>
+                    <span className="font-medium text-slate-900">
+                      {advance.fromBankName || 'ਫਰਮ ਬੈਂਕ'} {advance.fromAccountNumber ? `(${advance.fromAccountNumber})` : ''}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block text-[11px]">{isPa ? 'ਕਿਸਾਨ ਦਾ ਖਾਤਾ ਜਿਸ ਵਿੱਚ ਆਏ (To Farmer):' : 'To Farmer Account:'}</span>
+                    <span className="font-bold text-blue-900">
+                      {advance.toBankName || 'ਕਿਸਾਨ ਬੈਂਕ'} {advance.toAccountNumber ? `(A/C: ${advance.toAccountNumber})` : ''} {advance.toIfscCode ? `[${advance.toIfscCode}]` : ''}
+                    </span>
+                  </div>
+                  {(advance.transactionId || advance.referenceNumber) && (
+                    <div>
+                      <span className="text-slate-500 block text-[11px]">{isPa ? 'ਬੈਂਕ UTR / ਰੈਫ਼ਰੈਂਸ:' : 'Bank UTR / Ref:'}</span>
+                      <span className="font-mono font-bold text-slate-900 bg-white px-2 py-0.5 rounded border border-slate-200">
+                        {advance.transactionId || advance.referenceNumber}
+                      </span>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {(advance.paymentMode === 'GOOGLE_PAY' || advance.paymentMode === 'UPI') && (
+                <>
+                  {advance.fromBankName && (
+                    <div>
+                      <span className="text-slate-500 block text-[11px]">{isPa ? 'ਭੇਜਣ ਵਾਲਾ ਖਾਤਾ/UPI:' : 'From UPI/Account:'}</span>
+                      <span className="font-medium text-slate-800">{advance.fromBankName}</span>
+                    </div>
+                  )}
+                  {advance.upiId && (
+                    <div>
+                      <span className="text-slate-500 block text-[11px]">{isPa ? 'ਕਿਸਾਨ ਦਾ UPI ID:' : 'Farmer UPI ID:'}</span>
+                      <span className="font-mono font-bold text-emerald-900">{advance.upiId}</span>
+                    </div>
+                  )}
+                  {(advance.transactionId || advance.referenceNumber) && (
+                    <div>
+                      <span className="text-slate-500 block text-[11px]">{isPa ? 'UPI ਟ੍ਰਾਂਜੈਕਸ਼ਨ UTR:' : 'Transaction UTR:'}</span>
+                      <span className="font-mono font-bold text-slate-900 bg-white px-2 py-0.5 rounded border border-slate-200">
+                        {advance.transactionId || advance.referenceNumber}
+                      </span>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {advance.paymentMode === 'CASH' && (
+                <div className="col-span-2">
+                  <span className="text-slate-500 block text-[11px]">{isPa ? 'ਭੁਗਤਾਨ ਕਿਸਮ:' : 'Payment Type:'}</span>
+                  <span className="text-slate-700 italic">ਨਕਦ ਹੱਥੀਂ ਭੁਗਤਾਨ ਕੀਤਾ ਗਿਆ (Direct Hand-to-Hand Cash)</span>
+                </div>
+              )}
+            </div>
+          </div>
 
           {/* Financial Calculation Table */}
           <div className="border border-slate-200 rounded-xl overflow-hidden shadow-xs">

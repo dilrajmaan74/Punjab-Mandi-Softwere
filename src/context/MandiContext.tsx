@@ -91,6 +91,26 @@ interface DuplicateCheckResult {
   existingFarmer?: Farmer;
 }
 
+export interface MultiAdvanceSettlementItem {
+  advanceId: string;
+  interestPaid: number;
+  principalPaid: number;
+  totalRepaymentAmount: number;
+  newRemainingPrincipal: number;
+  oldPrincipal: number;
+  oldInterest: number;
+}
+
+export interface MultiAdvanceSettlementPayload {
+  farmerId: string;
+  returnDate: string;
+  paymentMode: 'CASH' | 'BANK_TRANSFER' | 'CHEQUE' | 'OTHER';
+  referenceNo?: string;
+  remarks?: string;
+  resetRestDate: boolean;
+  allocations: MultiAdvanceSettlementItem[];
+}
+
 export const DEFAULT_AGENCIES: ProcurementAgency[] = [
   { id: 'AG-01', nameEn: 'Markfed', namePa: 'ਮਾਰਕਫੈੱਡ (Markfed)', code: 'MARKFED', isDefault: true },
   { id: 'AG-02', nameEn: 'Pungrain', namePa: 'ਪਨਗ੍ਰੇਨ (Pungrain)', code: 'PUNGRAIN', isDefault: true },
@@ -252,6 +272,7 @@ interface MandiContextType {
   deleteFarmerAdvance: (id: string) => boolean;
   addAdvanceRepayment: (advanceId: string, repayment: Omit<AdvanceRepayment, 'id' | 'createdAt'>) => boolean;
   deleteAdvanceRepayment: (advanceId: string, repaymentId: string) => boolean;
+  settleMultiAdvanceRepayment: (payload: MultiAdvanceSettlementPayload) => boolean;
 
   // Boli Operations
   addBoliRecord: (record: Omit<BoliRecord, 'id' | 'createdAt'>) => BoliRecord;
@@ -1535,6 +1556,128 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       return updatedList;
     });
     return success;
+  };
+
+  const settleMultiAdvanceRepayment = (payload: MultiAdvanceSettlementPayload): boolean => {
+    const { returnDate, paymentMode, referenceNo, remarks, resetRestDate, allocations } = payload;
+    if (!allocations || allocations.length === 0) return false;
+
+    setFarmerAdvances((prev) => {
+      const updatedList = prev.map((item) => {
+        const alloc = allocations.find((a) => a.advanceId === item.id);
+        if (!alloc || alloc.totalRepaymentAmount <= 0) {
+          return item;
+        }
+
+        const repaymentRecord: AdvanceRepayment = {
+          id: `REP-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+          date: returnDate,
+          amount: alloc.totalRepaymentAmount,
+          paymentMode: paymentMode,
+          referenceNumber: referenceNo || undefined,
+          referenceNo: referenceNo || undefined,
+          remarks: remarks
+            ? `${remarks} (ਵਿਆਜ ਚੁਕਤਾ: ₹${Math.round(alloc.interestPaid)} • ਮੂਲ ਕਟੌਤੀ: ₹${Math.round(alloc.principalPaid)})`
+            : `ਮੁਨੀਮੀ ਵਾਪਸੀ: ਵਿਆਜ ₹${Math.round(alloc.interestPaid)} ਚੁਕਤਾ + ਮੂਲ ₹${Math.round(alloc.principalPaid)} ਘੱਟ (ਬਾਕੀ ਮੂਲ: ₹${Math.round(alloc.newRemainingPrincipal)})`,
+          createdAt: new Date().toISOString()
+        };
+
+        const existingRepayments = Array.isArray(item.repayments) ? item.repayments : [];
+        const updatedRepayments = [...existingRepayments, repaymentRecord];
+
+        if (resetRestDate) {
+          if (alloc.newRemainingPrincipal <= 0) {
+            return {
+              ...item,
+              repayments: updatedRepayments,
+              totalRepaid: (item.totalRepaid || 0) + alloc.totalRepaymentAmount,
+              netPrincipalRemaining: 0,
+              interestAmount: 0,
+              totalPayableWithInterest: 0,
+              totalPayable: 0,
+              status: 'SETTLED' as const,
+              updatedAt: new Date().toISOString()
+            };
+          }
+
+          const todayStr = formatDateToDDMMYYYY(new Date());
+          const newStartDate = returnDate;
+          const newPrincipal = alloc.newRemainingPrincipal;
+
+          const calc = calculateAdvanceInterest({
+            principal: newPrincipal,
+            monthlyInterestRate: item.monthlyInterestRate,
+            annualInterestRate: item.annualInterestRate,
+            interestMode: item.interestMode,
+            compounding: item.compounding,
+            isInterestFree: item.isInterestFree,
+            repayments: [],
+            startDate: newStartDate,
+            endDate: todayStr
+          });
+
+          return {
+            ...item,
+            date: newStartDate,
+            startDate: newStartDate,
+            amount: newPrincipal,
+            principal: newPrincipal,
+            repayments: updatedRepayments,
+            totalRepaid: 0,
+            netPrincipalRemaining: calc.netPrincipalRemaining,
+            interestAmount: calc.interestAmount,
+            totalDays: calc.totalDays,
+            monthsElapsed: calc.monthsElapsed,
+            daysElapsed: calc.daysElapsed,
+            totalPayableWithInterest: calc.totalPayableWithInterest,
+            totalPayable: calc.totalPayableWithInterest,
+            status: 'ACTIVE' as const,
+            updatedAt: new Date().toISOString()
+          };
+        } else {
+          const todayStr = formatDateToDDMMYYYY(new Date());
+          const startDate = (item.date || item.startDate || todayStr).trim();
+          const tillDate = (item.interestTillDate || item.endDate || todayStr).trim();
+          const amount = Number(item.amount) || 0;
+
+          const calc = calculateAdvanceInterest({
+            principal: amount,
+            monthlyInterestRate: item.monthlyInterestRate,
+            annualInterestRate: item.annualInterestRate,
+            interestMode: item.interestMode,
+            compounding: item.compounding,
+            isInterestFree: item.isInterestFree,
+            repayments: updatedRepayments,
+            startDate,
+            endDate: tillDate
+          });
+
+          return {
+            ...item,
+            repayments: updatedRepayments,
+            totalRepaid: calc.totalRepaid,
+            netPrincipalRemaining: calc.netPrincipalRemaining,
+            interestAmount: calc.interestAmount,
+            totalDays: calc.totalDays,
+            monthsElapsed: calc.monthsElapsed,
+            daysElapsed: calc.daysElapsed,
+            totalPayableWithInterest: calc.totalPayableWithInterest,
+            totalPayable: calc.totalPayableWithInterest,
+            status: calc.totalPayableWithInterest <= 0 ? ('SETTLED' as const) : item.status,
+            updatedAt: new Date().toISOString()
+          };
+        }
+      });
+
+      allocations.forEach((alloc) => {
+        const target = updatedList.find((a) => a.id === alloc.advanceId);
+        if (target) supabaseUpsertAdvance(target, activeFirmId, activeFiscalYear).catch(console.error);
+      });
+
+      return updatedList;
+    });
+
+    return true;
   };
 
   const deleteFarmerAdvance = (id: string): boolean => {
@@ -3686,6 +3829,7 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         deleteFarmerAdvance,
         addAdvanceRepayment,
         deleteAdvanceRepayment,
+        settleMultiAdvanceRepayment,
         addBoliRecord,
         updateBoliRecord,
         deleteBoliRecord,

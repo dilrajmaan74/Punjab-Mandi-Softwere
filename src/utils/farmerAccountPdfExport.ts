@@ -1204,6 +1204,25 @@ export async function exportFarmerAccountPDF(
       doc.setTextColor(159, 18, 57);
       doc.text(formatPdfCurrency(adv.totalPayableWithInterest || (adv.amount + (adv.interestAmount || 0))), pageWidth - margin - 3, y + 4.8, { align: 'right' });
       y += rowH;
+
+      // Print repayment sub-rows with exact return dates
+      if (adv.repayments && adv.repayments.length > 0) {
+        adv.repayments.forEach((rep) => {
+          checkPageBreak(7);
+          doc.setFillColor(240, 253, 244);
+          doc.rect(margin, y, contentWidth, 6.5, 'F');
+          doc.setFont('NotoSansGurmukhi', 'bold');
+          doc.setFontSize(7);
+          doc.setTextColor(20, 83, 45);
+          doc.text(`  ↳ ਵਾਪਸੀ ਮਿਤੀ: ${safeText(rep.date)}`, margin + 4, y + 4.5);
+          doc.setFont('NotoSansGurmukhi', 'normal');
+          doc.text(`ਕਿਸਾਨ ਵੱਲੋਂ ਕਿਸ਼ਤ ਵਾਪਸ: -${formatPdfCurrency(rep.amount)} (${safeText(rep.paymentMode)}) ${rep.remarks ? `• ${safeText(rep.remarks)}` : ''}`, margin + 48, y + 4.5);
+          doc.setFont('NotoSansGurmukhi', 'bold');
+          doc.setTextColor(20, 83, 45);
+          doc.text(`-${formatPdfCurrency(rep.amount)}`, pageWidth - margin - 3, y + 4.5, { align: 'right' });
+          y += 6.5;
+        });
+      }
     });
 
     // Advance Totals row
@@ -1228,7 +1247,31 @@ export async function exportFarmerAccountPDF(
   // ==========================================
   // SECTION 5B: PAYMENT RECEIPTS & RECOVERIES
   // ==========================================
-  const paymentRecords = account.paymentRecords || [];
+  const directPdfRecoveries = (account.paymentRecords || []).map((p) => ({
+    date: p.date,
+    mode: p.paymentMode,
+    ref: p.referenceNumber || '—',
+    agency: p.agency || '—',
+    remarks: p.remarks || 'ਸਿੱਧਾ ਭੁਗਤਾਨ / ਰਿਕਵਰੀ',
+    amount: p.amount
+  }));
+  const advPdfRecoveries = (account.advances || []).flatMap((adv) =>
+    (adv.repayments || []).map((r) => ({
+      date: r.date,
+      mode: r.paymentMode,
+      ref: r.referenceNumber || r.referenceNo || `Adv #${adv.id}`,
+      agency: '—',
+      remarks: r.remarks || `ਪੇਸ਼ਗੀ #${adv.id} ਖ਼ਿਲਾਫ਼ ਵਾਪਸ`,
+      amount: r.amount
+    }))
+  );
+  const allPdfRecoveries = [...directPdfRecoveries, ...advPdfRecoveries].sort((a, b) => {
+    const dateA = a.date.split('/').reverse().join('-');
+    const dateB = b.date.split('/').reverse().join('-');
+    return dateB.localeCompare(dateA);
+  });
+  const totalPdfRecoveries = allPdfRecoveries.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+
   checkPageBreak(38);
   doc.setFont('NotoSansGurmukhi', 'bold');
   doc.setFontSize(9.5);
@@ -1250,14 +1293,14 @@ export async function exportFarmerAccountPDF(
   doc.text('Amount / ਰਕਮ', pageWidth - margin - 3, y + 5.2, { align: 'right' });
   y += s5bHeaderHeight;
 
-  if (paymentRecords.length === 0) {
+  if (allPdfRecoveries.length === 0) {
     doc.setFont('NotoSansGurmukhi', 'normal');
     doc.setFontSize(8);
     doc.setTextColor(148, 163, 184);
     doc.text('No payment receipts or recoveries recorded / ਕੋਈ ਪ੍ਰਾਪਤ ਰਕਮ ਜਾਂ ਰਸੀਦ ਰਿਕਾਰਡ ਨਹੀਂ ਹੈ।', margin + 3, y + 5);
     y += 8;
   } else {
-    paymentRecords.forEach((pay, idx) => {
+    allPdfRecoveries.forEach((pay, idx) => {
       checkPageBreak(8);
       const rowH = 7;
       if (idx % 2 === 1) {
@@ -1268,8 +1311,8 @@ export async function exportFarmerAccountPDF(
       doc.setFontSize(7.5);
       doc.setTextColor(51, 65, 85);
       doc.text(safeText(pay.date), margin + 2, y + 4.8);
-      doc.text(safeText(pay.paymentMode), margin + 28, y + 4.8);
-      doc.text(safeText(pay.referenceNumber || '—'), margin + 62, y + 4.8);
+      doc.text(safeText(pay.mode), margin + 28, y + 4.8);
+      doc.text(safeText(pay.ref || '—'), margin + 62, y + 4.8);
       doc.text(safeText(pay.agency || '—'), margin + 100, y + 4.8);
       doc.text(safeText(pay.remarks || '—'), margin + 132, y + 4.8);
       doc.setFont('NotoSansGurmukhi', 'bold');
@@ -1284,9 +1327,9 @@ export async function exportFarmerAccountPDF(
     doc.setFont('NotoSansGurmukhi', 'bold');
     doc.setFontSize(8);
     doc.setTextColor(15, 23, 42);
-    doc.text('Total Payments Received / ਕੁੱਲ ਪ੍ਰਾਪਤ ਰਕਮ:', margin + 2, y + 5);
+    doc.text('Total Payments & Recoveries / ਕੁੱਲ ਪ੍ਰਾਪਤ ਤੇ ਵਾਪਸ ਆਈ ਰਕਮ:', margin + 2, y + 5);
     doc.setTextColor(20, 83, 45);
-    doc.text(formatPdfCurrency(paidAmount), pageWidth - margin - 3, y + 5, { align: 'right' });
+    doc.text(formatPdfCurrency(totalPdfRecoveries), pageWidth - margin - 3, y + 5, { align: 'right' });
     y += 8.5;
   }
 

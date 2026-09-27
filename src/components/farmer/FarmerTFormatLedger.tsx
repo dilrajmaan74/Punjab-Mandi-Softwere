@@ -42,12 +42,13 @@ interface CreditEntry {
   date: string;
   title: string;
   subTitle?: string;
-  category: 'PURCHASE' | 'ARRIVAL' | 'ADJUSTMENT' | 'OTHER';
+  category: 'PURCHASE' | 'ARRIVAL' | 'ADJUSTMENT' | 'REPAYMENT' | 'OTHER';
   amount: number;
   bags?: number;
   weight?: string;
   rate?: number;
   agency?: string;
+  ref?: string;
 }
 
 export const FarmerTFormatLedger: React.FC<FarmerTFormatLedgerProps> = ({
@@ -190,6 +191,25 @@ export const FarmerTFormatLedger: React.FC<FarmerTFormatLedgerProps> = ({
       category: 'PURCHASE',
       amount: account.totalGrossAmount,
       bags: account.purchasedBags || account.mandiArrivalBags
+    });
+  }
+
+  // B. Farmer Advance Repayments (ਕਿਸਾਨ ਵੱਲੋਂ ਕਿਸ਼ਤ ਵਾਪਸ / ਜਮ੍ਹਾਂ with exact return date)
+  if (account.advances && account.advances.length > 0) {
+    account.advances.forEach((adv) => {
+      if (adv.repayments && adv.repayments.length > 0) {
+        adv.repayments.forEach((rep) => {
+          creditList.push({
+            id: `rep-${adv.id}-${rep.id}`,
+            date: rep.date || '—',
+            title: `ਕਿਸਾਨ ਵੱਲੋਂ ਕਿਸ਼ਤ ਵਾਪਸ (ਪੇਸ਼ਗੀ #${adv.id})`,
+            subTitle: `ਵਾਪਸੀ ਮਿਤੀ: ${rep.date} • ${rep.paymentMode === 'CASH' ? 'ਨਕਦ (Cash)' : rep.paymentMode} ${rep.remarks ? `• ${rep.remarks}` : ''}`,
+            category: 'REPAYMENT',
+            amount: rep.amount,
+            ref: rep.referenceNo || rep.referenceNumber || adv.id
+          });
+        });
+      }
     });
   }
 
