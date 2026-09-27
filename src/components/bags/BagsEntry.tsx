@@ -72,6 +72,7 @@ export const BagsEntry: React.FC = () => {
     firms,
     language,
     activeCrop,
+    setActiveCrop,
     activeCropConfig
   } = useMandi();
   const isEn = language === 'en';
@@ -332,6 +333,9 @@ export const BagsEntry: React.FC = () => {
     if (data.farmer) {
       setSelectedFarmerId(data.farmer.id);
       setSelectedFarmerForBags(data.farmer);
+    }
+    if (data.crop) {
+      setActiveCrop(data.crop as any);
     }
     if (data.newBags !== undefined && data.newBags > 0) {
       setNewBagsInput(String(data.newBags));

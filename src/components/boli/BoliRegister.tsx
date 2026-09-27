@@ -93,6 +93,15 @@ export const BoliRegister: React.FC = () => {
     if (data.ratePerQtl) {
       setRate(String(data.ratePerQtl));
     }
+    if (data.crop) {
+      setCrop(data.crop);
+    }
+    if (data.agency) {
+      setAgency(data.agency);
+    }
+    if (data.buyerName) {
+      setBuyerName(data.buyerName);
+    }
     setIsFormOpen(true);
   };
 
