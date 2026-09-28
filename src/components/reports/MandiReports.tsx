@@ -45,6 +45,7 @@ import {
   getBagTransfers
 } from '../../utils/farmerAdjustmentsStorage';
 import { StockLedgerExportOptions } from '../../utils/stockBalancePdfExport';
+import { FarmerBagBalanceReport } from './FarmerBagBalanceReport';
 
 export type ReportCategoryTab =
   | 'farmer-account'
@@ -56,7 +57,8 @@ export type ReportCategoryTab =
   | 'farmer-register'
   | 'advance-interest'
   | 'payment-adjustment'
-  | 'bag-transfer';
+  | 'bag-transfer'
+  | 'farmer-bag-labour';
 
 export const MandiReports: React.FC = () => {
   const {
@@ -91,7 +93,26 @@ export const MandiReports: React.FC = () => {
   const bagTransfers = useMemo(() => getBagTransfers(), [activeTab]);
 
   // Farmer purchase summaries
-  const allSummaries = useMemo(() => getAllFarmersPurchaseSummaries(), [getAllFarmersPurchaseSummaries, farmers, bagsEntries, dailyPurchaseRecords, farmerAdvances]);
+  const allSummaries = useMemo(() => {
+    return getAllFarmersPurchaseSummaries().map((s) => {
+      const f = farmers.find((farm) => farm && farm.id === s.farmerId) || s.farmer || {
+        id: s.farmerId,
+        farmerName: s.farmerName || 'Farmer',
+        farmerNamePa: s.farmerNamePa || '',
+        fatherName: s.fatherName || '',
+        fatherNamePa: s.fatherNamePa || '',
+        village: s.village || '',
+        villagePa: s.villagePa || '',
+        mobile: s.mobile || '',
+        aadhaar: s.aadhaar || '',
+        pinCode: '141401'
+      };
+      return {
+        ...s,
+        farmer: f
+      };
+    });
+  }, [getAllFarmersPurchaseSummaries, farmers, bagsEntries, dailyPurchaseRecords, farmerAdvances]);
 
   // Unique villages
   const uniqueVillages = useMemo(() => Array.from(new Set(farmers.map((f) => f.village).filter(Boolean))), [farmers]);
@@ -126,17 +147,21 @@ export const MandiReports: React.FC = () => {
 
   // 1. Filtered Farmer Accounts
   const filteredFarmerSummaries = useMemo(() => {
-    return allSummaries.filter((s) => {
-      if (filterFarmerId !== 'ALL' && s.farmer.id !== filterFarmerId) return false;
-      if (filterVillage !== 'ALL' && s.farmer.village !== filterVillage) return false;
+    return allSummaries.filter((s: any) => {
+      const fId = s.farmerId || s.farmer?.id;
+      const fVillage = s.village || s.farmer?.village;
+      const fName = s.farmerName || s.farmer?.farmerName || '';
+      const fNamePa = s.farmerNamePa || s.farmer?.farmerNamePa || '';
+
+      if (filterFarmerId !== 'ALL' && fId !== filterFarmerId) return false;
+      if (filterVillage !== 'ALL' && fVillage !== filterVillage) return false;
       if (searchQuery) {
         const q = searchQuery.toLowerCase();
-        const f = s.farmer;
         const match =
-          f.farmerName.toLowerCase().includes(q) ||
-          f.id.toLowerCase().includes(q) ||
-          (f.farmerNamePa && f.farmerNamePa.includes(q)) ||
-          f.village.toLowerCase().includes(q);
+          fName.toLowerCase().includes(q) ||
+          (fId && fId.toLowerCase().includes(q)) ||
+          (fNamePa && fNamePa.includes(q)) ||
+          (fVillage && fVillage.toLowerCase().includes(q));
         if (!match) return false;
       }
       return true;
@@ -457,7 +482,8 @@ export const MandiReports: React.FC = () => {
     { id: 'farmer-register', titleEn: '7. Farmer Master Register', titlePa: 'ਕਿਸਾਨ ਰਜਿਸਟਰ', icon: Users },
     { id: 'advance-interest', titleEn: '8. Advance & Interest', titlePa: 'ਅਡਵਾਂਸ ਤੇ ਵਿਆਜ', icon: CreditCard },
     { id: 'payment-adjustment', titleEn: '9. Payment Adjustment', titlePa: 'ਪੇਮੈਂਟ ਐਡਜਸਟਮੈਂਟ', icon: ArrowLeftRight },
-    { id: 'bag-transfer', titleEn: '10. Bag Transfer', titlePa: 'ਬੋਰੀ ਟ੍ਰਾਂਸਫਰ', icon: PackageCheck }
+    { id: 'bag-transfer', titleEn: '10. Bag Transfer', titlePa: 'ਬੋਰੀ ਟ੍ਰਾਂਸਫਰ', icon: PackageCheck },
+    { id: 'farmer-bag-labour', titleEn: '11. Bag Balance & Labour', titlePa: 'ਬੋਰੀ ਤੇ ਲੇਬਰ ਕਟੌਤੀ', icon: Scale }
   ];
 
   return (
@@ -747,17 +773,23 @@ export const MandiReports: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
-                {filteredFarmerSummaries.map((s, idx) => {
-                  const f = s.farmer;
-                  const bags = s.totalArrivalBags || s.totalPurchasedBags || 0;
-                  const wtKg = s.totalArrivalKg || s.totalPurchasedKg || 0;
+                {filteredFarmerSummaries.map((s: any, idx) => {
+                  const f = s.farmer || {
+                    id: s.farmerId || `FRM-${idx}`,
+                    farmerName: s.farmerName || 'Farmer',
+                    farmerNamePa: s.farmerNamePa || '',
+                    fatherName: s.fatherName || '',
+                    village: s.village || ''
+                  };
+                  const bags = s.totalArrivalBags || s.totalPurchasedBags || s.mandiArrivalBags || s.alreadyPurchasedBags || 0;
+                  const wtKg = s.totalArrivalKg || s.totalPurchasedKg || s.mandiArrivalWeightKg || s.alreadyPurchasedWeightKg || 0;
                   const cropAmt = s.netPayableAmount || s.grossAmount || 0;
                   const advInt = s.totalAdvanceAmount || 0;
                   const balance = s.finalBalance !== undefined ? s.finalBalance : cropAmt - advInt;
                   const wtF = formatKgToQulKg(wtKg);
 
                   return (
-                    <tr key={f.id} className="hover:bg-slate-50 dark:hover:bg-slate-750 transition-colors">
+                    <tr key={f.id || idx} className="hover:bg-slate-50 dark:hover:bg-slate-750 transition-colors">
                       <td className="py-2.5 px-3 text-center text-slate-500">{idx + 1}</td>
                       <td className="py-2.5 px-3 font-mono text-[11px] font-semibold text-slate-600 dark:text-slate-300">{f.id}</td>
                       <td className="py-2.5 px-3 font-semibold text-slate-900 dark:text-white">
@@ -1782,6 +1814,15 @@ export const MandiReports: React.FC = () => {
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 11. TAB: FARMER BAG BALANCE & LABOUR RECONCILIATION */}
+      {/* ========================================================================= */}
+      {activeTab === 'farmer-bag-labour' && (
+        <div className="bg-white dark:bg-slate-800 rounded-xl p-3 sm:p-5 border border-slate-200 dark:border-slate-700 shadow-sm">
+          <FarmerBagBalanceReport />
         </div>
       )}
 

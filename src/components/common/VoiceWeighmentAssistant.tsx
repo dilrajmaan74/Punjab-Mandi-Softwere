@@ -53,7 +53,7 @@ export const VoiceWeighmentAssistant: React.FC<VoiceWeighmentAssistantProps> = (
   const [showSettings, setShowSettings] = useState(false);
   const [statusState, setStatusState] = useState<'IDLE' | 'LISTENING' | 'DISCONNECTED_READY'>('IDLE');
 
-  // Auto-disconnect settings: 0 = manual only, 2500 = 2.5 seconds of silence, 4000 = 4 seconds
+  // Settings & State
   const [autoDisconnectDelay, setAutoDisconnectDelay] = useState<number>(3000);
   const [soundFeedback, setSoundFeedback] = useState<boolean>(true);
 
@@ -61,8 +61,15 @@ export const VoiceWeighmentAssistant: React.FC<VoiceWeighmentAssistantProps> = (
   const silenceTimerRef = useRef<any>(null);
   const transcriptRef = useRef<string>('');
   const isListeningRef = useRef<boolean>(false);
+  const isStartingRef = useRef<boolean>(false);
+  const isActiveRef = useRef<boolean>(false);
+  const farmersRef = useRef<Farmer[]>(farmers);
+  const speechLangRef = useRef<'pa-IN' | 'hi-IN' | 'en-IN'>(speechLang);
+  const soundFeedbackRef = useRef<boolean>(soundFeedback);
+  const isEnRef = useRef<boolean>(isEn);
+  const autoDisconnectDelayRef = useRef<number>(autoDisconnectDelay);
 
-  // Keep ref in sync
+  // Keep references in sync without rebuilding SpeechRecognition
   useEffect(() => {
     transcriptRef.current = transcript;
   }, [transcript]);
@@ -71,6 +78,33 @@ export const VoiceWeighmentAssistant: React.FC<VoiceWeighmentAssistantProps> = (
     isListeningRef.current = isListening;
   }, [isListening]);
 
+  useEffect(() => {
+    farmersRef.current = farmers;
+  }, [farmers]);
+
+  useEffect(() => {
+    speechLangRef.current = speechLang;
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.lang = speechLang;
+      } catch {
+        // ignore
+      }
+    }
+  }, [speechLang]);
+
+  useEffect(() => {
+    soundFeedbackRef.current = soundFeedback;
+  }, [soundFeedback]);
+
+  useEffect(() => {
+    isEnRef.current = isEn;
+  }, [isEn]);
+
+  useEffect(() => {
+    autoDisconnectDelayRef.current = autoDisconnectDelay;
+  }, [autoDisconnectDelay]);
+
   // Clean disconnect helper
   const disconnectMic = useCallback(() => {
     if (silenceTimerRef.current) {
@@ -78,7 +112,9 @@ export const VoiceWeighmentAssistant: React.FC<VoiceWeighmentAssistantProps> = (
       silenceTimerRef.current = null;
     }
 
-    if (recognitionRef.current && isListeningRef.current) {
+    isStartingRef.current = false;
+
+    if (recognitionRef.current && (isActiveRef.current || isListeningRef.current)) {
       try {
         recognitionRef.current.stop();
       } catch (err) {
@@ -86,19 +122,20 @@ export const VoiceWeighmentAssistant: React.FC<VoiceWeighmentAssistantProps> = (
       }
     }
 
+    isActiveRef.current = false;
     setIsListening(false);
     isListeningRef.current = false;
     setInterimText('');
 
     if (transcriptRef.current.trim().length > 0) {
       setStatusState('DISCONNECTED_READY');
-      if (soundFeedback) {
+      if (soundFeedbackRef.current) {
         playVoiceFeedbackTone('STOP');
       }
     } else {
       setStatusState('IDLE');
     }
-  }, [soundFeedback]);
+  }, []);
 
   // Reset silence timer on new spoken speech
   const resetSilenceTimer = useCallback(() => {
@@ -107,37 +144,42 @@ export const VoiceWeighmentAssistant: React.FC<VoiceWeighmentAssistantProps> = (
       silenceTimerRef.current = null;
     }
 
-    if (autoDisconnectDelay > 0 && isListeningRef.current) {
+    const delay = autoDisconnectDelayRef.current;
+    if (delay > 0 && (isActiveRef.current || isListeningRef.current)) {
       silenceTimerRef.current = setTimeout(() => {
-        // Auto-disconnect after user stopped speaking
         disconnectMic();
-      }, autoDisconnectDelay);
+      }, delay);
     }
-  }, [autoDisconnectDelay, disconnectMic]);
+  }, [disconnectMic]);
 
-  // Initialize Speech Recognition
-  useEffect(() => {
+  // Setup single robust Speech Recognition instance
+  const getOrCreateRecognition = useCallback(() => {
+    if (recognitionRef.current) {
+      return recognitionRef.current;
+    }
+
     const SpeechRecognition =
       (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
     if (!SpeechRecognition) {
       setIsSupported(false);
-      return;
+      return null;
     }
 
     try {
       const recognition = new SpeechRecognition();
-      // CONTINUOUS = true allows user to pause naturally without sudden cutoff
       recognition.continuous = true;
       recognition.interimResults = true;
-      recognition.lang = speechLang;
+      recognition.lang = speechLangRef.current;
 
       recognition.onstart = () => {
+        isStartingRef.current = false;
+        isActiveRef.current = true;
         setIsListening(true);
         isListeningRef.current = true;
         setErrorMsg(null);
         setStatusState('LISTENING');
-        if (soundFeedback) {
+        if (soundFeedbackRef.current) {
           playVoiceFeedbackTone('START');
         }
       };
@@ -161,33 +203,35 @@ export const VoiceWeighmentAssistant: React.FC<VoiceWeighmentAssistantProps> = (
           transcriptRef.current = combined;
           setInterimText(interim);
 
-          // Real-time parsing of current speech
-          const parsed = parseSpokenMandiText(combined, farmers);
+          // Real-time parsing of current speech with current farmers list
+          const parsed = parseSpokenMandiText(combined, farmersRef.current);
           setParsedData(parsed);
 
-          // Reset silence timer because user is speaking
+          // Reset silence timer because user is actively speaking
           resetSilenceTimer();
         }
       };
 
       recognition.onerror = (event: any) => {
+        isStartingRef.current = false;
         if (event.error === 'no-speech') {
-          // Normal when silent, don't crash
+          // Silence timeout, don't crash
           return;
         }
 
+        isActiveRef.current = false;
         setIsListening(false);
         isListeningRef.current = false;
 
         if (event.error === 'not-allowed') {
           setErrorMsg(
-            isEn
+            isEnRef.current
               ? 'Microphone permission denied. Please allow microphone access in browser.'
               : 'ਮਾਈਕ੍ਰੋਫੋਨ ਦੀ ਆਗਿਆ ਨਹੀਂ ਮਿਲੀ (Microphone Permission Denied)। ਬ੍ਰਾਊਜ਼ਰ ਸੈਟਿੰਗ ਵਿੱਚ ਮਾਈਕ ਆਨ ਕਰੋ।'
           );
         } else if (event.error === 'network') {
           setErrorMsg(
-            isEn
+            isEnRef.current
               ? 'Speech recognition network error. Please check internet connection.'
               : 'ਇੰਟਰਨੈੱਟ ਕੁਨੈਕਸ਼ਨ ਨੈੱਟਵਰਕ ਐਰਰ। ਕਿਰਪਾ ਕਰਕੇ ਇੰਟਰਨੈੱਟ ਚੈੱਕ ਕਰੋ।'
           );
@@ -198,12 +242,10 @@ export const VoiceWeighmentAssistant: React.FC<VoiceWeighmentAssistantProps> = (
       };
 
       recognition.onend = () => {
-        // Recognition ended
-        if (isListeningRef.current) {
-          // If browser terminated unexpectedly but we wanted to stay listening
-          setIsListening(false);
-          isListeningRef.current = false;
-        }
+        isStartingRef.current = false;
+        isActiveRef.current = false;
+        setIsListening(false);
+        isListeningRef.current = false;
         setInterimText('');
         if (transcriptRef.current.trim().length > 0) {
           setStatusState('DISCONNECTED_READY');
@@ -213,8 +255,19 @@ export const VoiceWeighmentAssistant: React.FC<VoiceWeighmentAssistantProps> = (
       };
 
       recognitionRef.current = recognition;
+      return recognition;
     } catch (err) {
       console.warn('SpeechRecognition initialization error:', err);
+      setIsSupported(false);
+      return null;
+    }
+  }, [resetSilenceTimer]);
+
+  // Check support on mount
+  useEffect(() => {
+    const SpeechRecognition =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
       setIsSupported(false);
     }
 
@@ -230,30 +283,40 @@ export const VoiceWeighmentAssistant: React.FC<VoiceWeighmentAssistantProps> = (
         }
       }
     };
-  }, [speechLang, farmers, isEn, soundFeedback, resetSilenceTimer]);
+  }, []);
 
-  // Start Voice Recognition
+  // Start Voice Recognition safely preventing duplicate calls
   const startListening = () => {
-    if (!recognitionRef.current) return;
+    // If already in process of starting or actively listening, do nothing
+    if (isStartingRef.current || isActiveRef.current || isListening) {
+      return;
+    }
+
+    const recognition = getOrCreateRecognition();
+    if (!recognition) return;
+
     setErrorMsg(null);
     setTranscript('');
     setInterimText('');
     setParsedData(null);
     transcriptRef.current = '';
 
+    isStartingRef.current = true;
+
     try {
-      recognitionRef.current.lang = speechLang;
-      recognitionRef.current.start();
+      recognition.lang = speechLangRef.current;
+      recognition.start();
     } catch (err: any) {
-      // If already started or aborting
-      console.warn('Could not start recognition:', err);
-      try {
-        recognitionRef.current.abort();
-        setTimeout(() => {
-          recognitionRef.current.start();
-        }, 150);
-      } catch (e) {
-        console.error('Failed to restart speech recognition:', e);
+      isStartingRef.current = false;
+      const msg = String(err?.message || err);
+      if (err.name === 'InvalidStateError' || msg.includes('already started')) {
+        // Already active in browser
+        isActiveRef.current = true;
+        setIsListening(true);
+        isListeningRef.current = true;
+        setStatusState('LISTENING');
+      } else {
+        console.warn('Could not start recognition:', err);
       }
     }
   };
@@ -262,7 +325,7 @@ export const VoiceWeighmentAssistant: React.FC<VoiceWeighmentAssistantProps> = (
   const handleTranscriptChange = (val: string) => {
     setTranscript(val);
     transcriptRef.current = val;
-    const parsed = parseSpokenMandiText(val, farmers);
+    const parsed = parseSpokenMandiText(val, farmersRef.current);
     setParsedData(parsed);
   };
 

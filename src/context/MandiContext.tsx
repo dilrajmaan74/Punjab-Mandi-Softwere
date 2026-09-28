@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import {
   Farmer,
   BankDetails,
@@ -451,177 +451,217 @@ const DEFAULT_SETTINGS: MandiSettings = {
   requireAgencyPurchaseBeforeLefting: true
 };
 
-export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // 1. Farmers list - starts EMPTY by default (no fake records)
-  const [farmers, setFarmers] = useState<Farmer[]>(() => {
-    try {
-      const stored = localStorage.getItem(LOCAL_STORAGE_KEYS.FARMERS);
-      return stored ? JSON.parse(stored) : [];
-    } catch {
-      return [];
+// Firm-specific storage key generator
+export const getFirmStorageKey = (baseKey: string, firmId: string) => `${baseKey}_${firmId}`;
+
+// Load data strictly for specified firm, with automatic backward-compatibility migration for FIRM-001
+export const loadFirmData = <T,>(baseKey: string, firmId: string, defaultValue: T): T => {
+  try {
+    const firmKey = getFirmStorageKey(baseKey, firmId);
+    const firmStored = localStorage.getItem(firmKey);
+    if (firmStored) {
+      const parsed = JSON.parse(firmStored);
+      return parsed !== null && parsed !== undefined ? parsed : defaultValue;
     }
-  });
-
-  // 2. Bags entries - starts EMPTY by default
-  const [bagsEntries, setBagsEntries] = useState<BagsEntryRecord[]>(() => {
-    try {
-      const stored = localStorage.getItem(LOCAL_STORAGE_KEYS.BAGS_ENTRIES);
-      if (!stored) return [];
-      const parsed: BagsEntryRecord[] = JSON.parse(stored);
-      // Auto-repair any entries where Pakha or Sukhi was calculated, but fixed Pakki labour was omitted (the subtraction bug)
-      let needsSave = false;
-      const repaired = parsed.map((entry) => {
-        const totalBags = entry.bags || ((entry.newBags || 0) + (entry.oldBags || 0));
-        const hasDoubleOrSukki = 
-          (entry.conditionBreakdown?.doubleBags !== undefined && entry.conditionBreakdown.doubleBags > 0) ||
-          (entry.conditionBreakdown?.sukkiBags !== undefined && entry.conditionBreakdown.sukkiBags > 0) ||
-          (entry.labourDeductions?.pakkaDoubleLabourAmount !== undefined && entry.labourDeductions.pakkaDoubleLabourAmount > 0) ||
-          (entry.labourDeductions?.sukhiLabourAmount !== undefined && entry.labourDeductions.sukhiLabourAmount > 0);
-
-        const pakkiAmount = entry.conditionBreakdown?.pakkiAmount ?? entry.labourDeductions?.pakkiLabourAmount ?? 0;
-        const pakkiBags = entry.conditionBreakdown?.pakkiBags ?? entry.labourDeductions?.pakkiBagsCount ?? 0;
-
-        // If entry had double or sukki bags, but pakki bags or amount was 0 because of the old bug:
-        if (totalBags > 0 && hasDoubleOrSukki && (pakkiAmount === 0 || pakkiBags === 0)) {
-          needsSave = true;
-          const doubleBags = entry.conditionBreakdown?.doubleBags ?? entry.labourDeductions?.doubleBagsCount ?? 0;
-          const doubleRate = entry.conditionBreakdown?.doubleRate ?? entry.labourDeductions?.pakkaDoubleLabourRate ?? 14;
-          const sukkiBags = entry.conditionBreakdown?.sukkiBags ?? entry.labourDeductions?.sukkiBagsCount ?? 0;
-          const sukkiRate = entry.conditionBreakdown?.sukkiRate ?? entry.labourDeductions?.sukhiLabourRate ?? 5;
-          const pakkiRate = 8; // Fixed ₹8 pakki labour
-
-          const recalc = calculateAutomaticLabour(
-            entry.newBags || 0,
-            entry.oldBags || 0,
-            doubleBags,
-            sukkiBags,
-            entry.totalAmount,
-            undefined,
-            { pakkiRate, doubleRate, sukkiRate },
-            totalBags, // Fixed Pakki labour applies to all total bags!
-            { totalBagsOverride: totalBags }
-          );
-
-          return {
-            ...entry,
-            labourDeductions: recalc.labourDeductions,
-            conditionBreakdown: recalc.conditionBreakdown,
-            netAmount: recalc.netAmount
-          };
-        }
-        return entry;
-      });
-
-      if (needsSave) {
-        localStorage.setItem(LOCAL_STORAGE_KEYS.BAGS_ENTRIES, JSON.stringify(repaired));
+    // Backward compatibility: If no firmKey exists yet, check legacy un-prefixed key
+    if (firmId === 'FIRM-001' || firmId === DEFAULT_FIRM.id) {
+      const legacyStored = localStorage.getItem(baseKey);
+      if (legacyStored) {
+        const parsed = JSON.parse(legacyStored);
+        // Seed into firm-specific key so future reads are completely isolated
+        localStorage.setItem(firmKey, JSON.stringify(parsed));
+        return parsed;
       }
-      return repaired;
+    }
+    return defaultValue;
+  } catch {
+    return defaultValue;
+  }
+};
+
+// Save data strictly for specified firm
+export const saveFirmData = <T,>(baseKey: string, firmId: string, data: T) => {
+  try {
+    if (!firmId) return;
+    const firmKey = getFirmStorageKey(baseKey, firmId);
+    localStorage.setItem(firmKey, JSON.stringify(data));
+    // For default firm, keep legacy key in sync for backwards compatibility
+    if (firmId === 'FIRM-001' || firmId === DEFAULT_FIRM.id) {
+      localStorage.setItem(baseKey, JSON.stringify(data));
+    }
+  } catch (err) {
+    console.error(`Error saving firm data for ${baseKey}_${firmId}:`, err);
+  }
+};
+
+export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  // 1. Multi-Firm Management: initialize active firm first
+  const [firms, setFirms] = useState<MandiFirm[]>(() => {
+    try {
+      const stored = localStorage.getItem(LOCAL_STORAGE_KEYS.FIRMS);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.map((f: MandiFirm) => {
+            if (f.id === 'FIRM-001' || f.isDefault) {
+              return {
+                ...DEFAULT_FIRM,
+                ...f,
+                name: f.name || DEFAULT_FIRM.name,
+                address: f.address || DEFAULT_FIRM.address,
+                marketCommittee: f.marketCommittee || DEFAULT_FIRM.marketCommittee,
+                mobile: f.mobile || DEFAULT_FIRM.mobile,
+                licenceNo: f.licenceNo || DEFAULT_FIRM.licenceNo
+              };
+            }
+            return f;
+          });
+        }
+      }
+      return [DEFAULT_FIRM];
     } catch {
-      return [];
+      return [DEFAULT_FIRM];
     }
   });
 
-  // 3. Bardana Received Records - starts EMPTY by default
+  const [activeFirmId, setActiveFirmIdState] = useState<string>(() => {
+    try {
+      const stored = localStorage.getItem(LOCAL_STORAGE_KEYS.ACTIVE_FIRM_ID);
+      return stored || DEFAULT_FIRM.id;
+    } catch {
+      return DEFAULT_FIRM.id;
+    }
+  });
+
+  const activeFirmIdRef = useRef(activeFirmId);
+  activeFirmIdRef.current = activeFirmId;
+
+  // 2. Farmers list - strictly isolated per active firm
+  const [farmers, setFarmers] = useState<Farmer[]>(() => {
+    const list = loadFirmData<Farmer[]>(LOCAL_STORAGE_KEYS.FARMERS, activeFirmId, []);
+    return Array.isArray(list) ? list.filter((f) => f && f.id) : [];
+  });
+
+  // 3. Bags entries - strictly isolated per active firm
+  const [bagsEntries, setBagsEntries] = useState<BagsEntryRecord[]>(() => {
+    const list = loadFirmData<BagsEntryRecord[]>(LOCAL_STORAGE_KEYS.BAGS_ENTRIES, activeFirmId, []);
+    if (!Array.isArray(list)) return [];
+    // Auto-repair any entries where Pakha or Sukhi was calculated, but fixed Pakki labour was omitted
+    let needsSave = false;
+    const repaired = list.map((entry) => {
+      const totalBags = entry.bags || ((entry.newBags || 0) + (entry.oldBags || 0));
+      const hasDoubleOrSukki = 
+        (entry.conditionBreakdown?.doubleBags !== undefined && entry.conditionBreakdown.doubleBags > 0) ||
+        (entry.conditionBreakdown?.sukkiBags !== undefined && entry.conditionBreakdown.sukkiBags > 0) ||
+        (entry.labourDeductions?.pakkaDoubleLabourAmount !== undefined && entry.labourDeductions.pakkaDoubleLabourAmount > 0) ||
+        (entry.labourDeductions?.sukhiLabourAmount !== undefined && entry.labourDeductions.sukhiLabourAmount > 0);
+
+      const pakkiAmount = entry.conditionBreakdown?.pakkiAmount ?? entry.labourDeductions?.pakkiLabourAmount ?? 0;
+      const pakkiBags = entry.conditionBreakdown?.pakkiBags ?? entry.labourDeductions?.pakkiBagsCount ?? 0;
+
+      if (totalBags > 0 && hasDoubleOrSukki && (pakkiAmount === 0 || pakkiBags === 0)) {
+        needsSave = true;
+        const doubleBags = entry.conditionBreakdown?.doubleBags ?? entry.labourDeductions?.doubleBagsCount ?? 0;
+        const doubleRate = entry.conditionBreakdown?.doubleRate ?? entry.labourDeductions?.pakkaDoubleLabourRate ?? 14;
+        const sukkiBags = entry.conditionBreakdown?.sukkiBags ?? entry.labourDeductions?.sukkiBagsCount ?? 0;
+        const sukkiRate = entry.conditionBreakdown?.sukkiRate ?? entry.labourDeductions?.sukhiLabourRate ?? 5;
+        const pakkiRate = 8;
+
+        const recalc = calculateAutomaticLabour(
+          entry.newBags || 0,
+          entry.oldBags || 0,
+          doubleBags,
+          sukkiBags,
+          entry.totalAmount,
+          undefined,
+          { pakkiRate, doubleRate, sukkiRate },
+          totalBags,
+          { totalBagsOverride: totalBags }
+        );
+
+        return {
+          ...entry,
+          labourDeductions: recalc.labourDeductions,
+          conditionBreakdown: recalc.conditionBreakdown,
+          netAmount: recalc.netAmount
+        };
+      }
+      return entry;
+    });
+
+    if (needsSave) {
+      saveFirmData(LOCAL_STORAGE_KEYS.BAGS_ENTRIES, activeFirmId, repaired);
+    }
+    return repaired;
+  });
+
+  // 4. Bardana Received Records - strictly isolated per active firm
   const [bardanaRecords, setBardanaRecords] = useState<BardanaReceivedRecord[]>(() => {
-    try {
-      const stored = localStorage.getItem(LOCAL_STORAGE_KEYS.BARDANA);
-      return stored ? JSON.parse(stored) : [];
-    } catch {
-      return [];
-    }
+    const list = loadFirmData<BardanaReceivedRecord[]>(LOCAL_STORAGE_KEYS.BARDANA, activeFirmId, []);
+    return Array.isArray(list) ? list : [];
   });
 
-  // 4. Daily Purchase Records - starts EMPTY by default
+  // 5. Daily Purchase Records - strictly isolated per active firm
   const [dailyPurchaseRecords, setDailyPurchaseRecords] = useState<DailyPurchaseRecord[]>(() => {
-    try {
-      const stored = localStorage.getItem(LOCAL_STORAGE_KEYS.DAILY_PURCHASES);
-      return stored ? JSON.parse(stored) : [];
-    } catch {
-      return [];
-    }
+    const list = loadFirmData<DailyPurchaseRecord[]>(LOCAL_STORAGE_KEYS.DAILY_PURCHASES, activeFirmId, []);
+    return Array.isArray(list) ? list : [];
   });
 
-  // 4b. Farmer Payment Records - starts EMPTY by default
+  // 6. Farmer Payment Records - strictly isolated per active firm
   const [farmerPayments, setFarmerPayments] = useState<FarmerPaymentRecord[]>(() => {
-    try {
-      const stored = localStorage.getItem(LOCAL_STORAGE_KEYS.FARMER_PAYMENTS);
-      return stored ? JSON.parse(stored) : [];
-    } catch {
-      return [];
-    }
+    const list = loadFirmData<FarmerPaymentRecord[]>(LOCAL_STORAGE_KEYS.FARMER_PAYMENTS, activeFirmId, []);
+    return Array.isArray(list) ? list : [];
   });
 
-  // 4c. Farmer Advance Records - starts EMPTY by default
+  // 7. Farmer Advance Records - strictly isolated per active firm
   const [farmerAdvances, setFarmerAdvances] = useState<FarmerAdvanceRecord[]>(() => {
-    try {
-      const stored = localStorage.getItem(LOCAL_STORAGE_KEYS.ADVANCES);
-      return stored ? JSON.parse(stored) : [];
-    } catch {
-      return [];
-    }
+    const list = loadFirmData<FarmerAdvanceRecord[]>(LOCAL_STORAGE_KEYS.ADVANCES, activeFirmId, []);
+    return Array.isArray(list) ? list : [];
   });
 
-  // 4d. Boli Records - starts EMPTY by default
+  // 8. Boli Records - strictly isolated per active firm
   const [boliRecords, setBoliRecords] = useState<BoliRecord[]>(() => {
-    try {
-      const stored = localStorage.getItem(LOCAL_STORAGE_KEYS.BOLI_RECORDS);
-      return stored ? JSON.parse(stored) : [];
-    } catch {
-      return [];
-    }
+    const list = loadFirmData<BoliRecord[]>(LOCAL_STORAGE_KEYS.BOLI_RECORDS, activeFirmId, []);
+    return Array.isArray(list) ? list : [];
   });
 
-  // 4d-2. Labour Mates / Palledar Gangs
+  // 9. Labour Mates - isolated per firm
   const [labourMates, setLabourMates] = useState<LabourMate[]>(() => {
-    try {
-      const stored = localStorage.getItem(LOCAL_STORAGE_KEYS.LABOUR_MATES);
-      return stored ? JSON.parse(stored) : DEFAULT_LABOUR_MATES;
-    } catch {
-      return DEFAULT_LABOUR_MATES;
-    }
+    const list = loadFirmData<LabourMate[]>(LOCAL_STORAGE_KEYS.LABOUR_MATES, activeFirmId, DEFAULT_LABOUR_MATES);
+    return Array.isArray(list) && list.length > 0 ? list : DEFAULT_LABOUR_MATES;
   });
 
-  // 4d-3. Labour Work Entries (Palledari/Loading/Cleaning tasks)
+  // 10. Labour Work Entries - strictly isolated per active firm
   const [labourWorkEntries, setLabourWorkEntries] = useState<LabourWorkEntry[]>(() => {
-    try {
-      const stored = localStorage.getItem(LOCAL_STORAGE_KEYS.LABOUR_WORK_ENTRIES);
-      return stored ? JSON.parse(stored) : [];
-    } catch {
-      return [];
-    }
+    const list = loadFirmData<LabourWorkEntry[]>(LOCAL_STORAGE_KEYS.LABOUR_WORK_ENTRIES, activeFirmId, []);
+    return Array.isArray(list) ? list : [];
   });
 
-  // 4d-4. Labour Advance / Kharcha Payments
+  // 11. Labour Advance / Kharcha Payments - strictly isolated per active firm
   const [labourAdvancePayments, setLabourAdvancePayments] = useState<LabourAdvancePayment[]>(() => {
-    try {
-      const stored = localStorage.getItem(LOCAL_STORAGE_KEYS.LABOUR_ADVANCE_PAYMENTS);
-      return stored ? JSON.parse(stored) : [];
-    } catch {
-      return [];
-    }
+    const list = loadFirmData<LabourAdvancePayment[]>(LOCAL_STORAGE_KEYS.LABOUR_ADVANCE_PAYMENTS, activeFirmId, []);
+    return Array.isArray(list) ? list : [];
   });
 
-  // 4e. Lefting (Sheller Dispatch) Records - starts EMPTY by default
+  // 12. Lefting (Sheller Dispatch) Records - strictly isolated per active firm
   const [leftingRecords, setLeftingRecords] = useState<LeftingRecord[]>(() => {
-    try {
-      const stored = localStorage.getItem(LOCAL_STORAGE_KEYS.LEFTING);
-      return stored ? JSON.parse(stored) : [];
-    } catch {
-      return [];
-    }
+    const list = loadFirmData<LeftingRecord[]>(LOCAL_STORAGE_KEYS.LEFTING, activeFirmId, []);
+    return Array.isArray(list) ? list : [];
   });
 
-  // 4f. Recycle Bin Items - starts EMPTY by default
+  // 13. Recycle Bin Items - strictly isolated per active firm
   const [recycleBinItems, setRecycleBinItems] = useState<RecycleBinItem[]>(() => {
-    try {
-      const stored = localStorage.getItem(LOCAL_STORAGE_KEYS.RECYCLE_BIN);
-      return stored ? JSON.parse(stored) : [];
-    } catch {
-      return [];
-    }
+    const list = loadFirmData<RecycleBinItem[]>(LOCAL_STORAGE_KEYS.RECYCLE_BIN, activeFirmId, []);
+    return Array.isArray(list) ? list : [];
   });
 
-  // 5. Procurement Agencies list
+  // 14. Truck Master Directory - strictly isolated per active firm
+  const [trucks, setTrucks] = useState<TruckMasterRecord[]>(() => {
+    const list = loadFirmData<TruckMasterRecord[]>(LOCAL_STORAGE_KEYS.TRUCKS, activeFirmId, []);
+    return Array.isArray(list) ? list : [];
+  });
+
+  // 15. Shared Procurement Agencies list
   const [agencies, setAgencies] = useState<ProcurementAgency[]>(() => {
     try {
       const stored = localStorage.getItem(LOCAL_STORAGE_KEYS.AGENCIES);
@@ -631,7 +671,7 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   });
 
-  // 6. PIN Codes & Villages Mapping Database
+  // 16. PIN Codes & Villages Mapping Database
   const [pinCodes, setPinCodes] = useState<PinCodeVillageMapping[]>(() => {
     try {
       const stored = localStorage.getItem(LOCAL_STORAGE_KEYS.PIN_CODES);
@@ -661,7 +701,7 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   });
 
-  // 7. Mandi Settings
+  // 17. Mandi Settings
   const [settings, setSettings] = useState<MandiSettings>(() => {
     try {
       const stored = localStorage.getItem(LOCAL_STORAGE_KEYS.SETTINGS);
@@ -696,45 +736,7 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   });
 
-  // 8. Multi-Firm Management
-  const [firms, setFirms] = useState<MandiFirm[]>(() => {
-    try {
-      const stored = localStorage.getItem(LOCAL_STORAGE_KEYS.FIRMS);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.map((f: MandiFirm) => {
-            if (f.id === 'FIRM-001' || f.isDefault) {
-              return {
-                ...DEFAULT_FIRM,
-                ...f,
-                name: f.name || DEFAULT_FIRM.name,
-                address: f.address || DEFAULT_FIRM.address,
-                marketCommittee: f.marketCommittee || DEFAULT_FIRM.marketCommittee,
-                mobile: f.mobile || DEFAULT_FIRM.mobile,
-                licenceNo: f.licenceNo || DEFAULT_FIRM.licenceNo
-              };
-            }
-            return f;
-          });
-        }
-      }
-      return [DEFAULT_FIRM];
-    } catch {
-      return [DEFAULT_FIRM];
-    }
-  });
-
-  const [activeFirmId, setActiveFirmId] = useState<string>(() => {
-    try {
-      const stored = localStorage.getItem(LOCAL_STORAGE_KEYS.ACTIVE_FIRM_ID);
-      return stored || DEFAULT_FIRM.id;
-    } catch {
-      return DEFAULT_FIRM.id;
-    }
-  });
-
-  // 9. Multi-Fiscal-Year Management
+  // 18. Multi-Fiscal-Year Management
   const [fiscalYears, setFiscalYears] = useState<string[]>(() => {
     try {
       const stored = localStorage.getItem(LOCAL_STORAGE_KEYS.FISCAL_YEARS);
@@ -753,23 +755,13 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   });
 
-  // 10. Multi-Seller Master Management
+  // 19. Multi-Seller Master Management
   const [sellers, setSellers] = useState<SellerMaster[]>(() => {
     try {
       const stored = localStorage.getItem(LOCAL_STORAGE_KEYS.SELLERS);
       return stored ? JSON.parse(stored) : DEFAULT_SELLERS;
     } catch {
       return DEFAULT_SELLERS;
-    }
-  });
-
-  // 11. Truck Master Directory
-  const [trucks, setTrucks] = useState<TruckMasterRecord[]>(() => {
-    try {
-      const stored = localStorage.getItem(LOCAL_STORAGE_KEYS.TRUCKS);
-      return stored ? JSON.parse(stored) : [];
-    } catch {
-      return [];
     }
   });
 
@@ -933,46 +925,66 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   }, []);
 
-  // Sync to LocalStorage
+  // Sync to LocalStorage (strictly isolated per activeFirmId)
   useEffect(() => {
-    localStorage.setItem(LOCAL_STORAGE_KEYS.TRUCKS, JSON.stringify(trucks));
-  }, [trucks]);
+    if (activeFirmId) {
+      saveFirmData(LOCAL_STORAGE_KEYS.TRUCKS, activeFirmId, trucks);
+    }
+  }, [trucks, activeFirmId]);
 
   useEffect(() => {
-    localStorage.setItem(LOCAL_STORAGE_KEYS.FARMERS, JSON.stringify(farmers));
-  }, [farmers]);
+    if (activeFirmId) {
+      saveFirmData(LOCAL_STORAGE_KEYS.FARMERS, activeFirmId, farmers);
+    }
+  }, [farmers, activeFirmId]);
 
   useEffect(() => {
-    localStorage.setItem(LOCAL_STORAGE_KEYS.BAGS_ENTRIES, JSON.stringify(bagsEntries));
-  }, [bagsEntries]);
+    if (activeFirmId) {
+      saveFirmData(LOCAL_STORAGE_KEYS.BAGS_ENTRIES, activeFirmId, bagsEntries);
+    }
+  }, [bagsEntries, activeFirmId]);
 
   useEffect(() => {
-    localStorage.setItem(LOCAL_STORAGE_KEYS.BARDANA, JSON.stringify(bardanaRecords));
-  }, [bardanaRecords]);
+    if (activeFirmId) {
+      saveFirmData(LOCAL_STORAGE_KEYS.BARDANA, activeFirmId, bardanaRecords);
+    }
+  }, [bardanaRecords, activeFirmId]);
 
   useEffect(() => {
-    localStorage.setItem(LOCAL_STORAGE_KEYS.DAILY_PURCHASES, JSON.stringify(dailyPurchaseRecords));
-  }, [dailyPurchaseRecords]);
+    if (activeFirmId) {
+      saveFirmData(LOCAL_STORAGE_KEYS.DAILY_PURCHASES, activeFirmId, dailyPurchaseRecords);
+    }
+  }, [dailyPurchaseRecords, activeFirmId]);
 
   useEffect(() => {
-    localStorage.setItem(LOCAL_STORAGE_KEYS.FARMER_PAYMENTS, JSON.stringify(farmerPayments));
-  }, [farmerPayments]);
+    if (activeFirmId) {
+      saveFirmData(LOCAL_STORAGE_KEYS.FARMER_PAYMENTS, activeFirmId, farmerPayments);
+    }
+  }, [farmerPayments, activeFirmId]);
 
   useEffect(() => {
-    localStorage.setItem(LOCAL_STORAGE_KEYS.ADVANCES, JSON.stringify(farmerAdvances));
-  }, [farmerAdvances]);
+    if (activeFirmId) {
+      saveFirmData(LOCAL_STORAGE_KEYS.ADVANCES, activeFirmId, farmerAdvances);
+    }
+  }, [farmerAdvances, activeFirmId]);
 
   useEffect(() => {
-    localStorage.setItem(LOCAL_STORAGE_KEYS.BOLI_RECORDS, JSON.stringify(boliRecords));
-  }, [boliRecords]);
+    if (activeFirmId) {
+      saveFirmData(LOCAL_STORAGE_KEYS.BOLI_RECORDS, activeFirmId, boliRecords);
+    }
+  }, [boliRecords, activeFirmId]);
 
   useEffect(() => {
-    localStorage.setItem(LOCAL_STORAGE_KEYS.LEFTING, JSON.stringify(leftingRecords));
-  }, [leftingRecords]);
+    if (activeFirmId) {
+      saveFirmData(LOCAL_STORAGE_KEYS.LEFTING, activeFirmId, leftingRecords);
+    }
+  }, [leftingRecords, activeFirmId]);
 
   useEffect(() => {
-    localStorage.setItem(LOCAL_STORAGE_KEYS.RECYCLE_BIN, JSON.stringify(recycleBinItems));
-  }, [recycleBinItems]);
+    if (activeFirmId) {
+      saveFirmData(LOCAL_STORAGE_KEYS.RECYCLE_BIN, activeFirmId, recycleBinItems);
+    }
+  }, [recycleBinItems, activeFirmId]);
 
   useEffect(() => {
     localStorage.setItem(LOCAL_STORAGE_KEYS.AGENCIES, JSON.stringify(agencies));
@@ -1011,16 +1023,22 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, [sellers]);
 
   useEffect(() => {
-    localStorage.setItem(LOCAL_STORAGE_KEYS.LABOUR_MATES, JSON.stringify(labourMates));
-  }, [labourMates]);
+    if (activeFirmId) {
+      saveFirmData(LOCAL_STORAGE_KEYS.LABOUR_MATES, activeFirmId, labourMates);
+    }
+  }, [labourMates, activeFirmId]);
 
   useEffect(() => {
-    localStorage.setItem(LOCAL_STORAGE_KEYS.LABOUR_WORK_ENTRIES, JSON.stringify(labourWorkEntries));
-  }, [labourWorkEntries]);
+    if (activeFirmId) {
+      saveFirmData(LOCAL_STORAGE_KEYS.LABOUR_WORK_ENTRIES, activeFirmId, labourWorkEntries);
+    }
+  }, [labourWorkEntries, activeFirmId]);
 
   useEffect(() => {
-    localStorage.setItem(LOCAL_STORAGE_KEYS.LABOUR_ADVANCE_PAYMENTS, JSON.stringify(labourAdvancePayments));
-  }, [labourAdvancePayments]);
+    if (activeFirmId) {
+      saveFirmData(LOCAL_STORAGE_KEYS.LABOUR_ADVANCE_PAYMENTS, activeFirmId, labourAdvancePayments);
+    }
+  }, [labourAdvancePayments, activeFirmId]);
 
   // Keep settings automatically in sync with activeFirm
   useEffect(() => {
@@ -2830,11 +2848,11 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const targetCrop = cropFilter !== undefined ? cropFilter : activeCrop;
     const shouldFilterCrop = targetCrop !== 'ALL';
 
-    const farmer = farmers.find((f) => f.id === farmerId);
-    const linkedSubFarmers = farmers.filter((f) => f.linkedMainFarmerId === farmerId);
+    const farmer = farmers.find((f) => f && f.id === farmerId);
+    const linkedSubFarmers = farmers.filter((f) => f && f.linkedMainFarmerId === farmerId);
     const isMainFarmer = linkedSubFarmers.length > 0;
     const linkedToMainFarmer = farmer?.linkedMainFarmerId
-      ? farmers.find((f) => f.id === farmer.linkedMainFarmerId)
+      ? farmers.find((f) => f && f.id === farmer.linkedMainFarmerId)
       : undefined;
     const isLinkedFarmer = !!linkedToMainFarmer;
 
@@ -2889,7 +2907,21 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         amount: val.amount
       }));
 
+      const farmerObj: Farmer = farmer || {
+        id: farmerId,
+        farmerName: '',
+        farmerNamePa: '',
+        fatherName: '',
+        fatherNamePa: '',
+        village: '',
+        villagePa: '',
+        pinCode: '141401',
+        mobile: '',
+        aadhaar: ''
+      };
+
       return {
+        farmer: farmerObj,
         farmerId,
         farmerName: farmer?.farmerName || '',
         farmerNamePa: farmer?.farmerNamePa || '',
@@ -2982,7 +3014,21 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       amount: val.amount
     }));
 
+    const farmerObj: Farmer = farmer || {
+      id: farmerId,
+      farmerName: '',
+      farmerNamePa: '',
+      fatherName: '',
+      fatherNamePa: '',
+      village: '',
+      villagePa: '',
+      pinCode: '141401',
+      mobile: '',
+      aadhaar: ''
+    };
+
     return {
+      farmer: farmerObj,
       farmerId,
       farmerName: farmer?.farmerName || '',
       farmerNamePa: farmer?.farmerNamePa || '',
@@ -3013,7 +3059,7 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
    * Get purchase summary for all registered farmers
    */
   const getAllFarmersPurchaseSummaries = (cropFilter?: CropFilterType): FarmerPurchaseSummary[] => {
-    return farmers.map((f) => getFarmerPurchaseSummary(f.id, cropFilter));
+    return farmers.filter((f) => f && f.id).map((f) => getFarmerPurchaseSummary(f.id, cropFilter));
   };
 
   /**
@@ -3621,8 +3667,89 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   /**
-   * Firm Management Methods
+   * Firm Management Methods with 100% Strict Data Isolation
    */
+  const setActiveFirmId = (newFirmId: string) => {
+    if (newFirmId === activeFirmIdRef.current) return;
+    const oldFirmId = activeFirmIdRef.current;
+
+    // 1. Immediately flush & save current active firm's data
+    saveFirmData(LOCAL_STORAGE_KEYS.FARMERS, oldFirmId, farmers);
+    saveFirmData(LOCAL_STORAGE_KEYS.BAGS_ENTRIES, oldFirmId, bagsEntries);
+    saveFirmData(LOCAL_STORAGE_KEYS.BARDANA, oldFirmId, bardanaRecords);
+    saveFirmData(LOCAL_STORAGE_KEYS.DAILY_PURCHASES, oldFirmId, dailyPurchaseRecords);
+    saveFirmData(LOCAL_STORAGE_KEYS.FARMER_PAYMENTS, oldFirmId, farmerPayments);
+    saveFirmData(LOCAL_STORAGE_KEYS.ADVANCES, oldFirmId, farmerAdvances);
+    saveFirmData(LOCAL_STORAGE_KEYS.BOLI_RECORDS, oldFirmId, boliRecords);
+    saveFirmData(LOCAL_STORAGE_KEYS.LEFTING, oldFirmId, leftingRecords);
+    saveFirmData(LOCAL_STORAGE_KEYS.RECYCLE_BIN, oldFirmId, recycleBinItems);
+    saveFirmData(LOCAL_STORAGE_KEYS.LABOUR_MATES, oldFirmId, labourMates);
+    saveFirmData(LOCAL_STORAGE_KEYS.LABOUR_WORK_ENTRIES, oldFirmId, labourWorkEntries);
+    saveFirmData(LOCAL_STORAGE_KEYS.LABOUR_ADVANCE_PAYMENTS, oldFirmId, labourAdvancePayments);
+    saveFirmData(LOCAL_STORAGE_KEYS.TRUCKS, oldFirmId, trucks);
+
+    // 2. Load target firm's isolated data
+    const newFarmers = loadFirmData<Farmer[]>(LOCAL_STORAGE_KEYS.FARMERS, newFirmId, []);
+    const newBags = loadFirmData<BagsEntryRecord[]>(LOCAL_STORAGE_KEYS.BAGS_ENTRIES, newFirmId, []);
+    const newBardana = loadFirmData<BardanaReceivedRecord[]>(LOCAL_STORAGE_KEYS.BARDANA, newFirmId, []);
+    const newPurchases = loadFirmData<DailyPurchaseRecord[]>(LOCAL_STORAGE_KEYS.DAILY_PURCHASES, newFirmId, []);
+    const newPayments = loadFirmData<FarmerPaymentRecord[]>(LOCAL_STORAGE_KEYS.FARMER_PAYMENTS, newFirmId, []);
+    const newAdvances = loadFirmData<FarmerAdvanceRecord[]>(LOCAL_STORAGE_KEYS.ADVANCES, newFirmId, []);
+    const newBolis = loadFirmData<BoliRecord[]>(LOCAL_STORAGE_KEYS.BOLI_RECORDS, newFirmId, []);
+    const newLefting = loadFirmData<LeftingRecord[]>(LOCAL_STORAGE_KEYS.LEFTING, newFirmId, []);
+    const newBin = loadFirmData<RecycleBinItem[]>(LOCAL_STORAGE_KEYS.RECYCLE_BIN, newFirmId, []);
+    const newMates = loadFirmData<LabourMate[]>(LOCAL_STORAGE_KEYS.LABOUR_MATES, newFirmId, DEFAULT_LABOUR_MATES);
+    const newWork = loadFirmData<LabourWorkEntry[]>(LOCAL_STORAGE_KEYS.LABOUR_WORK_ENTRIES, newFirmId, []);
+    const newLabourAdvances = loadFirmData<LabourAdvancePayment[]>(LOCAL_STORAGE_KEYS.LABOUR_ADVANCE_PAYMENTS, newFirmId, []);
+    const newTrucks = loadFirmData<TruckMasterRecord[]>(LOCAL_STORAGE_KEYS.TRUCKS, newFirmId, []);
+
+    // 3. Clear transient navigation/modal states
+    setActiveReceipt(null);
+    setActiveBagsEntryToEdit(null);
+    setSelectedFarmerForBags(null);
+    setSelectedFarmerForAccount(null);
+    setActivePurchaseRecord(null);
+
+    // 4. Update firm ID state & ref
+    activeFirmIdRef.current = newFirmId;
+    setActiveFirmIdState(newFirmId);
+    localStorage.setItem(LOCAL_STORAGE_KEYS.ACTIVE_FIRM_ID, newFirmId);
+
+    // 5. Update state arrays to target firm
+    setFarmers(Array.isArray(newFarmers) ? newFarmers.filter((f) => f && f.id) : []);
+    setBagsEntries(Array.isArray(newBags) ? newBags : []);
+    setBardanaRecords(Array.isArray(newBardana) ? newBardana : []);
+    setDailyPurchaseRecords(Array.isArray(newPurchases) ? newPurchases : []);
+    setFarmerPayments(Array.isArray(newPayments) ? newPayments : []);
+    setFarmerAdvances(Array.isArray(newAdvances) ? newAdvances : []);
+    setBoliRecords(Array.isArray(newBolis) ? newBolis : []);
+    setLeftingRecords(Array.isArray(newLefting) ? newLefting : []);
+    setRecycleBinItems(Array.isArray(newBin) ? newBin : []);
+    setLabourMates(Array.isArray(newMates) && newMates.length > 0 ? newMates : DEFAULT_LABOUR_MATES);
+    setLabourWorkEntries(Array.isArray(newWork) ? newWork : []);
+    setLabourAdvancePayments(Array.isArray(newLabourAdvances) ? newLabourAdvances : []);
+    setTrucks(Array.isArray(newTrucks) ? newTrucks : []);
+
+    // 6. Update settings header
+    const targetFirm = firms.find((f) => f.id === newFirmId) || DEFAULT_FIRM;
+    setSettings((prev) => ({
+      ...prev,
+      firmNameEn: targetFirm.name,
+      firmNamePa: targetFirm.namePa || targetFirm.name,
+      firmAddress: targetFirm.address,
+      firmMobile: targetFirm.mobile,
+      firmLicence: targetFirm.licenceNo,
+      firmPan: targetFirm.pan || prev.firmPan,
+      firmGstin: targetFirm.gstin || prev.firmGstin,
+      mandiNameEn: targetFirm.address.split(',')[0]?.trim() || prev.mandiNameEn,
+      mandiNamePa: targetFirm.addressPa?.split(',')[0]?.trim() || prev.mandiNamePa,
+      marketCommitteeEn: `Market Committee ${targetFirm.marketCommittee}`,
+      marketCommitteePa: `ਮਾਰਕੀਟ ਕਮੇਟੀ ${targetFirm.marketCommitteePa || targetFirm.marketCommittee}`
+    }));
+
+    supabaseSaveActiveFirmContext(newFirmId).catch(console.error);
+  };
+
   const addFirm = (firmData: Omit<MandiFirm, 'id'>): MandiFirm => {
     const id = `FIRM-${String(firms.length + 1).padStart(3, '0')}`;
     const newFirm: MandiFirm = {
@@ -3656,6 +3783,25 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const remaining = firms.filter((f) => f.id !== id);
     setFirms(remaining);
     supabaseDeleteFirm(id).catch(console.error);
+
+    // Completely wipe all data keys stored for this firm
+    const firmDataKeys = [
+      LOCAL_STORAGE_KEYS.FARMERS,
+      LOCAL_STORAGE_KEYS.BAGS_ENTRIES,
+      LOCAL_STORAGE_KEYS.BARDANA,
+      LOCAL_STORAGE_KEYS.DAILY_PURCHASES,
+      LOCAL_STORAGE_KEYS.FARMER_PAYMENTS,
+      LOCAL_STORAGE_KEYS.ADVANCES,
+      LOCAL_STORAGE_KEYS.BOLI_RECORDS,
+      LOCAL_STORAGE_KEYS.LEFTING,
+      LOCAL_STORAGE_KEYS.RECYCLE_BIN,
+      LOCAL_STORAGE_KEYS.LABOUR_MATES,
+      LOCAL_STORAGE_KEYS.LABOUR_WORK_ENTRIES,
+      LOCAL_STORAGE_KEYS.LABOUR_ADVANCE_PAYMENTS,
+      LOCAL_STORAGE_KEYS.TRUCKS
+    ];
+    firmDataKeys.forEach((key) => localStorage.removeItem(getFirmStorageKey(key, id)));
+
     if (activeFirmId === id) {
       setActiveFirmId(remaining[0].id);
       supabaseSaveActiveFirmContext(remaining[0].id).catch(console.error);

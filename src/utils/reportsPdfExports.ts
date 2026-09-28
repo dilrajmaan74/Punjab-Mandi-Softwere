@@ -226,11 +226,17 @@ export async function exportFarmerAccountSummaryListPDF(
 
   const fontName = (doc as any).__gurmukhiFontRegistered ? 'NotoSansGurmukhi' : 'helvetica';
 
-  summaries.forEach((s, idx) => {
-    const f = s.farmer;
-    const bags = s.mandiArrivalBags || s.purchasedBags || 0;
-    const wtKg = s.mandiArrivalWeightKg || s.purchasedWeightKg || 0;
-    const cropAmt = s.netPayableAmount || s.totalGrossAmount || 0;
+  summaries.forEach((s: any, idx) => {
+    const f = s.farmer || {
+      id: s.farmerId || `FRM-${idx + 1}`,
+      farmerName: s.farmerName || 'Farmer',
+      farmerNamePa: s.farmerNamePa || '',
+      fatherName: s.fatherName || '',
+      village: s.village || ''
+    };
+    const bags = s.mandiArrivalBags || s.purchasedBags || s.alreadyPurchasedBags || s.totalArrivalBags || 0;
+    const wtKg = s.mandiArrivalWeightKg || s.purchasedWeightKg || s.alreadyPurchasedWeightKg || s.totalArrivalKg || 0;
+    const cropAmt = s.netPayableAmount || s.totalGrossAmount || s.grossAmount || 0;
     const advInt = s.totalAdvanceAmount || 0;
     const balance = s.finalBalance !== undefined ? s.finalBalance : cropAmt - advInt;
 
@@ -242,12 +248,17 @@ export async function exportFarmerAccountSummaryListPDF(
 
     const wtFormatted = formatKgToQulKg(wtKg);
 
+    const farmerDisplayName = f.farmerName || s.farmerName || 'Farmer';
+    const farmerPaName = f.farmerNamePa || s.farmerNamePa || '';
+    const fatherDisplayName = f.fatherName || s.fatherName || '-';
+    const villageDisplayName = f.village || s.village || '-';
+
     const values: DataRowCell[] = [
       { text: `${idx + 1}`, align: 'center', w: 12 },
-      { text: f.id, align: 'center', w: 22 },
-      { text: `${cleanPdfText(f.farmerName)} ${f.farmerNamePa ? `(${cleanPdfText(f.farmerNamePa)})` : ''}`, align: 'left', w: 45 },
-      { text: cleanPdfText(f.fatherName || '-'), align: 'left', w: 40 },
-      { text: cleanPdfText(f.village), align: 'left', w: 34 },
+      { text: f.id || s.farmerId || '-', align: 'center', w: 22 },
+      { text: `${cleanPdfText(farmerDisplayName)} ${farmerPaName ? `(${cleanPdfText(farmerPaName)})` : ''}`, align: 'left', w: 45 },
+      { text: cleanPdfText(fatherDisplayName), align: 'left', w: 40 },
+      { text: cleanPdfText(villageDisplayName), align: 'left', w: 34 },
       { text: `${bags}`, align: 'right', w: 20 },
       { text: `${wtFormatted.qtl} Q ${wtFormatted.kg} K`, align: 'right', w: 30 },
       { text: Math.round(cropAmt).toLocaleString('en-IN'), align: 'right', w: 26 },
@@ -313,7 +324,7 @@ export async function exportFarmerAccountFullDetailsSingleOrAllPDF(
   selectedFarmerId?: string
 ) {
   const targetSummaries = selectedFarmerId && selectedFarmerId !== 'ALL'
-    ? summaries.filter((s) => s.farmer.id === selectedFarmerId)
+    ? summaries.filter((s) => (s?.farmer?.id || (s as any)?.farmerId) === selectedFarmerId)
     : summaries;
 
   if (targetSummaries.length === 1) {

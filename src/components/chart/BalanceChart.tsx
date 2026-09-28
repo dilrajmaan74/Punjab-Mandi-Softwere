@@ -12,7 +12,17 @@ import {
   ArrowRight,
   Calculator,
   FileSpreadsheet,
-  Minus
+  Minus,
+  ChevronDown,
+  ChevronUp,
+  Truck,
+  Package,
+  CheckCircle2,
+  AlertCircle,
+  Sparkles,
+  Layers,
+  Eye,
+  BarChart3
 } from 'lucide-react';
 import { formatKgToQulKg, FIXED_BAG_WEIGHT_KG } from '../../utils/calculations';
 import { normalizeDateToComparable } from '../../utils/purchasePdfExport';
@@ -63,6 +73,45 @@ export const BalanceChart: React.FC = () => {
     sellers,
     settings
   } = useMandi();
+
+  // 1. View Mode: 'SIMPLE' (default) vs 'DETAILED' (Idea #1)
+  const [viewMode, setViewMode] = useState<'SIMPLE' | 'DETAILED'>('SIMPLE');
+
+  // 2. Accordion Expanded Categories for Detailed View (Idea #3)
+  const [expandedCategories, setExpandedCategories] = useState<{ [key in CategoryType]?: boolean }>({
+    TOLA: true,
+    PURCHASE: true,
+    BARDANA: false,
+    LEFTING: false
+  });
+
+  const toggleCategory = (cat: CategoryType) => {
+    setExpandedCategories((prev) => ({
+      ...prev,
+      [cat]: !prev[cat]
+    }));
+  };
+
+  const handleExpandAllCategories = () => {
+    setExpandedCategories({
+      TOLA: true,
+      PURCHASE: true,
+      BARDANA: true,
+      LEFTING: true
+    });
+  };
+
+  const handleCollapseAllCategories = () => {
+    setExpandedCategories({
+      TOLA: false,
+      PURCHASE: false,
+      BARDANA: false,
+      LEFTING: false
+    });
+  };
+
+  // 3. Collapsible Custom Pair Comparison Calculator (Idea #5)
+  const [showCustomCalc, setShowCustomCalc] = useState(false);
 
   // Filter States
   const [datePreset, setDatePreset] = useState<DatePreset>('ALL');
@@ -281,6 +330,55 @@ export const BalanceChart: React.FC = () => {
       );
     }, 0);
   }, [filteredLeftingRecords]);
+
+  // Derived Key Mandi Figures (Idea #2: One-Glance Pipeline)
+  const groundStockPendingLiftingBags = totalPurchaseBags - totalLeftingBags;
+  const unsoldStockBags = totalTolaBags - totalPurchaseBags;
+  const remainingBardanaBags = totalBardanaBags - totalTolaBags;
+  const overallLiftingPercent = totalPurchaseBags > 0
+    ? Math.min(100, Math.round((totalLeftingBags / totalPurchaseBags) * 100))
+    : (totalLeftingBags > 0 ? 100 : 0);
+
+  // Agency-wise Lifting Progress Data (Idea #4)
+  const agencyProgressList = useMemo(() => {
+    const agencyMap: { [agency: string]: { purchased: number; purchasedKg: number; lifted: number; liftedKg: number } } = {};
+
+    filteredPurchaseRecords.forEach((p) => {
+      const ag = p.agency || 'Other';
+      if (!agencyMap[ag]) {
+        agencyMap[ag] = { purchased: 0, purchasedKg: 0, lifted: 0, liftedKg: 0 };
+      }
+      agencyMap[ag].purchased += Number(p.bags) || 0;
+      agencyMap[ag].purchasedKg += Number(p.totalWeightKg) || 0;
+    });
+
+    filteredLeftingRecords.forEach((l) => {
+      const ag = l.agency || l.sellerOrAgency || 'Other';
+      if (!agencyMap[ag]) {
+        agencyMap[ag] = { purchased: 0, purchasedKg: 0, lifted: 0, liftedKg: 0 };
+      }
+      agencyMap[ag].lifted += Number(l.bags) || 0;
+      agencyMap[ag].liftedKg += Number(l.totalWeightKg) || 0;
+    });
+
+    return Object.entries(agencyMap)
+      .map(([agency, data]) => {
+        const pending = data.purchased - data.lifted;
+        const percent = data.purchased > 0
+          ? Math.min(100, Math.round((data.lifted / data.purchased) * 100))
+          : (data.lifted > 0 ? 100 : 0);
+        return {
+          agency,
+          purchased: data.purchased,
+          purchasedKg: data.purchasedKg,
+          lifted: data.lifted,
+          liftedKg: data.liftedKg,
+          pending,
+          percent
+        };
+      })
+      .sort((a, b) => b.purchased - a.purchased);
+  }, [filteredPurchaseRecords, filteredLeftingRecords]);
 
   // Helper to get category quantities
   const getCategoryQty = (cat: CategoryType) => {
@@ -649,7 +747,7 @@ export const BalanceChart: React.FC = () => {
 
   return (
     <div className="space-y-6 pb-12 print:p-0 print:space-y-4">
-      {/* 1. Master Header */}
+      {/* 1. Master Header with View Mode Switch (Idea #1) */}
       <div className="bg-white p-5 rounded-2xl border border-slate-300 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-4 print:hidden">
         <div className="flex items-center gap-3.5">
           <div className="p-3 bg-slate-900 text-white rounded-xl shadow-xs">
@@ -660,27 +758,56 @@ export const BalanceChart: React.FC = () => {
               <span>ਸਟਾਕ ਬੈਲੇਂਸ ਚਾਰਟ / STOCK BALANCE LEDGER</span>
             </h1>
             <p className="text-xs text-slate-600 font-medium">
-              ਹਰੇਕ ਸ਼੍ਰੇਣੀ ਦਾ ਵੱਖਰਾ ਬੈਲੇਂਸ ਖਾਤਾ (Separate Balance for Every Stock Category) • TOTAL → USED → BALANCE
+              ਮੰਡੀ ਆਮਦ, ਖਰੀਦ, ਲਿਫਟਿੰਗ ਅਤੇ ਫੜ੍ਹ 'ਤੇ ਬਾਕੀ ਬੋਰੀਆਂ ਦਾ ਲੇਖਾ-ਜੋਖਾ
             </p>
           </div>
         </div>
 
+        {/* View Mode Toggle (Idea #1) & Print/Export Buttons */}
         <div className="flex items-center gap-2.5 flex-wrap">
+          {/* View Mode Selector */}
+          <div className="inline-flex p-1 bg-slate-100 rounded-xl border border-slate-200">
+            <button
+              type="button"
+              onClick={() => setViewMode('SIMPLE')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer ${
+                viewMode === 'SIMPLE'
+                  ? 'bg-emerald-700 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>ਸਧਾਰਨ ਵਿਊ (Simple)</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('DETAILED')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer ${
+                viewMode === 'DETAILED'
+                  ? 'bg-slate-900 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Layers className="w-3.5 h-3.5" />
+              <span>ਵਿਸਤ੍ਰਿਤ ਖਾਤਾ (Detailed)</span>
+            </button>
+          </div>
+
           <button
             onClick={handleExportPDF}
-            className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition shadow-2xs"
+            className="px-3 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition shadow-2xs cursor-pointer"
             title="Download Official A4 PDF"
           >
-            <Download className="w-4 h-4" />
-            <span>PDF ਡਾਊਨਲੋਡ (Export PDF)</span>
+            <Download className="w-3.5 h-3.5" />
+            <span>PDF ਡਾਊਨਲੋਡ</span>
           </button>
           <button
             onClick={() => window.print()}
-            className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 rounded-xl text-xs font-bold flex items-center gap-1.5 transition"
+            className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
             title="Print A4 Office Ledger"
           >
-            <Printer className="w-4 h-4" />
-            <span>ਪ੍ਰਿੰਟ ਕਰੋ (Print A4)</span>
+            <Printer className="w-3.5 h-3.5" />
+            <span>ਪ੍ਰਿੰਟ ਕਰੋ</span>
           </button>
         </div>
       </div>
@@ -823,294 +950,515 @@ export const BalanceChart: React.FC = () => {
         </div>
       </div>
 
-      {/* 4. MASTER STOCK TOTALS STRIP (Clean Office Accounting Row) */}
-      <div className="bg-slate-100 p-4 rounded-2xl border-2 border-slate-400">
-        <div className="text-[11px] font-black uppercase text-slate-700 tracking-wider mb-2.5">
-          ਮੁੱਖ ਸਟਾਕ ਕੁੱਲ ਜੋੜ (Master Stock Totals Summary)
+      {/* 4. ONE-GLANCE STOCK PIPELINE CARDS (Idea #2: ਫੜ੍ਹ ਦਾ ਸਟਾਕ ਤੇ ਮੁੱਖ ਅੰਕੜੇ) */}
+      <div className="bg-linear-to-r from-slate-900 via-slate-800 to-emerald-950 p-5 rounded-2xl border border-slate-700 text-white shadow-md">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-700/80 gap-2">
+          <div className="flex items-center gap-2">
+            <BarChart3 className="w-4 h-4 text-emerald-400" />
+            <h2 className="text-xs font-black uppercase tracking-wider text-emerald-400">
+              ਮੁੱਖ ਸਟਾਕ ਪਾਈਪਲਾਈਨ (One-Glance Mandi Stock Pipeline)
+            </h2>
+          </div>
+          <span className="text-xs text-slate-300">
+            ਲਿਫਟਿੰਗ ਪ੍ਰਗਤੀ: <strong className="text-emerald-400 font-mono">{overallLiftingPercent}%</strong> ਮੁਕੰਮਲ
+          </span>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {/* Tola Total */}
-          <div className="bg-white p-3 rounded-xl border border-slate-300">
-            <div className="text-[11px] font-bold text-slate-600">1. ਕੁੱਲ ਤੋਲ (Tola)</div>
-            <div className="text-xl font-black font-mono text-slate-900 mt-0.5">
-              {totalTolaBags.toLocaleString('en-IN')} <span className="text-xs font-sans">Bags</span>
+
+        {/* 4 Horizontal Flow Cards */}
+        <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+          {/* Card 1: Tola / Arrival */}
+          <div className="bg-slate-800/90 p-4 rounded-xl border border-slate-700 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">1. ਕੁੱਲ ਆਮਦ (ਤੋਲ)</span>
+                <Package className="w-4 h-4 text-slate-400" />
+              </div>
+              <div className="text-2xl font-black font-mono text-white mt-1">
+                {totalTolaBags.toLocaleString('en-IN')} <span className="text-xs font-sans text-slate-300">ਬੋਰੀਆਂ</span>
+              </div>
             </div>
-            <div className="text-[11px] font-mono text-slate-600 font-semibold">
-              {(totalTolaWeightKg / 100).toFixed(2)} Qtl
+            <div className="mt-2 pt-2 border-t border-slate-700 text-[11px] text-slate-400 flex items-center justify-between">
+              <span>ਵਜ਼ਨ:</span>
+              <strong className="text-slate-200 font-mono">{(totalTolaWeightKg / 100).toFixed(2)} Qtl</strong>
             </div>
           </div>
 
-          {/* Purchase Total */}
-          <div className="bg-white p-3 rounded-xl border border-slate-300">
-            <div className="text-[11px] font-bold text-slate-600">2. ਏਜੰਸੀ ਖਰੀਦ (Purchase)</div>
-            <div className="text-xl font-black font-mono text-slate-900 mt-0.5">
-              {totalPurchaseBags.toLocaleString('en-IN')} <span className="text-xs font-sans">Bags</span>
+          {/* Card 2: Purchase */}
+          <div className="bg-slate-800/90 p-4 rounded-xl border border-slate-700 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-blue-400 uppercase tracking-wide">2. ਏਜੰਸੀ ਖਰੀਦ</span>
+                <Building className="w-4 h-4 text-blue-400" />
+              </div>
+              <div className="text-2xl font-black font-mono text-blue-200 mt-1">
+                {totalPurchaseBags.toLocaleString('en-IN')} <span className="text-xs font-sans text-blue-300">ਬੋਰੀਆਂ</span>
+              </div>
             </div>
-            <div className="text-[11px] font-mono text-slate-600 font-semibold">
-              {(totalPurchaseWeightKg / 100).toFixed(2)} Qtl
-            </div>
-          </div>
-
-          {/* Bardana Total */}
-          <div className="bg-white p-3 rounded-xl border border-slate-300">
-            <div className="text-[11px] font-bold text-slate-600">3. ਬਾਰਦਾਨਾ (Bardana)</div>
-            <div className="text-xl font-black font-mono text-slate-900 mt-0.5">
-              {totalBardanaBags.toLocaleString('en-IN')} <span className="text-xs font-sans">Bags</span>
-            </div>
-            <div className="text-[11px] font-mono text-slate-500 font-medium">
-              ਗੱਟੇ ਪ੍ਰਾਪਤ (Received Bags)
+            <div className="mt-2 pt-2 border-t border-slate-700 text-[11px] text-slate-400 flex items-center justify-between">
+              <span>ਵਜ਼ਨ:</span>
+              <strong className="text-blue-300 font-mono">{(totalPurchaseWeightKg / 100).toFixed(2)} Qtl</strong>
             </div>
           </div>
 
-          {/* Lefting Total */}
-          <div className="bg-white p-3 rounded-xl border border-slate-300">
-            <div className="text-[11px] font-bold text-slate-600">4. ਸ਼ੈਲਰ ਰਵਾਨਗੀ (Lefting)</div>
-            <div className="text-xl font-black font-mono text-slate-900 mt-0.5">
-              {totalLeftingBags.toLocaleString('en-IN')} <span className="text-xs font-sans">Bags</span>
+          {/* Card 3: Lefting / Dispatched */}
+          <div className="bg-slate-800/90 p-4 rounded-xl border border-slate-700 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-purple-400 uppercase tracking-wide">3. ਸ਼ੈਲਰ ਰਵਾਨਗੀ (ਲਿਫਟਿੰਗ)</span>
+                <Truck className="w-4 h-4 text-purple-400" />
+              </div>
+              <div className="text-2xl font-black font-mono text-purple-200 mt-1">
+                {totalLeftingBags.toLocaleString('en-IN')} <span className="text-xs font-sans text-purple-300">ਬੋਰੀਆਂ</span>
+              </div>
             </div>
-            <div className="text-[11px] font-mono text-slate-600 font-semibold">
-              {(totalLeftingWeightKg / 100).toFixed(2)} Qtl
+            <div className="mt-2 pt-2 border-t border-slate-700 text-[11px] text-slate-400 flex items-center justify-between">
+              <span>ਵਜ਼ਨ:</span>
+              <strong className="text-purple-300 font-mono">{(totalLeftingWeightKg / 100).toFixed(2)} Qtl</strong>
             </div>
+          </div>
+
+          {/* Card 4: HIGHLIGHTED GROUND STOCK (Purchase - Lefting) */}
+          <div className="bg-amber-950/90 p-4 rounded-xl border-2 border-amber-400 shadow-md flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-black text-amber-300 uppercase tracking-wide flex items-center gap-1">
+                  <AlertCircle className="w-3.5 h-3.5 text-amber-400" />
+                  <span>4. ਫੜ੍ਹ 'ਤੇ ਬਾਕੀ ਬੋਰੀਆਂ</span>
+                </span>
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-black bg-amber-400 text-amber-950">
+                  ਬਾਕੀ ਲਿਫਟਿੰਗ
+                </span>
+              </div>
+              <div className="text-2xl font-black font-mono text-amber-100 mt-1">
+                {groundStockPendingLiftingBags.toLocaleString('en-IN')} <span className="text-xs font-sans text-amber-200">ਬੋਰੀਆਂ</span>
+              </div>
+            </div>
+            <div className="mt-2 pt-2 border-t border-amber-800 text-[11px] text-amber-300 flex items-center justify-between">
+              <span>ਫਾਰਮੂਲਾ:</span>
+              <span className="font-mono text-amber-200">ਖਰੀਦ ({totalPurchaseBags}) − ਲਿਫਟਿੰਗ ({totalLeftingBags})</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Supplementary Quick Indicators Strip */}
+        <div className="mt-3.5 pt-3 border-t border-slate-700/80 grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+          <div className="bg-slate-800/60 px-3 py-2 rounded-lg flex items-center justify-between">
+            <span className="text-slate-400">ਅਣਵਿਕਿਆ ਝੋਨਾ (Unsold):</span>
+            <strong className={`font-mono ${unsoldStockBags > 0 ? 'text-amber-400' : 'text-slate-300'}`}>
+              {unsoldStockBags.toLocaleString('en-IN')} ਬੋਰੀਆਂ (ਆਮਦ − ਖਰੀਦ)
+            </strong>
+          </div>
+          <div className="bg-slate-800/60 px-3 py-2 rounded-lg flex items-center justify-between">
+            <span className="text-slate-400">ਬਾਰਦਾਨਾ ਬਾਕੀ (Unused Bags):</span>
+            <strong className={`font-mono ${remainingBardanaBags >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+              {remainingBardanaBags >= 0 ? '+' : ''}{remainingBardanaBags.toLocaleString('en-IN')} ਗੱਟੇ
+            </strong>
+          </div>
+          <div className="bg-slate-800/60 px-3 py-2 rounded-lg flex items-center justify-between">
+            <span className="text-slate-400">ਕੁੱਲ ਬਾਰਦਾਨਾ ਪ੍ਰਾਪਤ:</span>
+            <strong className="text-slate-200 font-mono">
+              {totalBardanaBags.toLocaleString('en-IN')} ਗੱਟੇ
+            </strong>
           </div>
         </div>
       </div>
 
-      {/* 5. SEPARATE STOCK CATEGORY LEDGERS (Exact Handwritten Note Behavior) */}
-      <div className="space-y-6">
-        {categorySections.map((sec, idx) => {
-          return (
-            <div
-              key={sec.categoryId}
-              className="bg-white rounded-2xl border-2 border-slate-300 shadow-2xs overflow-hidden print:border-slate-800 print:break-inside-avoid"
-            >
-              {/* Category Header Ribbon */}
-              <div className="bg-slate-900 text-white p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <div className="flex items-center gap-2.5">
-                  <span className="w-6 h-6 rounded-lg bg-white/20 text-white font-mono font-black text-xs flex items-center justify-center">
-                    {idx + 1}
-                  </span>
-                  <div>
-                    <h2 className="text-sm font-black tracking-wide">
-                      {sec.categoryTitlePa} ({sec.categoryTitleEn})
-                    </h2>
-                    <div className="text-[11px] text-slate-300 font-medium">
-                      ਸਰੋਤ ਕੁੱਲ ਸਟਾਕ (Source Total): <strong className="text-white font-mono">{sec.totalStockBags.toLocaleString('en-IN')} Bags</strong>
-                      {sec.totalStockWeightKg ? ` • ${(sec.totalStockWeightKg / 100).toFixed(2)} Qtl` : ''}
+      {/* 5. AGENCY-WISE LIFTING PROGRESS CARDS (Idea #4: ਏਜੰਸੀ-ਵਾਰ ਪ੍ਰੋਗਰੈਸ ਬਾਰ) */}
+      <div className="bg-white p-5 rounded-2xl border border-slate-300 shadow-2xs space-y-3.5 print:break-inside-avoid">
+        <div className="flex items-center justify-between border-b border-slate-200 pb-2.5">
+          <div className="flex items-center gap-2">
+            <Truck className="w-4 h-4 text-emerald-700" />
+            <h3 className="text-xs font-black text-slate-900 uppercase tracking-wide">
+              ਏਜੰਸੀ-ਵਾਰ ਲਿਫਟਿੰਗ ਪ੍ਰੋਗਰੈਸ (Agency-wise Lifting Status)
+            </h3>
+          </div>
+          <span className="text-[11px] text-slate-500 font-medium">
+            ਹਰੇਕ ਏਜੰਸੀ ਦੀ ਖਰੀਦ, ਲਿਫਟਿੰਗ ਅਤੇ ਫੜ੍ਹ 'ਤੇ ਬਾਕੀ ਬੋਰੀਆਂ
+          </span>
+        </div>
+
+        {agencyProgressList.length === 0 ? (
+          <p className="text-xs text-slate-400 italic py-2">
+            ਚੁਣੇ ਹੋਏ ਫਿਲਟਰ ਅਨੁਸਾਰ ਕੋਈ ਏਜੰਸੀ ਰਿਕਾਰਡ ਨਹੀਂ ਮਿਲਿਆ।
+          </p>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+            {agencyProgressList.map((item) => {
+              const isCompleted = item.percent >= 100 && item.pending <= 0;
+              const isNotStarted = item.lifted === 0 && item.purchased > 0;
+
+              return (
+                <div
+                  key={item.agency}
+                  className={`p-4 rounded-xl border transition-all ${
+                    isCompleted
+                      ? 'bg-emerald-50/50 border-emerald-300'
+                      : item.pending > 0
+                      ? 'bg-amber-50/30 border-amber-300'
+                      : 'bg-slate-50 border-slate-300'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-black text-sm text-slate-900">{item.agency}</span>
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                        isCompleted
+                          ? 'bg-emerald-100 text-emerald-800'
+                          : isNotStarted
+                          ? 'bg-rose-100 text-rose-800'
+                          : 'bg-amber-100 text-amber-800'
+                      }`}
+                    >
+                      {isCompleted ? '✓ 100% ਮੁਕੰਮਲ' : `${item.percent}% ਲਿਫਟ`}
+                    </span>
+                  </div>
+
+                  {/* Progress Bar */}
+                  <div className="mt-2 w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+                    <div
+                      className={`h-2 rounded-full transition-all duration-500 ${
+                        isCompleted
+                          ? 'bg-emerald-600'
+                          : item.percent > 50
+                          ? 'bg-blue-600'
+                          : 'bg-amber-500'
+                      }`}
+                      style={{ width: `${Math.min(100, item.percent)}%` }}
+                    />
+                  </div>
+
+                  <div className="mt-2.5 grid grid-cols-3 gap-1 text-center text-xs">
+                    <div className="bg-white/80 p-1.5 rounded border border-slate-200">
+                      <span className="text-[10px] text-slate-500 block">ਖਰੀਦ</span>
+                      <strong className="font-mono text-slate-900 text-xs">{item.purchased.toLocaleString('en-IN')}</strong>
+                    </div>
+                    <div className="bg-white/80 p-1.5 rounded border border-slate-200">
+                      <span className="text-[10px] text-slate-500 block">ਲਿਫਟ</span>
+                      <strong className="font-mono text-emerald-800 text-xs">{item.lifted.toLocaleString('en-IN')}</strong>
+                    </div>
+                    <div className={`p-1.5 rounded border ${item.pending > 0 ? 'bg-amber-100 border-amber-300' : 'bg-white/80 border-slate-200'}`}>
+                      <span className="text-[10px] text-slate-600 block">ਬਾਕੀ</span>
+                      <strong className={`font-mono text-xs ${item.pending > 0 ? 'text-amber-900 font-black' : 'text-slate-700'}`}>
+                        {item.pending.toLocaleString('en-IN')}
+                      </strong>
                     </div>
                   </div>
                 </div>
-
-                {/* Final Individual Balance Badge */}
-                <div className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-xl text-right">
-                  <div className="text-[10px] uppercase tracking-wider text-slate-300 font-bold">
-                    {sec.finalBalanceLabelPa}
-                  </div>
-                  <div className="text-sm font-black font-mono">
-                    {sec.finalBalanceBags < 0 ? (
-                      <span className="text-rose-400 font-bold">{sec.finalBalanceBags.toLocaleString('en-IN')} Bags (ਘਾਟ)</span>
-                    ) : (
-                      <span className="text-emerald-400 font-bold">+{sec.finalBalanceBags.toLocaleString('en-IN')} Bags (ਬਾਕੀ)</span>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Table: Source | Total | Used/Deducted/Compared With | Formula | Balance */}
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead>
-                    <tr className="bg-slate-100 text-slate-800 font-black border-b border-slate-300">
-                      <th className="p-3 w-44">ਸਰੋਤ (Source / Type)</th>
-                      <th className="p-3 text-right w-36">ਕੁੱਲ ਸਟਾਕ (Total)</th>
-                      <th className="p-3 w-48">ਵਰਤੋਂ / ਕਟੌਤੀ (Used / Deducted / Compared)</th>
-                      <th className="p-3 text-center w-36">ਫਾਰਮੂਲਾ (Total − Used)</th>
-                      <th className="p-3 text-right w-44">ਬਾਕੀ ਬੈਲੈਂਸ (Balance)</th>
-                      <th className="p-3">ਮੰਡੀ ਸਥਿਤੀ / ਵੇਰਵਾ (Mandi Meaning)</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-200">
-                    {sec.rows.map((row, rIdx) => {
-                      const isNegative = row.balance < 0;
-                      const isZero = row.balance === 0;
-
-                      return (
-                        <tr
-                          key={row.id}
-                          className={`hover:bg-slate-50 transition-colors ${
-                            rIdx % 2 === 1 ? 'bg-slate-50/50' : 'bg-white'
-                          }`}
-                        >
-                          {/* Source */}
-                          <td className="p-3 font-black text-slate-900">
-                            <div>{row.sourceTypePa}</div>
-                            <div className="text-[11px] text-slate-500 font-normal">{row.sourceTypeEn}</div>
-                          </td>
-
-                          {/* Total */}
-                          <td className="p-3 text-right font-mono font-black text-slate-900">
-                            <div>{row.totalQty.toLocaleString('en-IN')} Bags</div>
-                            {row.totalWeightKg !== undefined && (
-                              <div className="text-[11px] text-slate-500 font-normal">
-                                {(row.totalWeightKg / 100).toFixed(2)} Qtl
-                              </div>
-                            )}
-                          </td>
-
-                          {/* Used / Deducted */}
-                          <td className="p-3">
-                            <div className="font-bold text-slate-800">{row.usedTypePa}</div>
-                            <div className="font-mono font-bold text-slate-700 text-xs">
-                              {row.usedQty.toLocaleString('en-IN')} Bags
-                              {row.usedWeightKg !== undefined ? ` (${(row.usedWeightKg / 100).toFixed(2)} Qtl)` : ''}
-                            </div>
-                          </td>
-
-                          {/* Formula */}
-                          <td className="p-3 text-center font-mono text-[11px] text-slate-600 font-semibold bg-slate-50/75">
-                            {row.totalQty.toLocaleString('en-IN')} − {row.usedQty.toLocaleString('en-IN')}
-                          </td>
-
-                          {/* Balance */}
-                          <td className="p-3 text-right">
-                            {isNegative ? (
-                              <div className="inline-block px-2.5 py-1 bg-rose-50 border border-rose-300 rounded-lg text-rose-800 font-mono font-black text-sm">
-                                {row.balance.toLocaleString('en-IN')} Bags
-                              </div>
-                            ) : isZero ? (
-                              <div className="inline-block px-2.5 py-1 bg-slate-100 border border-slate-300 rounded-lg text-slate-700 font-mono font-bold text-xs">
-                                0 Bags (ਬਰਾਬਰ)
-                              </div>
-                            ) : (
-                              <div className="inline-block px-2.5 py-1 bg-emerald-50 border border-emerald-300 rounded-lg text-emerald-900 font-mono font-black text-sm">
-                                +{row.balance.toLocaleString('en-IN')} Bags
-                              </div>
-                            )}
-
-                            {row.balanceWeightKg !== undefined && (
-                              <div className="text-[11px] font-mono text-slate-600 mt-0.5">
-                                {(row.balanceWeightKg / 100).toFixed(2)} Qtl
-                              </div>
-                            )}
-                          </td>
-
-                          {/* Description / Status */}
-                          <td className="p-3 text-slate-700">
-                            <div className="font-semibold text-slate-900">{row.statusDescPa}</div>
-                            <div className="text-[11px] text-slate-500">{row.statusDescEn}</div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          );
-        })}
+              );
+            })}
+          </div>
+        )}
       </div>
 
-      {/* 6. INTERACTIVE CUSTOM PAIR COMPARATOR (Directly reflects handwritten ledger freedom) */}
-      <div className="bg-white p-5 rounded-2xl border-2 border-slate-300 shadow-2xs space-y-4 print:hidden">
-        <div className="flex items-center justify-between border-b border-slate-200 pb-2.5">
-          <div className="flex items-center gap-2">
+      {/* 6. CONDITIONAL VIEW: SIMPLE VIEW NOTICE vs DETAILED ACCORDION LEDGERS (Idea #1 & #3) */}
+      {viewMode === 'SIMPLE' ? (
+        <div className="bg-emerald-50 border-2 border-emerald-300 rounded-2xl p-5 text-center space-y-3">
+          <div className="inline-flex p-2.5 rounded-full bg-emerald-100 text-emerald-800">
+            <CheckCircle2 className="w-6 h-6" />
+          </div>
+          <div>
+            <h3 className="text-sm font-black text-emerald-950">
+              ਤੁਸੀਂ ਸਧਾਰਨ ਵਿਊ (Simple Mode) ਵਿੱਚ ਦੇਖ ਰਹੇ ਹੋ
+            </h3>
+            <p className="text-xs text-emerald-800 mt-1 max-w-lg mx-auto">
+              ਉੱਪਰ ਦਿੱਤੇ ਕਾਰਡਾਂ ਵਿੱਚ ਆਮਦ, ਖਰੀਦ, ਲਿਫਟਿੰਗ, ਫੜ੍ਹ ਦਾ ਬਾਕੀ ਸਟਾਕ ਅਤੇ ਏਜੰਸੀਆਂ ਦੀ ਪ੍ਰਗਤੀ ਸਪੱਸ਼ਟ ਹੈ।
+              ਜੇਕਰ ਤੁਹਾਨੂੰ ਦਫ਼ਤਰੀ ਜਾਂਚ ਲਈ ਪੂਰੇ 12-ਕਾਲਮ ਲੇਜਰ ਟੇਬਲ ਚਾਹੀਦੇ ਹਨ ਤਾਂ ਹੇਠਾਂ ਦਿੱਤੇ ਬਟਨ 'ਤੇ ਕਲਿੱਕ ਕਰੋ:
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setViewMode('DETAILED')}
+            className="px-4 py-2 bg-slate-900 hover:bg-black text-white text-xs font-black rounded-xl shadow-xs inline-flex items-center gap-2 transition cursor-pointer"
+          >
+            <Layers className="w-4 h-4 text-emerald-400" />
+            <span>ਵਿਸਥਾਰਤ ਖਾਤਾ ਟੇਬਲ ਦੇਖੋ (Switch to Detailed Ledger)</span>
+          </button>
+        </div>
+      ) : (
+        /* DETAILED VIEW: COLLAPSIBLE CATEGORY ACCORDIONS (Idea #3) */
+        <div className="space-y-4">
+          <div className="flex items-center justify-between bg-slate-100 px-4 py-2.5 rounded-xl border border-slate-300">
+            <span className="text-xs font-black text-slate-800 uppercase tracking-wide">
+              ਵਿਸਥਾਰਤ ਸ਼੍ਰੇਣੀ ਖਾਤੇ (Category-wise Detailed Ledgers)
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleExpandAllCategories}
+                className="px-2.5 py-1 text-[11px] font-bold text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 rounded-lg cursor-pointer"
+              >
+                ਸਾਰੇ ਖੋਲ੍ਹੋ (Expand All)
+              </button>
+              <button
+                type="button"
+                onClick={handleCollapseAllCategories}
+                className="px-2.5 py-1 text-[11px] font-bold text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 rounded-lg cursor-pointer"
+              >
+                ਸਾਰੇ ਬੰਦ ਕਰੋ (Collapse All)
+              </button>
+            </div>
+          </div>
+
+          {categorySections.map((sec, idx) => {
+            const isExpanded = !!expandedCategories[sec.categoryId];
+
+            return (
+              <div
+                key={sec.categoryId}
+                className="bg-white rounded-2xl border-2 border-slate-300 shadow-2xs overflow-hidden print:border-slate-800 print:break-inside-avoid transition-all"
+              >
+                {/* Category Header Ribbon (Collapsible Toggle) */}
+                <button
+                  type="button"
+                  onClick={() => toggleCategory(sec.categoryId)}
+                  className="w-full bg-slate-900 hover:bg-slate-800 text-white p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-left cursor-pointer transition"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <span className="w-6 h-6 rounded-lg bg-white/20 text-white font-mono font-black text-xs flex items-center justify-center">
+                      {idx + 1}
+                    </span>
+                    <div>
+                      <h2 className="text-sm font-black tracking-wide flex items-center gap-2">
+                        <span>{sec.categoryTitlePa} ({sec.categoryTitleEn})</span>
+                      </h2>
+                      <div className="text-[11px] text-slate-300 font-medium">
+                        ਸਰੋਤ ਕੁੱਲ ਸਟਾਕ: <strong className="text-white font-mono">{sec.totalStockBags.toLocaleString('en-IN')} Bags</strong>
+                        {sec.totalStockWeightKg ? ` • ${(sec.totalStockWeightKg / 100).toFixed(2)} Qtl` : ''}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    {/* Final Individual Balance Badge */}
+                    <div className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-xl text-right">
+                      <div className="text-[10px] uppercase tracking-wider text-slate-300 font-bold">
+                        {sec.finalBalanceLabelPa}
+                      </div>
+                      <div className="text-sm font-black font-mono">
+                        {sec.finalBalanceBags < 0 ? (
+                          <span className="text-rose-400 font-bold">{sec.finalBalanceBags.toLocaleString('en-IN')} Bags (ਘਾਟ)</span>
+                        ) : (
+                          <span className="text-emerald-400 font-bold">+{sec.finalBalanceBags.toLocaleString('en-IN')} Bags (ਬਾਕੀ)</span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="p-1 rounded-lg bg-white/10 text-white">
+                      {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                    </div>
+                  </div>
+                </button>
+
+                {/* Table: Source | Total | Used | Formula | Balance */}
+                {isExpanded && (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="bg-slate-100 text-slate-800 font-black border-b border-slate-300">
+                          <th className="p-3 w-44">ਸਰੋਤ (Source / Type)</th>
+                          <th className="p-3 text-right w-36">ਕੁੱਲ ਸਟਾਕ (Total)</th>
+                          <th className="p-3 w-48">ਵਰਤੋਂ / ਕਟੌਤੀ (Used / Deducted / Compared)</th>
+                          <th className="p-3 text-center w-36">ਫਾਰਮੂਲਾ (Total − Used)</th>
+                          <th className="p-3 text-right w-44">ਬਾਕੀ ਬੈਲੈਂਸ (Balance)</th>
+                          <th className="p-3">ਮੰਡੀ ਸਥਿਤੀ / ਵੇਰਵਾ (Mandi Meaning)</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200">
+                        {sec.rows.map((row, rIdx) => {
+                          const isNegative = row.balance < 0;
+                          const isZero = row.balance === 0;
+
+                          return (
+                            <tr
+                              key={row.id}
+                              className={`hover:bg-slate-50 transition-colors ${
+                                rIdx % 2 === 1 ? 'bg-slate-50/50' : 'bg-white'
+                              }`}
+                            >
+                              <td className="p-3 font-black text-slate-900">
+                                <div>{row.sourceTypePa}</div>
+                                <div className="text-[11px] text-slate-500 font-normal">{row.sourceTypeEn}</div>
+                              </td>
+
+                              <td className="p-3 text-right font-mono font-black text-slate-900">
+                                <div>{row.totalQty.toLocaleString('en-IN')} Bags</div>
+                                {row.totalWeightKg !== undefined && (
+                                  <div className="text-[11px] text-slate-500 font-normal">
+                                    {(row.totalWeightKg / 100).toFixed(2)} Qtl
+                                  </div>
+                                )}
+                              </td>
+
+                              <td className="p-3">
+                                <div className="font-bold text-slate-800">{row.usedTypePa}</div>
+                                <div className="font-mono font-bold text-slate-700 text-xs">
+                                  {row.usedQty.toLocaleString('en-IN')} Bags
+                                  {row.usedWeightKg !== undefined ? ` (${(row.usedWeightKg / 100).toFixed(2)} Qtl)` : ''}
+                                </div>
+                              </td>
+
+                              <td className="p-3 text-center font-mono text-[11px] text-slate-600 font-semibold bg-slate-50/75">
+                                {row.totalQty.toLocaleString('en-IN')} − {row.usedQty.toLocaleString('en-IN')}
+                              </td>
+
+                              <td className="p-3 text-right">
+                                {isNegative ? (
+                                  <div className="inline-block px-2.5 py-1 bg-rose-50 border border-rose-300 rounded-lg text-rose-800 font-mono font-black text-sm">
+                                    {row.balance.toLocaleString('en-IN')} Bags
+                                  </div>
+                                ) : isZero ? (
+                                  <div className="inline-block px-2.5 py-1 bg-slate-100 border border-slate-300 rounded-lg text-slate-700 font-mono font-bold text-xs">
+                                    0 Bags (ਬਰਾਬਰ)
+                                  </div>
+                                ) : (
+                                  <div className="inline-block px-2.5 py-1 bg-emerald-50 border border-emerald-300 rounded-lg text-emerald-900 font-mono font-black text-sm">
+                                    +{row.balance.toLocaleString('en-IN')} Bags
+                                  </div>
+                                )}
+
+                                {row.balanceWeightKg !== undefined && (
+                                  <div className="text-[11px] font-mono text-slate-600 mt-0.5">
+                                    {(row.balanceWeightKg / 100).toFixed(2)} Qtl
+                                  </div>
+                                )}
+                              </td>
+
+                              <td className="p-3 text-slate-700">
+                                <div className="font-semibold text-slate-900">{row.statusDescPa}</div>
+                                <div className="text-[11px] text-slate-500">{row.statusDescEn}</div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* 7. COLLAPSIBLE CUSTOM PAIR COMPARATOR (Idea #5: ਆਪਸ਼ਨਲ ਕੈਲਕੁਲੇਟਰ) */}
+      <div className="bg-white rounded-2xl border-2 border-slate-300 shadow-2xs overflow-hidden print:hidden">
+        <button
+          type="button"
+          onClick={() => setShowCustomCalc(!showCustomCalc)}
+          className="w-full p-4 bg-slate-50 hover:bg-slate-100 border-b border-slate-200 flex items-center justify-between text-left cursor-pointer transition"
+        >
+          <div className="flex items-center gap-2.5">
             <div className="p-1.5 bg-slate-800 text-white rounded-lg">
               <Calculator className="w-4 h-4" />
             </div>
             <div>
               <h3 className="text-xs font-black text-slate-900 uppercase tracking-wide">
-                ਵਿਸ਼ੇਸ਼ ਸਟਾਕ ਤੁਲਨਾ ਕੈਲਕੁਲੇਟਰ (Custom Stock Pair Comparison)
+                ਵਿਸ਼ੇਸ਼ ਸਟਾਕ ਤੁਲਨਾ ਕੈਲਕੁਲੇਟਰ (Custom Stock Pair Comparison Calculator)
               </h3>
               <p className="text-[11px] text-slate-500 font-medium">
                 ਆਪਣੀ ਮਰਜ਼ੀ ਅਨੁਸਾਰ ਕਿਸੇ ਵੀ ਦੋ ਸ਼੍ਰੇਣੀਆਂ ਦੀ ਆਪਸੀ ਤੁਲਨਾ ਅਤੇ ਬੈਲੇਂਸ ਦੇਖੋ
               </p>
             </div>
           </div>
-        </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-center bg-slate-50 p-4 rounded-xl border border-slate-200">
-          {/* Pick Source */}
-          <div className="space-y-1">
-            <label className="text-[11px] font-bold text-slate-700 block">
-              1. ਸਰੋਤ ਸ਼੍ਰੇਣੀ ਚੁਣੋ (Select Source)
-            </label>
-            <select
-              value={customSource}
-              onChange={(e) => setCustomSource(e.target.value as CategoryType)}
-              className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-bold text-slate-900 text-xs focus:ring-2 focus:ring-slate-900 focus:outline-none"
-            >
-              <option value="TOLA">ਤੋਲ / ਆਮਦ (Tola / Weighing)</option>
-              <option value="PURCHASE">ਏਜੰਸੀ ਖਰੀਦ (Agency Purchase)</option>
-              <option value="BARDANA">ਬਾਰਦਾਨਾ ਸਟਾਕ (Bardana Stock)</option>
-              <option value="LEFTING">ਸ਼ੈਲਰ ਲਿਫਟਿੰਗ (Lefting / Dispatch)</option>
-            </select>
-            <div className="text-xs font-mono font-bold text-slate-800 pt-1">
-              ਕੁੱਲ ਸਟਾਕ: <span className="text-slate-950 font-black">{customCalc.src.bags.toLocaleString('en-IN')} Bags</span>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-slate-600">
+              {showCustomCalc ? 'ਬੰਦ ਕਰੋ' : 'ਕੈਲਕੁਲੇਟਰ ਖੋਲ੍ਹੋ'}
+            </span>
+            <div className="p-1 rounded-lg bg-slate-200 text-slate-700">
+              {showCustomCalc ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
             </div>
           </div>
+        </button>
 
-          {/* Pick Deduction */}
-          <div className="space-y-1">
-            <label className="text-[11px] font-bold text-slate-700 block">
-              2. ਕਟੌਤੀ / ਤੁਲਨਾ ਸ਼੍ਰੇਣੀ (Minus / Compared With)
-            </label>
-            <select
-              value={customDeduction}
-              onChange={(e) => setCustomDeduction(e.target.value as CategoryType)}
-              className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-bold text-slate-900 text-xs focus:ring-2 focus:ring-slate-900 focus:outline-none"
-            >
-              <option value="TOLA">ਤੋਲ / ਆਮਦ (Tola / Weighing)</option>
-              <option value="PURCHASE">ਏਜੰਸੀ ਖਰੀਦ (Agency Purchase)</option>
-              <option value="BARDANA">ਬਾਰਦਾਨਾ ਸਟਾਕ (Bardana Stock)</option>
-              <option value="LEFTING">ਸ਼ੈਲਰ ਲਿਫਟਿੰਗ (Lefting / Dispatch)</option>
-            </select>
-            <div className="text-xs font-mono font-bold text-slate-800 pt-1">
-              ਵਰਤੋਂ / ਤੁਲਨਾ: <span className="text-slate-950 font-black">{customCalc.ded.bags.toLocaleString('en-IN')} Bags</span>
-            </div>
-          </div>
-
-          {/* Result */}
-          <div className="p-3 bg-white rounded-xl border border-slate-300 text-center space-y-1">
-            <div className="text-[10px] font-black uppercase tracking-wider text-slate-500">
-              ਕੁੱਲ ਬੈਲੇਂਸ (Calculated Balance)
-            </div>
-            <div
-              className={`text-xl font-mono font-black ${
-                customCalc.balance < 0
-                  ? 'text-rose-700'
-                  : customCalc.balance === 0
-                  ? 'text-slate-800'
-                  : 'text-emerald-800'
-              }`}
-            >
-              {customCalc.balance < 0 ? '' : '+'}
-              {customCalc.balance.toLocaleString('en-IN')} Bags
-            </div>
-            <div className="text-[11px] font-mono text-slate-500 font-semibold">
-              {customCalc.src.bags.toLocaleString('en-IN')} − {customCalc.ded.bags.toLocaleString('en-IN')} = {customCalc.balance.toLocaleString('en-IN')}
-            </div>
-            {customCalc.balanceWeightKg !== undefined && (
-              <div className="text-[10px] font-mono text-slate-600">
-                {(customCalc.balanceWeightKg / 100).toFixed(2)} Qtl
+        {showCustomCalc && (
+          <div className="p-5">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-center bg-slate-50 p-4 rounded-xl border border-slate-200">
+              {/* Pick Source */}
+              <div className="space-y-1">
+                <label className="text-[11px] font-bold text-slate-700 block">
+                  1. ਸਰੋਤ ਸ਼੍ਰੇਣੀ ਚੁਣੋ (Select Source)
+                </label>
+                <select
+                  value={customSource}
+                  onChange={(e) => setCustomSource(e.target.value as CategoryType)}
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-bold text-slate-900 text-xs focus:ring-2 focus:ring-slate-900 focus:outline-none"
+                >
+                  <option value="TOLA">ਤੋਲ / ਆਮਦ (Tola / Weighing)</option>
+                  <option value="PURCHASE">ਏਜੰਸੀ ਖਰੀਦ (Agency Purchase)</option>
+                  <option value="BARDANA">ਬਾਰਦਾਨਾ ਸਟਾਕ (Bardana Stock)</option>
+                  <option value="LEFTING">ਸ਼ੈਲਰ ਲਿਫਟਿੰਗ (Lefting / Dispatch)</option>
+                </select>
+                <div className="text-xs font-mono font-bold text-slate-800 pt-1">
+                  ਕੁੱਲ ਸਟਾਕ: <span className="text-slate-950 font-black">{customCalc.src.bags.toLocaleString('en-IN')} Bags</span>
+                </div>
               </div>
-            )}
+
+              {/* Pick Deduction */}
+              <div className="space-y-1">
+                <label className="text-[11px] font-bold text-slate-700 block">
+                  2. ਕਟੌਤੀ / ਤੁਲਨਾ ਸ਼੍ਰੇਣੀ (Minus / Compared With)
+                </label>
+                <select
+                  value={customDeduction}
+                  onChange={(e) => setCustomDeduction(e.target.value as CategoryType)}
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-bold text-slate-900 text-xs focus:ring-2 focus:ring-slate-900 focus:outline-none"
+                >
+                  <option value="TOLA">ਤੋਲ / ਆਮਦ (Tola / Weighing)</option>
+                  <option value="PURCHASE">ਏਜੰਸੀ ਖਰੀਦ (Agency Purchase)</option>
+                  <option value="BARDANA">ਬਾਰਦਾਨਾ ਸਟਾਕ (Bardana Stock)</option>
+                  <option value="LEFTING">ਸ਼ੈਲਰ ਲਿਫਟਿੰਗ (Lefting / Dispatch)</option>
+                </select>
+                <div className="text-xs font-mono font-bold text-slate-800 pt-1">
+                  ਵਰਤੋਂ / ਤੁਲਨਾ: <span className="text-slate-950 font-black">{customCalc.ded.bags.toLocaleString('en-IN')} Bags</span>
+                </div>
+              </div>
+
+              {/* Result */}
+              <div className="p-3 bg-white rounded-xl border border-slate-300 text-center space-y-1">
+                <div className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+                  ਕੁੱਲ ਬੈਲੇਂਸ (Calculated Balance)
+                </div>
+                <div
+                  className={`text-xl font-mono font-black ${
+                    customCalc.balance < 0
+                      ? 'text-rose-700'
+                      : customCalc.balance === 0
+                      ? 'text-slate-800'
+                      : 'text-emerald-800'
+                  }`}
+                >
+                  {customCalc.balance < 0 ? '' : '+'}
+                  {customCalc.balance.toLocaleString('en-IN')} Bags
+                </div>
+                <div className="text-[11px] font-mono text-slate-500 font-semibold">
+                  {customCalc.src.bags.toLocaleString('en-IN')} − {customCalc.ded.bags.toLocaleString('en-IN')} = {customCalc.balance.toLocaleString('en-IN')}
+                </div>
+                {customCalc.balanceWeightKg !== undefined && (
+                  <div className="text-[10px] font-mono text-slate-600">
+                    {(customCalc.balanceWeightKg / 100).toFixed(2)} Qtl
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
-      {/* 7. MANDI ACCOUNTING RULES & GUIDE RIBBON */}
+      {/* 8. MANDI ACCOUNTING RULES & GUIDE RIBBON */}
       <div className="bg-slate-50 p-4 rounded-xl border border-slate-300 text-xs text-slate-700 space-y-1.5 print:hidden">
         <div className="font-black text-slate-900 flex items-center gap-1.5">
           <span>ਨਿਯਮ ਅਤੇ ਵਿਆਖਿਆ (Accounting Ledger Rules):</span>
         </div>
         <ul className="list-disc list-inside space-y-1 text-[11px] text-slate-600">
           <li>
-            <strong>ਬੈਲੇਂਸ ਫਾਰਮੂਲਾ (Balance Formula):</strong> ਹਰੇਕ ਲੇਖੇ ਵਿੱਚ ਚੁਣੇ ਹੋਏ ਸਰੋਤ ਦਾ ਕੁੱਲ ਸਟਾਕ − ਸੰਬੰਧਿਤ ਵਰਤੋਂ / ਕਟੌਤੀ = ਨੈੱਟ ਬੈਲੇਂਸ (Balance = Total − Used).
+            <strong>ਫੜ੍ਹ 'ਤੇ ਬਾਕੀ ਬੋਰੀਆਂ:</strong> ਏਜੰਸੀ ਖਰੀਦ − ਸ਼ੈਲਰ ਰਵਾਨਗੀ (ਲਿਫਟਿੰਗ)। ਇਹ ਦਰਸਾਉਂਦਾ ਹੈ ਕਿ ਕਿੰਨਾ ਮਾਲ ਖਰੀਦਿਆ ਜਾ ਚੁੱਕਾ ਹੈ ਪਰ ਅਜੇ ਮੰਡੀ ਵਿੱਚੋਂ ਚੁੱਕਿਆ ਜਾਣਾ ਬਾਕੀ ਹੈ।
           </li>
           <li>
-            <strong>ਮਨਫ਼ੀ ਬੈਲੇਂਸ (Negative Balance):</strong> ਜੇਕਰ ਸਰੋਤ ਦੇ ਮੁਕਾਬਲੇ ਦੂਸਰੀ ਮਾਤਰਾ ਜ਼ਿਆਦਾ ਹੋਵੇ ਤਾਂ ਨਤੀਜਾ ਲਾਲ ਰੰਗ ਵਿੱਚ ਮਨਫ਼ੀ (-) ਨਿਸ਼ਾਨ ਨਾਲ ਦਰਸਾਇਆ ਜਾਂਦਾ ਹੈ।
+            <strong>ਅਣਵਿਕਿਆ ਝੋਨਾ:</strong> ਕੁੱਲ ਆਮਦ (ਤੋਲ) − ਏਜੰਸੀ ਖਰੀਦ। ਇਹ ਦਰਸਾਉਂਦਾ ਹੈ ਕਿ ਮੰਡੀ ਵਿੱਚ ਆਏ ਮਾਲ ਵਿੱਚੋਂ ਕਿੰਨੀਆਂ ਬੋਰੀਆਂ ਅਜੇ ਤੱਕ ਨਹੀਂ ਵਿਕੀਆਂ।
           </li>
           <li>
-            <strong>ਰੀਅਲਟਾਈਮ ਅੱਪਡੇਟ (Realtime Sync):</strong> ਜਦੋਂ ਵੀ ਤੋਲ, ਖਰੀਦ, ਬਾਰਦਾਨਾ ਜਾਂ ਲਿਫਟਿੰਗ ਵਿੱਚ ਕੋਈ ਨਵਾਂ ਇੰਦਰਾਜ ਦਰਜ ਹੁੰਦਾ ਹੈ, ਸਾਰੇ ਖਾਤੇ ਆਪਣੇ ਆਪ ਅੱਪਡੇਟ ਹੋ ਜਾਂਦੇ ਹਨ।
+            <strong>ਰੀਅਲਟਾਈਮ ਅੱਪਡੇਟ:</strong> ਤੋਲ, ਖਰੀਦ, ਬਾਰਦਾਨਾ ਜਾਂ ਲਿਫਟਿੰਗ ਵਿੱਚ ਨਵਾਂ ਇੰਦਰਾਜ ਹੁੰਦੇ ਹੀ ਸਾਰੇ ਬੈਲੇਂਸ ਆਪਣੇ ਆਪ ਬਦਲ ਜਾਂਦੇ ਹਨ।
           </li>
         </ul>
       </div>

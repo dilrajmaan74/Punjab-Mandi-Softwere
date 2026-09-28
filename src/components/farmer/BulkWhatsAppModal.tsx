@@ -187,7 +187,9 @@ export const BulkWhatsAppModal: React.FC<BulkWhatsAppModalProps> = ({
       setSelectedFarmerIds(new Set());
     } else {
       const newSet = new Set<string>();
-      filteredFarmerData.forEach(item => newSet.add(item.farmer.id));
+      filteredFarmerData.forEach(item => {
+        if (item?.farmer?.id) newSet.add(item.farmer.id);
+      });
       setSelectedFarmerIds(newSet);
     }
   };
@@ -280,9 +282,9 @@ export const BulkWhatsAppModal: React.FC<BulkWhatsAppModalProps> = ({
   // Currently focused preview farmer
   const activePreviewFarmerData = useMemo(() => {
     if (previewFarmerId) {
-      return farmerDataList.find(d => d.farmer.id === previewFarmerId) || filteredFarmerData[0] || farmerDataList[0];
+      return farmerDataList.find(d => d?.farmer?.id === previewFarmerId) || filteredFarmerData[0] || farmerDataList[0];
     }
-    const firstSelected = filteredFarmerData.find(d => selectedFarmerIds.has(d.farmer.id));
+    const firstSelected = filteredFarmerData.find(d => d?.farmer?.id && selectedFarmerIds.has(d.farmer.id));
     return firstSelected || filteredFarmerData[0] || farmerDataList[0];
   }, [previewFarmerId, farmerDataList, filteredFarmerData, selectedFarmerIds]);
 
@@ -293,6 +295,7 @@ export const BulkWhatsAppModal: React.FC<BulkWhatsAppModalProps> = ({
 
   // Send single farmer message
   const handleSendToFarmer = (item: (typeof farmerDataList)[0]) => {
+    if (!item?.farmer?.id) return;
     const msg = generateMessageForFarmer(item);
     openWhatsApp(item.farmer.mobile, msg);
     setSentRecords(prev => ({
@@ -303,12 +306,12 @@ export const BulkWhatsAppModal: React.FC<BulkWhatsAppModalProps> = ({
 
   // Find next unsent farmer among selected
   const nextUnsentItem = useMemo(() => {
-    return filteredFarmerData.find(item => selectedFarmerIds.has(item.farmer.id) && !sentRecords[item.farmer.id]);
+    return filteredFarmerData.find(item => item?.farmer?.id && selectedFarmerIds.has(item.farmer.id) && !sentRecords[item.farmer.id]);
   }, [filteredFarmerData, selectedFarmerIds, sentRecords]);
 
   // Send to Next Unsent
   const handleSendNext = () => {
-    if (nextUnsentItem) {
+    if (nextUnsentItem && nextUnsentItem.farmer?.id) {
       handleSendToFarmer(nextUnsentItem);
       setPreviewFarmerId(nextUnsentItem.farmer.id);
     } else {
@@ -321,7 +324,7 @@ export const BulkWhatsAppModal: React.FC<BulkWhatsAppModalProps> = ({
 
   // Copy all phone numbers
   const handleCopyNumbers = () => {
-    const selectedList = filteredFarmerData.filter(d => selectedFarmerIds.has(d.farmer.id));
+    const selectedList = filteredFarmerData.filter(d => d?.farmer?.id && selectedFarmerIds.has(d.farmer.id));
     const phones = selectedList
       .map(d => cleanMobileForWhatsApp(d.farmer.mobile))
       .filter(Boolean)

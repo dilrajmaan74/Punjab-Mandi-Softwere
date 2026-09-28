@@ -330,7 +330,7 @@ export const BagsEntry: React.FC = () => {
 
   // Handle voice typing parsing and auto-fill
   const handleVoiceApply = (data: ParsedVoiceData) => {
-    if (data.farmer) {
+    if (data?.farmer?.id) {
       setSelectedFarmerId(data.farmer.id);
       setSelectedFarmerForBags(data.farmer);
     }

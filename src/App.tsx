@@ -1,7 +1,9 @@
 import React from 'react';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import { MandiProvider, useMandi } from './context/MandiContext';
 import { NotificationProvider } from './context/NotificationContext';
 import { GoogleSheetsSyncProvider } from './context/GoogleSheetsSyncContext';
+import { AuthPortalModal } from './components/auth/AuthPortalModal';
 import { ToastContainer } from './components/common/ToastContainer';
 import { ConfirmationModal } from './components/common/ConfirmationModal';
 import { Header } from './components/common/Header';
@@ -157,18 +159,23 @@ const MainAppContent: React.FC = () => {
 
       {/* Farmer Bags Entry Edit Modal */}
       <BagsEntryEditModal />
+
+      {/* Multi-Firm Pro Authentication & Registration Portal */}
+      <AuthPortalModal />
     </div>
   );
 };
 
 export default function App() {
   return (
-    <MandiProvider>
-      <NotificationProvider>
-        <GoogleSheetsSyncProvider>
-          <MainAppContent />
-        </GoogleSheetsSyncProvider>
-      </NotificationProvider>
-    </MandiProvider>
+    <AuthProvider>
+      <MandiProvider>
+        <NotificationProvider>
+          <GoogleSheetsSyncProvider>
+            <MainAppContent />
+          </GoogleSheetsSyncProvider>
+        </NotificationProvider>
+      </MandiProvider>
+    </AuthProvider>
   );
 }

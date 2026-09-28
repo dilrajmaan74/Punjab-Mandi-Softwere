@@ -82,7 +82,7 @@ export const BoliRegister: React.FC = () => {
 
   // Voice assistant auto-fill
   const handleVoiceApply = (data: ParsedVoiceData) => {
-    if (data.farmer) {
+    if (data?.farmer?.id) {
       setSelectedFarmerId(data.farmer.id);
     }
     if (data.totalBags) {

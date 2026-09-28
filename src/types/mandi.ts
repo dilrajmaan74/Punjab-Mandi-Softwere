@@ -222,6 +222,21 @@ export interface MandiFirm {
   email?: string;
   isDefault?: boolean;
   createdAt?: string;
+  username?: string; // Firm specific username/munim
+  password?: string; // Firm specific password
+  pin?: string; // Quick 4-digit PIN
+}
+
+export interface AppUserAccount {
+  id: string;
+  fullName: string;
+  mobile: string;
+  password: string;
+  isVerified: boolean;
+  registeredAt: string;
+  lastLoginAt?: string;
+  email?: string;
+  activeFirmId?: string;
 }
 
 export interface SellerMaster {
@@ -499,6 +514,7 @@ export interface LinkedPurchaseDetail {
 }
 
 export interface FarmerPurchaseSummary {
+  farmer?: Farmer;
   farmerId: string;
   farmerName: string;
   farmerNamePa: string;

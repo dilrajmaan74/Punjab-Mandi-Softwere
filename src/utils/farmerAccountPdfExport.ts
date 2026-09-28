@@ -62,14 +62,49 @@ function drawPhotoBox(doc: any, x: number, y: number, size: number, labelEn: str
   doc.text(labelPa, x + size / 2, y + size / 2 + 3, { align: 'center' });
 }
 
+function normalizeAccount(account: any): FarmerAccountSummary {
+  if (!account) {
+    return {
+      farmer: {
+        id: 'FRM-000',
+        farmerName: 'Farmer',
+        farmerNamePa: 'ਕਿਸਾਨ',
+        fatherName: '',
+        fatherNamePa: '',
+        village: '',
+        villagePa: '',
+        pinCode: '141401',
+        mobile: '',
+        aadhaar: ''
+      }
+    } as any;
+  }
+  if (!account.farmer) {
+    account.farmer = {
+      id: account.farmerId || 'FRM-000',
+      farmerName: account.farmerName || 'Farmer',
+      farmerNamePa: account.farmerNamePa || '',
+      fatherName: account.fatherName || '',
+      fatherNamePa: account.fatherNamePa || '',
+      village: account.village || '',
+      villagePa: account.villagePa || '',
+      pinCode: account.pinCode || '141401',
+      mobile: account.mobile || '',
+      aadhaar: account.aadhaar || ''
+    };
+  }
+  return account;
+}
+
 /**
  * Capture and export the exact A4 reference statement from DOM
  * with 100% pixel fidelity, exact colors, tables, and Punjabi Gurmukhi text.
  */
 export async function captureAndExportExactA4Pdf(
-  account: FarmerAccountSummary,
+  rawAccount: FarmerAccountSummary,
   filenameSuffix: string = 'Statement'
 ): Promise<boolean> {
+  const account = normalizeAccount(rawAccount);
   if (typeof document === 'undefined') return false;
   const el =
     document.getElementById('farmer-account-reference-a4-preview') ||
@@ -127,10 +162,11 @@ export async function captureAndExportExactA4Pdf(
  * (English + Proper Punjabi Gurmukhi)
  */
 export async function exportSimpleFarmerAccountPDF(
-  account: FarmerAccountSummary,
+  rawAccount: FarmerAccountSummary,
   settings: MandiSettings,
   labourInfo?: SimpleFarmerLabourInfo
 ): Promise<void> {
+  const account = normalizeAccount(rawAccount);
   // 1. Try exact pixel-faithful reference A4 export first
   const captured = await captureAndExportExactA4Pdf(account, 'Simple');
   if (captured) return;
@@ -476,10 +512,11 @@ export async function exportSimpleFarmerAccountPDF(
  * (English + Proper Punjabi Gurmukhi across all sections)
  */
 export async function exportFarmerAccountPDF(
-  account: FarmerAccountSummary,
+  rawAccount: FarmerAccountSummary,
   settings: MandiSettings,
   labourInfo?: SimpleFarmerLabourInfo
 ): Promise<void> {
+  const account = normalizeAccount(rawAccount);
   // 1. Try exact pixel-faithful reference A4 export first
   const captured = await captureAndExportExactA4Pdf(account, 'Complete');
   if (captured) return;
@@ -1477,11 +1514,12 @@ export interface ExportThreePageLedgerOptions {
  * Page 3: ਸੀਜ਼ਨ ਅੰਤਿਮ ਖਾਤਾ ਨਿਬੇੜਾ ਤੇ ਲੈਣ-ਦੇਣ ਫੈਸਲਾ
  */
 export async function exportThreePageLedgerPDF({
-  account,
+  account: rawAccount,
   settings,
   activeCropSeason = 'ਸਾਉਣੀ / ਹਾੜ੍ਹੀ 2026',
   mode = 'all'
 }: ExportThreePageLedgerOptions): Promise<boolean> {
+  const account = normalizeAccount(rawAccount);
   if (typeof document === 'undefined') return false;
 
   try {

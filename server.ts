@@ -1,11 +1,11 @@
 import express from "express";
 import http from "http";
 import path from "path";
-import { createServer as createViteServer } from "vite";
+import fs from "fs";
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = Number(process.env.PORT) || 3000;
 
   app.use(express.json());
 
@@ -23,8 +23,38 @@ async function startServer() {
   app.get("/api/health", healthHandler);
   app.get("/api/healthz", healthHandler);
 
-  // Vite middleware for development vs static serving for production
-  if (process.env.NODE_ENV !== "production") {
+  const distPath = path.join(process.cwd(), "dist");
+  const indexPath = path.join(distPath, "index.html");
+  let hasDist = fs.existsSync(indexPath);
+
+  // If in production but dist is not present, build it on the fly
+  if (!hasDist && process.env.NODE_ENV === "production") {
+    try {
+      console.log("dist/index.html not found; building static assets on the fly...");
+      const { build } = await import("vite");
+      await build();
+      hasDist = fs.existsSync(indexPath);
+      console.log(`On-the-fly build finished, hasDist: ${hasDist}`);
+    } catch (buildErr) {
+      console.error("On-the-fly build failed, will mount Vite middleware:", buildErr);
+    }
+  }
+
+  if (hasDist) {
+    // Serve pre-built static bundle
+    app.use(express.static(distPath));
+    app.get("*", (_req, res, next) => {
+      if (fs.existsSync(indexPath)) {
+        res.sendFile(indexPath, (err) => {
+          if (err) next(err);
+        });
+      } else {
+        next();
+      }
+    });
+  } else {
+    // Development mode or fallback: Mount Vite middleware to serve on-the-fly
+    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: {
         middlewareMode: true,
@@ -34,39 +64,33 @@ async function startServer() {
       appType: "spa",
     });
     app.use(vite.middlewares);
-  } else {
-    const distPath = path.join(process.cwd(), "dist");
-    app.use(express.static(distPath));
-    app.get("*", (_req, res) => {
-      res.sendFile(path.join(distPath, "index.html"));
-    });
   }
 
-  // Bind to primary port 3000 on 0.0.0.0 (required for container ingress & Nginx reverse proxy)
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Application server running on http://0.0.0.0:${PORT}`);
+  // Bind primary server to 0.0.0.0 on PORT (required for Cloud Run container ingress)
+  const server = app.listen(PORT, "0.0.0.0", () => {
+    console.log(`Primary server running on http://0.0.0.0:${PORT}`);
   });
 
-  // Support direct Cloud Run invocations if deployed in a standalone container without Nginx
-  const rawPort = process.env.PORT;
-  if (rawPort) {
-    const envPort = parseInt(rawPort, 10);
-    if (!isNaN(envPort) && envPort !== PORT) {
-      const altServer = http.createServer(app);
-      altServer.on("error", (err: any) => {
-        if (err.code === "EADDRINUSE") {
-          console.log(`Port ${envPort} in use by reverse proxy, app active on port ${PORT}`);
-        } else {
-          console.error(`Alt server error on port ${envPort}:`, err);
-        }
-      });
-      try {
-        altServer.listen(envPort, "0.0.0.0", () => {
-          console.log(`Application also listening on PORT ${envPort}`);
-        });
-      } catch {
-        // Safe to ignore if reverse proxy binds to this port
+  server.on("error", (err: any) => {
+    console.error("Primary server error:", err);
+  });
+
+  // If Cloud Run assigned a port other than 3000 (e.g. 8080), also try binding 3000 if available
+  if (PORT !== 3000) {
+    const secondaryServer = http.createServer(app);
+    secondaryServer.on("error", (err: any) => {
+      if (err.code === "EADDRINUSE") {
+        console.log("Port 3000 already in use by proxy/container.");
+      } else {
+        console.error("Secondary server error on port 3000:", err);
       }
+    });
+    try {
+      secondaryServer.listen(3000, "0.0.0.0", () => {
+        console.log("Secondary server also listening on http://0.0.0.0:3000");
+      });
+    } catch {
+      // Safe to ignore
     }
   }
 }
@@ -75,3 +99,4 @@ startServer().catch((err) => {
   console.error("Failed to start application server:", err);
   process.exit(1);
 });
+

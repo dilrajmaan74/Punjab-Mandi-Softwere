@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useMandi } from '../../context/MandiContext';
+import { useAuth } from '../../context/AuthContext';
 import {
   Wheat,
   Globe,
@@ -14,7 +15,10 @@ import {
   RefreshCw,
   CheckCircle2,
   AlertCircle,
-  FileSpreadsheet
+  FileSpreadsheet,
+  UserCheck,
+  LogOut,
+  ShieldCheck
 } from 'lucide-react';
 import { FirmManagerModal } from '../firm/FirmManagerModal';
 import { SellerMasterModal } from '../seller/SellerMasterModal';
@@ -44,10 +48,12 @@ export const Header: React.FC = () => {
     isSupabaseConfigured
   } = useMandi();
   const { syncStatus: sheetsSyncStatus, lastSyncTime, conflicts } = useGoogleSheetsSync();
+  const { currentUser, logout, setIsAuthModalOpen, setAuthModalMode } = useAuth();
 
   const [isFirmModalOpen, setIsFirmModalOpen] = useState(false);
   const [isSellerModalOpen, setIsSellerModalOpen] = useState(false);
   const [isGoogleSheetsModalOpen, setIsGoogleSheetsModalOpen] = useState(false);
+  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
 
   const totalBags = bagsEntries.reduce((sum, b) => sum + (b.bags || 0), 0);
 
@@ -85,11 +91,11 @@ export const Header: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setIsFirmModalOpen(true)}
-                className="px-2 py-1 text-[11px] font-bold bg-slate-800 hover:bg-slate-700 text-amber-300 rounded-lg border border-slate-700 flex items-center gap-1"
+                className="px-2 py-1 text-[11px] font-bold bg-slate-800 hover:bg-slate-700 text-amber-300 rounded-lg border border-slate-700 flex items-center gap-1 max-w-[130px] truncate"
                 title="Manage Firms & Years"
               >
-                <Building2 className="w-3.5 h-3.5" />
-                <span>{activeFiscalYear}</span>
+                <Building2 className="w-3.5 h-3.5 shrink-0" />
+                <span className="truncate">{activeFirm.name || activeFiscalYear}</span>
               </button>
             </div>
           </div>
@@ -97,25 +103,26 @@ export const Header: React.FC = () => {
           {/* Quick Selectors & Metrics */}
           <div className="flex items-center justify-between md:justify-end gap-2 sm:gap-3 flex-wrap">
             {/* Firm Selector */}
-            <div className="hidden sm:flex items-center gap-1.5 bg-slate-800/90 px-2 py-1 rounded-lg border border-slate-700">
+            <div className="hidden sm:flex items-center gap-1.5 bg-slate-800/90 px-2.5 py-1.5 rounded-xl border border-slate-700 shadow-2xs">
+              <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" title="Active Firm (Isolated Data)" />
               <Building2 className="w-3.5 h-3.5 text-amber-400" />
               <select
                 value={activeFirmId}
                 onChange={(e) => setActiveFirmId(e.target.value)}
-                className="bg-transparent text-xs font-bold text-white focus:outline-none cursor-pointer pr-1"
-                title="Active Firm"
+                className="bg-transparent text-xs font-black text-white focus:outline-none cursor-pointer pr-1 max-w-[180px] truncate"
+                title="Active Firm (Strictly Isolated Data)"
               >
                 {firms.map((f) => (
                   <option key={f.id} value={f.id} className="bg-slate-900 text-white">
-                    {f.name}
+                    {f.name} {f.namePa ? `(${f.namePa})` : ''}
                   </option>
                 ))}
               </select>
               <button
                 type="button"
                 onClick={() => setIsFirmModalOpen(true)}
-                className="p-1 text-slate-400 hover:text-white rounded transition"
-                title="Add / Edit Firms"
+                className="p-1 text-slate-400 hover:text-white rounded transition cursor-pointer"
+                title="ਫਰਮਾਂ ਦਾ ਪ੍ਰਬੰਧਨ (Manage Firms)"
               >
                 <Settings2 className="w-3.5 h-3.5" />
               </button>
@@ -256,6 +263,97 @@ export const Header: React.FC = () => {
               >
                 EN
               </button>
+            </div>
+
+            {/* User Account / Profile Menu */}
+            <div className="relative">
+              {currentUser ? (
+                <div className="flex items-center">
+                  <button
+                    type="button"
+                    onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
+                    className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 px-2 py-1 rounded-xl transition text-xs font-bold text-white shadow-xs cursor-pointer"
+                    title="User Profile & Settings"
+                  >
+                    <div className="w-6 h-6 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-black text-xs shadow-2xs">
+                      {currentUser.fullName ? currentUser.fullName.charAt(0).toUpperCase() : 'U'}
+                    </div>
+                    <span className="hidden md:inline max-w-[110px] truncate text-slate-200">
+                      {currentUser.fullName.split(' ')[0]}
+                    </span>
+                    <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                  </button>
+
+                  {/* Profile Dropdown */}
+                  {isProfileMenuOpen && (
+                    <div
+                      className="absolute right-0 top-full mt-2 w-64 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl p-3 z-50 animate-in fade-in zoom-in-95 text-xs space-y-3"
+                      onMouseLeave={() => setIsProfileMenuOpen(false)}
+                    >
+                      <div className="flex items-center gap-3 pb-2.5 border-b border-slate-800">
+                        <div className="w-10 h-10 rounded-xl bg-emerald-600 flex items-center justify-center font-black text-white text-base shadow-sm">
+                          {currentUser.fullName ? currentUser.fullName.charAt(0).toUpperCase() : 'U'}
+                        </div>
+                        <div className="overflow-hidden">
+                          <h4 className="font-black text-white text-sm truncate">
+                            {currentUser.fullName}
+                          </h4>
+                          <p className="text-[11px] font-mono text-emerald-400">
+                            +91 {currentUser.mobile}
+                          </p>
+                          <span className="inline-flex items-center gap-1 text-[9px] font-bold text-emerald-300 bg-emerald-950/80 px-1.5 py-0.2 rounded border border-emerald-800/80 mt-0.5">
+                            <ShieldCheck className="w-2.5 h-2.5" /> ਵੈਰੀਫਾਈਡ ਮਾਲਕ
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="space-y-1 text-slate-300">
+                        <div className="flex items-center justify-between py-1 px-2 rounded-lg bg-slate-800/60 text-[11px]">
+                          <span>ਕੁੱਲ ਫਰਮਾਂ (Firms):</span>
+                          <strong className="text-white font-mono">{firms.length}</strong>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsProfileMenuOpen(false);
+                            setIsFirmModalOpen(true);
+                          }}
+                          className="w-full text-left py-1.5 px-2 hover:bg-slate-800 rounded-lg text-emerald-400 font-bold transition flex items-center justify-between"
+                        >
+                          <span>ਫਰਮਾਂ ਦਾ ਪ੍ਰਬੰਧਨ (Manage Firms)</span>
+                          <Building2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+
+                      <div className="pt-2 border-t border-slate-800">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsProfileMenuOpen(false);
+                            logout();
+                          }}
+                          className="w-full py-2 px-3 bg-rose-950/60 hover:bg-rose-900 border border-rose-800/60 text-rose-300 rounded-xl font-black text-xs transition flex items-center justify-center gap-2 cursor-pointer"
+                        >
+                          <LogOut className="w-3.5 h-3.5" />
+                          <span>ਲੌਗ ਆਉਟ (Logout Account)</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuthModalMode('LOGIN');
+                    setIsAuthModalOpen(true);
+                  }}
+                  className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black transition flex items-center gap-1.5 shadow-sm"
+                >
+                  <UserCheck className="w-3.5 h-3.5" />
+                  <span>ਲੌਗਇਨ</span>
+                </button>
+              )}
             </div>
           </div>
         </div>

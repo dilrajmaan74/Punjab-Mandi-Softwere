@@ -75,6 +75,7 @@ import { BardanaClearanceCard } from './BardanaClearanceCard';
 import { FarmerTFormatLedger } from './FarmerTFormatLedger';
 import { SeasonSettlementModal } from './SeasonSettlementModal';
 import { FarmerThreePageAccount } from './FarmerThreePageAccount';
+import { FarmerBagLabourReconciliationCard } from './FarmerBagLabourReconciliationCard';
 import {
   savePaymentTransfer,
   saveSameFarmerAdjustment,
@@ -248,6 +249,8 @@ export const FarmerYearlyProfitLossModal: React.FC<FarmerYearlyProfitLossModalPr
 export const FarmerAccount: React.FC = () => {
   const {
     farmers,
+    bagsEntries,
+    dailyPurchaseRecords,
     selectedFarmerForAccount,
     setSelectedFarmerForAccount,
     setSelectedFarmerForBags,
@@ -305,7 +308,7 @@ export const FarmerAccount: React.FC = () => {
   const [isExportingPDF, setIsExportingPDF] = useState(false);
   const [isBulkWhatsAppOpen, setIsBulkWhatsAppOpen] = useState(false);
   const [isMiniSlipOpen, setIsMiniSlipOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<'threepage' | 'statement' | 'tformat' | 'records'>('threepage');
+  const [activeTab, setActiveTab] = useState<'threepage' | 'statement' | 'tformat' | 'records' | 'baglabour'>('threepage');
   const [selectedSeasonFilter, setSelectedSeasonFilter] = useState<'ALL' | 'WHEAT' | 'PADDY'>('ALL');
   const [isSettlementModalOpen, setIsSettlementModalOpen] = useState(false);
 
@@ -1554,6 +1557,19 @@ export const FarmerAccount: React.FC = () => {
                   <Layers className="w-4 h-4" />
                   <span>Detailed Data Records / ਵਿਸਥਾਰਤ ਰਿਕਾਰਡ ਤੇ ਐਂਟਰੀਆਂ</span>
                 </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('baglabour')}
+                  className={`px-4 py-2.5 rounded-xl text-xs font-black flex items-center gap-2 transition-all cursor-pointer ${
+                    activeTab === 'baglabour'
+                      ? 'bg-rose-700 text-white shadow-md ring-2 ring-rose-500 scale-[1.02]'
+                      : 'bg-rose-50 hover:bg-rose-100 text-rose-950 border border-rose-200'
+                  }`}
+                >
+                  <Scale className="w-4 h-4 text-amber-300" />
+                  <span>📊 ਬੋਰੀ ਤੇ ਲੇਬਰ ਕਟੌਤੀ ਚਾਰਟ (Bag & Labour Reconciliation)</span>
+                </button>
               </div>
 
               {activeTab === 'statement' && (
@@ -1631,6 +1647,15 @@ export const FarmerAccount: React.FC = () => {
                   onOpenMiniSlip={() => setIsMiniSlipOpen(true)}
                 />
               </div>
+            ) : activeTab === 'baglabour' ? (
+              <FarmerBagLabourReconciliationCard
+                farmer={currentFarmer}
+                allFarmers={farmers}
+                bagsEntries={bagsEntries}
+                dailyPurchases={dailyPurchaseRecords}
+                settings={settings}
+                onNavigateToFullRegister={() => setActiveSection('farmer-bag-balance-labour')}
+              />
             ) : (
               <div className="space-y-6">
                 {/* 1. NEW: 4-STEP SIMPLE SUMMARY CARD + AUDIO ASSISTANT (Highest prominence for easy farmer understanding) */}
@@ -3181,7 +3206,7 @@ export const FarmerAccount: React.FC = () => {
                         });
                       }}
                       options={farmers
-                        .filter((f) => f.id !== currentFarmer.id)
+                        .filter((f) => f && f.id && f.id !== currentFarmer?.id)
                         .map((f) => ({
                           value: f.id,
                           label: `${f.farmerNamePa} (${f.farmerName})`,
@@ -3517,7 +3542,7 @@ export const FarmerAccount: React.FC = () => {
                     className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                   >
                     <option value="">-- ਕਿਸਾਨ ਚੁਣੋ (Select Farmer) --</option>
-                    {farmers.filter(f => f.id !== currentFarmer.id).map(f => (
+                    {farmers.filter(f => f && f.id && f.id !== currentFarmer?.id).map(f => (
                       <option key={f.id} value={f.id}>
                         {f.farmerNamePa} ({f.farmerName}) - A/C: {f.id} ({f.village})
                       </option>
@@ -3758,7 +3783,7 @@ export const FarmerAccount: React.FC = () => {
                     className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs font-medium focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                   >
                     <option value="">-- ਕਿਸਾਨ ਚੁਣੋ (Select Farmer) --</option>
-                    {farmers.filter(f => f.id !== currentFarmer.id).map(f => (
+                    {farmers.filter(f => f && f.id && f.id !== currentFarmer?.id).map(f => (
                       <option key={f.id} value={f.id}>
                         {f.farmerNamePa} ({f.farmerName}) - A/C: {f.id} ({f.village})
                       </option>

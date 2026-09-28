@@ -51,12 +51,12 @@ export const FarmerBagBalanceReport: React.FC = () => {
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
 
-  // Applicable Bag Rate Setting (Default: 925 as in prompt example, or calculated from rate)
+  // Applicable Bag Rate Setting (Default: calculated dynamically e.g. 37.5 * 2461 / 100 = 922.875)
   const defaultCalculatedBagRate = useMemo(() => {
     const bagKg = settings.fixedBagWeightKg || 37.5;
     const qtlRate = settings.fixedRatePerQtl || 2461;
-    // 37.5 * 2461 / 100 = 922.875, or 925 as user specified
-    return 925;
+    const val = (bagKg * qtlRate) / 100;
+    return val > 0 ? Number(val.toFixed(3)) : 922.875;
   }, [settings.fixedBagWeightKg, settings.fixedRatePerQtl]);
 
   const [applicableBagRate, setApplicableBagRate] = useState<number>(defaultCalculatedBagRate);
@@ -458,32 +458,32 @@ export const FarmerBagBalanceReport: React.FC = () => {
                 <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">₹</span>
                 <input
                   type="number"
-                  min="1"
-                  step="1"
+                  min="0.01"
+                  step="0.001"
                   value={applicableBagRate}
-                  onChange={(e) => setApplicableBagRate(Math.max(1, Number(e.target.value) || 1))}
+                  onChange={(e) => setApplicableBagRate(Math.max(0.01, Number(e.target.value) || 0.01))}
                   className="w-full pl-6 pr-3 py-1.5 bg-white border border-slate-300 rounded-md text-sm font-bold text-slate-900 focus:outline-none focus:ring-1 focus:ring-emerald-600"
                 />
               </div>
               <button
                 type="button"
-                onClick={() => setApplicableBagRate(925)}
+                onClick={() => setApplicableBagRate(defaultCalculatedBagRate)}
                 className="px-2.5 py-1.5 text-[11px] font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 rounded-md border border-emerald-200"
-                title="Reset to standard ₹925"
+                title={`Calculated MSP ₹${defaultCalculatedBagRate}`}
               >
-                ₹925
+                ₹{defaultCalculatedBagRate}
               </button>
               <button
                 type="button"
-                onClick={() => setApplicableBagRate(Math.round((37.5 / 100) * (settings.fixedRatePerQtl || 2461)))}
+                onClick={() => setApplicableBagRate(925)}
                 className="px-2.5 py-1.5 text-[11px] font-bold text-slate-700 bg-white hover:bg-slate-100 rounded-md border border-slate-200"
-                title="Calculated from MSP ₹2,461/Qtl"
+                title="Round ₹925"
               >
-                ₹{Math.round((37.5 / 100) * (settings.fixedRatePerQtl || 2461))}
+                ₹925
               </button>
             </div>
             <p className="mt-1 text-[10px] text-slate-500">
-              Formula: Labour Expense ÷ ₹{applicableBagRate} = Labour Bags (rounded UP)
+              Formula: ਕੁੱਲ ਲੇਬਰ (₹) ÷ ₹{applicableBagRate} = ਲੇਬਰ ਬੋਰੀਆਂ ਕਟੌਤੀ (ਰਾਊਂਡ ਅੱਪ)
             </p>
           </div>
 
