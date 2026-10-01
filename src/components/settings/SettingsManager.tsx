@@ -16,10 +16,14 @@ import {
   RefreshCw,
   Trash2,
   Edit2,
-  Star
+  Star,
+  Calendar,
+  Layers,
+  ArrowRight
 } from 'lucide-react';
 import { transliterateEnglishToPunjabi } from '../../utils/translations';
 import { ProcurementAgency } from '../../types/mandi';
+import { FiscalYearManagerModal } from '../firm/FiscalYearManagerModal';
 
 export const SettingsManager: React.FC = () => {
   const {
@@ -30,10 +34,16 @@ export const SettingsManager: React.FC = () => {
     agencies,
     addAgency,
     updateAgency,
-    deleteAgency
+    deleteAgency,
+    activeFiscalYear,
+    fiscalYears,
+    setActiveFiscalYear,
+    isYearLocked,
+    language
   } = useMandi();
   const { notifySaveSuccess, notifyUpdateSuccess, notifyDeleteSuccess, notifyError } = useNotification();
 
+  const [isFyModalOpen, setIsFyModalOpen] = useState(false);
   const [selectedPin, setSelectedPin] = useState(pinCodes[0]?.pinCode || '141401');
   const [newVillageEn, setNewVillageEn] = useState('');
   const [newVillagePa, setNewVillagePa] = useState('');
@@ -214,6 +224,62 @@ export const SettingsManager: React.FC = () => {
               ਸਰਕਾਰੀ ਖਰੀਦ ਏਜੰਸੀਆਂ (Markfed, Pungrain, Punsup...), ਮੰਡੀ ਵੇਰਵੇ ਤੇ ਪੰਜਾਬ ਪਿੰਨ ਕੋਡ
             </p>
           </div>
+        </div>
+      </div>
+
+      {/* Financial Year Management & Roll-over Banner */}
+      <div className="bg-gradient-to-r from-slate-900 via-emerald-950 to-slate-900 rounded-xl p-4 border border-emerald-800/40 text-white shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-emerald-500 text-slate-950 flex items-center justify-center font-black shadow-md shrink-0">
+            <Calendar className="w-5 h-5 text-slate-950" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs uppercase font-extrabold tracking-wider text-emerald-400">
+                {language === 'en' ? 'Active Financial Year' : 'ਸਰਗਰਮ ਵਿੱਤੀ ਸਾਲ'}
+              </span>
+              <span className="bg-emerald-500/20 text-emerald-300 font-mono font-black text-sm px-2 py-0.5 rounded border border-emerald-500/30">
+                FY {activeFiscalYear}
+              </span>
+              {isYearLocked(activeFiscalYear) ? (
+                <span className="bg-rose-500/20 text-rose-300 text-[10px] font-bold px-1.5 py-0.5 rounded border border-rose-500/30">
+                  {language === 'en' ? 'Locked' : 'ਸਾਲ ਲੌਕ ਹੈ'}
+                </span>
+              ) : (
+                <span className="bg-emerald-500/20 text-emerald-300 text-[10px] font-bold px-1.5 py-0.5 rounded border border-emerald-500/30">
+                  {language === 'en' ? 'Open' : 'ਐਂਟਰੀਆਂ ਖੁੱਲ੍ਹੀਆਂ'}
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-slate-300 mt-0.5">
+              {language === 'en'
+                ? 'Separate data by FY (2024-25, 2025-26, 2026-27), create new years, carry forward balances & edit opening balances.'
+                : 'ਸਾਲ ਵਾਰ ਵੱਖਰਾ ਡਾਟਾ, ਨਵਾਂ ਵਿੱਤੀ ਸਾਲ ਬਣਾਉਣਾ, ਕਿਸਾਨਾਂ ਦਾ ਸਾਲਾਨਾ ਬਕਾਇਆ ਰੋਲ-ਓਵਰ ਤੇ ਓਪਨਿੰਗ ਬੈਲੇਂਸ ਮਾਸਟਰ।'}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0">
+          <select
+            value={activeFiscalYear}
+            onChange={(e) => setActiveFiscalYear(e.target.value)}
+            className="bg-slate-800 text-white font-mono text-xs font-bold px-3 py-2 rounded-lg border border-slate-700 cursor-pointer focus:outline-none focus:border-emerald-500"
+          >
+            {fiscalYears.map((yr) => (
+              <option key={yr} value={yr}>
+                {yr} {isYearLocked(yr) ? '🔒' : ''}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={() => setIsFyModalOpen(true)}
+            className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs px-3 py-2 rounded-lg transition shadow-md flex items-center gap-1.5 cursor-pointer"
+          >
+            <Calendar className="w-3.5 h-3.5" />
+            <span>{language === 'en' ? 'Manage FY & Roll-Over' : 'ਵਿੱਤੀ ਸਾਲ ਮਾਸਟਰ ਖੋਲ੍ਹੋ'}</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
         </div>
       </div>
 
@@ -580,6 +646,11 @@ export const SettingsManager: React.FC = () => {
           </form>
         </div>
       </div>
+
+      <FiscalYearManagerModal
+        isOpen={isFyModalOpen}
+        onClose={() => setIsFyModalOpen(false)}
+      />
     </div>
   );
 };

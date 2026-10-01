@@ -1020,4 +1020,117 @@ export function calculateAdvanceInterest(
   };
 }
 
+/**
+ * Financial Year (ਵਿੱਤੀ ਸਾਲ) Utilities
+ * Indian Financial Year runs from 1st April to 31st March (e.g. 2026-27: 01/04/2026 to 31/03/2027)
+ */
+
+export function getFiscalYearFromDate(dateStr?: string): string {
+  if (!dateStr) return '2026-27';
+  const d = parseDateString(dateStr);
+  const year = d.getFullYear();
+  const month = d.getMonth() + 1; // 1-12
+  if (month >= 4) {
+    // April to December
+    const nextYearShort = String((year + 1) % 100).padStart(2, '0');
+    return `${year}-${nextYearShort}`;
+  } else {
+    // January to March
+    const currentYearShort = String(year % 100).padStart(2, '0');
+    return `${year - 1}-${currentYearShort}`;
+  }
+}
+
+export function parseFiscalYear(fyStr: string): { startYear: number; endYear: number } {
+  const clean = (fyStr || '2026-27').trim();
+  // e.g. "2026-27" or "2026-2027"
+  const parts = clean.split('-');
+  let startYear = parseInt(parts[0], 10);
+  if (isNaN(startYear) || startYear < 2000) startYear = 2026;
+  let endYear = startYear + 1;
+  if (parts[1]) {
+    const rawEnd = parseInt(parts[1], 10);
+    if (!isNaN(rawEnd)) {
+      endYear = rawEnd < 100 ? Math.floor(startYear / 100) * 100 + rawEnd : rawEnd;
+    }
+  }
+  return { startYear, endYear };
+}
+
+export function getFiscalYearDateRange(fyStr: string): {
+  startYear: number;
+  endYear: number;
+  startDateStr: string;
+  endDateStr: string;
+  startDate: Date;
+  endDate: Date;
+} {
+  const { startYear, endYear } = parseFiscalYear(fyStr);
+  const startDate = new Date(startYear, 3, 1, 0, 0, 0); // 1st April
+  const endDate = new Date(endYear, 2, 31, 23, 59, 59, 999); // 31st March
+  return {
+    startYear,
+    endYear,
+    startDateStr: `01/04/${startYear}`,
+    endDateStr: `31/03/${endYear}`,
+    startDate,
+    endDate
+  };
+}
+
+export function isDateInFiscalYear(dateStr: string, fyStr: string): boolean {
+  if (!dateStr || !fyStr) return true;
+  const targetFY = getFiscalYearFromDate(dateStr);
+  const cleanFY = fyStr.trim();
+  const { startYear } = parseFiscalYear(cleanFY);
+  const targetParsed = parseFiscalYear(targetFY);
+  return startYear === targetParsed.startYear;
+}
+
+export function validateDateInFiscalYear(
+  dateStr: string,
+  fiscalYear: string = '2026-27'
+): {
+  isValid: boolean;
+  startYear: number;
+  endYear: number;
+  startDateStr: string;
+  endDateStr: string;
+  messagePa?: string;
+  messageEn?: string;
+} {
+  const range = getFiscalYearDateRange(fiscalYear);
+  const isValid = isDateInFiscalYear(dateStr, fiscalYear);
+  return {
+    isValid,
+    startYear: range.startYear,
+    endYear: range.endYear,
+    startDateStr: range.startDateStr,
+    endDateStr: range.endDateStr,
+    messagePa: isValid
+      ? undefined
+      : `ਚੇਤਾਵਨੀ: ਦਰਜ ਕੀਤੀ ਮਿਤੀ (${dateStr}) ਚੁਣੇ ਹੋਏ ਵਿੱਤੀ ਸਾਲ ${fiscalYear} (${range.startDateStr} ਤੋਂ ${range.endDateStr}) ਦੇ ਘੇਰੇ ਵਿੱਚ ਨਹੀਂ ਆਉਂਦੀ!`,
+    messageEn: isValid
+      ? undefined
+      : `Warning: Entered date (${dateStr}) falls outside the active fiscal year ${fiscalYear} (${range.startDateStr} to ${range.endDateStr})!`
+  };
+}
+
+export function isRecordInFiscalYear(
+  recordDate?: string,
+  recordFiscalYear?: string,
+  targetFiscalYear: string = '2026-27'
+): boolean {
+  if (!targetFiscalYear || targetFiscalYear === 'ALL') return true;
+  if (recordFiscalYear) {
+    const { startYear: rStart } = parseFiscalYear(recordFiscalYear);
+    const { startYear: tStart } = parseFiscalYear(targetFiscalYear);
+    if (rStart === tStart) return true;
+  }
+  if (recordDate) {
+    return isDateInFiscalYear(recordDate, targetFiscalYear);
+  }
+  return true;
+}
+
 

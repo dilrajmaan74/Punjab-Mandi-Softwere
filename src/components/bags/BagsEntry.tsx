@@ -33,7 +33,8 @@ import {
   autoFormatDate,
   formatCurrency,
   calculateAutomaticLabour,
-  calculateMoistureCut
+  calculateMoistureCut,
+  isRecordInFiscalYear
 } from '../../utils/calculations';
 import { BagsEntryRecord, BardanaType, LabourAndDeductions, CropFilterType } from '../../types/mandi';
 import { SearchableSelect, SearchableSelectOption } from '../common/SearchableSelect';
@@ -73,7 +74,10 @@ export const BagsEntry: React.FC = () => {
     language,
     activeCrop,
     setActiveCrop,
-    activeCropConfig
+    activeCropConfig,
+    activeFiscalYear,
+    isYearLocked,
+    validateDateInFiscalYear
   } = useMandi();
   const isEn = language === 'en';
   const { notifySaveSuccess, notifyDeleteSuccess, confirmDelete, notifyError } = useNotification();
@@ -284,9 +288,9 @@ export const BagsEntry: React.FC = () => {
 
   const [savedCropFilter, setSavedCropFilter] = useState<CropFilterType>('ALL');
 
-  // Filtered saved entries for quick search, crop filter, and editing
+  // Filtered saved entries for quick search, crop filter, active fiscal year, and editing
   const filteredSavedEntries = useMemo(() => {
-    let list = bagsEntries;
+    let list = bagsEntries.filter((b) => isRecordInFiscalYear(b.date, b.fiscalYear, activeFiscalYear));
     if (savedCropFilter !== 'ALL') {
       list = list.filter((b) => (b.cropType || 'PADDY') === savedCropFilter);
     }
@@ -574,9 +578,25 @@ export const BagsEntry: React.FC = () => {
           {/* Left 2 Columns: Input Controls */}
           <div className="lg:col-span-2 space-y-4">
             <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xs space-y-3.5">
-              <h3 className="font-black text-slate-900 text-xs sm:text-sm border-b border-slate-100 pb-2">
-                {isEn ? '1. Date & Farmer Selection' : '1. ਮਿਤੀ ਤੇ ਕਿਸਾਨ ਦੀ ਚੋਣ (Date & Farmer Selection)'}
-              </h3>
+              {isYearLocked(activeFiscalYear) && (
+                <div className="bg-rose-50 border border-rose-300 text-rose-800 rounded-xl p-3 text-xs font-bold flex items-center gap-2">
+                  <span className="text-base">🔒</span>
+                  <span>
+                    {isEn
+                      ? `Fiscal Year ${activeFiscalYear} is Locked/Frozen. Please unlock to add or edit records.`
+                      : `ਵਿੱਤੀ ਸਾਲ ${activeFiscalYear} ਲਾਕ / ਫਰੀਜ਼ ਹੈ। ਨਵੀਂ ਐਂਟਰੀ ਕਰਨ ਲਈ ਸਾਲ ਅਨਲਾਕ ਕਰੋ।`}
+                  </span>
+                </div>
+              )}
+
+              <div className="flex items-center justify-between border-b border-slate-100 pb-2 flex-wrap gap-2">
+                <h3 className="font-black text-slate-900 text-xs sm:text-sm">
+                  {isEn ? '1. Date & Farmer Selection' : '1. ਮਿਤੀ ਤੇ ਕਿਸਾਨ ਦੀ ਚੋਣ (Date & Farmer Selection)'}
+                </h3>
+                <span className="text-[11px] font-mono font-bold bg-slate-100 text-slate-700 px-2 py-0.5 rounded border border-slate-200">
+                  FY: {activeFiscalYear}
+                </span>
+              </div>
 
               {/* Date Input with Auto-Formatting & Calendar Picker */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -587,9 +607,15 @@ export const BagsEntry: React.FC = () => {
                     label={isEn ? "Date (DD/MM/YYYY)" : "ਮਿਤੀ (Date - DD/MM/YYYY)"}
                     required
                   />
-                  <span className="text-[10px] text-slate-400">
-                    {isEn ? 'Click calendar icon to pick date' : "ਕੈਲੰਡਰ ਆਈਕਨ 'ਤੇ ਕਲਿੱਕ ਕਰਕੇ ਮਿਤੀ ਚੁਣੋ"}
-                  </span>
+                  {!validateDateInFiscalYear(dateInput, activeFiscalYear).isValid ? (
+                    <div className="text-[10px] text-amber-700 bg-amber-50 border border-amber-300 rounded px-1.5 py-0.5 mt-1 font-bold">
+                      ⚠️ {isEn ? validateDateInFiscalYear(dateInput, activeFiscalYear).messageEn : validateDateInFiscalYear(dateInput, activeFiscalYear).messagePa}
+                    </div>
+                  ) : (
+                    <span className="text-[10px] text-slate-400">
+                      {isEn ? 'Click calendar icon to pick date' : "ਕੈਲੰਡਰ ਆਈਕਨ 'ਤੇ ਕਲਿੱਕ ਕਰਕੇ ਮਿਤੀ ਚੁਣੋ"}
+                    </span>
+                  )}
                 </div>
 
                 {/* Farmer Selection Dropdown with Search Box */}

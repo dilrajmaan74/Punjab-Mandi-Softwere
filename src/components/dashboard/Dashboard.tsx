@@ -31,7 +31,9 @@ import {
   formatKgToQulKg,
   formatCurrency,
   FIXED_BAG_WEIGHT_KG,
-  FIXED_RATE_PER_QTL
+  FIXED_RATE_PER_QTL,
+  isRecordInFiscalYear,
+  getFiscalYearDateRange
 } from '../../utils/calculations';
 
 export const Dashboard: React.FC = () => {
@@ -48,7 +50,9 @@ export const Dashboard: React.FC = () => {
     activeCrop,
     setActiveCrop,
     activeCropConfig,
-    language
+    language,
+    activeFiscalYear,
+    isYearLocked
   } = useMandi();
 
   const isEn = language === 'en';
@@ -60,11 +64,24 @@ export const Dashboard: React.FC = () => {
     setDashboardCropFilter(activeCrop);
   }, [activeCrop]);
 
-  // Filter bags entries by selected crop
+  // Filter bags entries by active fiscal year and selected crop
   const filteredBagsEntries = useMemo(() => {
-    if (dashboardCropFilter === 'ALL') return bagsEntries;
-    return bagsEntries.filter((b) => (b.cropType || 'PADDY') === dashboardCropFilter);
-  }, [bagsEntries, dashboardCropFilter]);
+    let list = bagsEntries.filter((b) => isRecordInFiscalYear(b.date, b.fiscalYear, activeFiscalYear));
+    if (dashboardCropFilter !== 'ALL') {
+      list = list.filter((b) => (b.cropType || 'PADDY') === dashboardCropFilter);
+    }
+    return list;
+  }, [bagsEntries, dashboardCropFilter, activeFiscalYear]);
+
+  // Filter daily purchases by active fiscal year
+  const filteredPurchaseRecords = useMemo(() => {
+    return dailyPurchaseRecords.filter((p) => isRecordInFiscalYear(p.date, p.fiscalYear, activeFiscalYear));
+  }, [dailyPurchaseRecords, activeFiscalYear]);
+
+  // Filter leftings by active fiscal year
+  const filteredLeftingRecords = useMemo(() => {
+    return leftingRecords.filter((l) => isRecordInFiscalYear(l.dispatchDate, l.fiscalYear, activeFiscalYear));
+  }, [leftingRecords, activeFiscalYear]);
 
   // Calculate actual aggregates from filtered entered records
   const totalBagsCount = filteredBagsEntries.reduce((sum, b) => sum + (b.bags || 0), 0);
@@ -126,6 +143,13 @@ export const Dashboard: React.FC = () => {
               </button>
             );
           })}
+          <div className="flex items-center gap-1.5 bg-slate-900 text-white px-2.5 py-1 rounded-lg text-xs font-mono font-bold shadow-2xs">
+            <span className="text-emerald-400 font-sans text-[11px] font-bold">ਵਿੱਤੀ ਸਾਲ:</span>
+            <span>{activeFiscalYear}</span>
+            {isYearLocked(activeFiscalYear) ? (
+              <span className="text-[10px] text-rose-400 font-sans ml-1">🔒 ਲਾਕ</span>
+            ) : null}
+          </div>
         </div>
       </div>
 

@@ -26,6 +26,7 @@ import {
   parseSpokenMandiText,
   playVoiceFeedbackTone
 } from '../../utils/mandiVoiceParser';
+import { parseVoiceWithGemini } from '../../services/aiService';
 
 export type { ParsedVoiceData };
 
@@ -52,6 +53,8 @@ export const VoiceWeighmentAssistant: React.FC<VoiceWeighmentAssistantProps> = (
   const [isEditingTranscript, setIsEditingTranscript] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [statusState, setStatusState] = useState<'IDLE' | 'LISTENING' | 'DISCONNECTED_READY'>('IDLE');
+  const [isAiRefining, setIsAiRefining] = useState(false);
+  const [isAiVerified, setIsAiVerified] = useState(false);
 
   // Settings & State
   const [autoDisconnectDelay, setAutoDisconnectDelay] = useState<number>(3000);
@@ -247,8 +250,48 @@ export const VoiceWeighmentAssistant: React.FC<VoiceWeighmentAssistantProps> = (
         setIsListening(false);
         isListeningRef.current = false;
         setInterimText('');
-        if (transcriptRef.current.trim().length > 0) {
+        const finalText = transcriptRef.current.trim();
+        if (finalText.length > 0) {
           setStatusState('DISCONNECTED_READY');
+          // Trigger Gemini AI deep parsing
+          setIsAiRefining(true);
+          parseVoiceWithGemini(
+            finalText,
+            farmersRef.current.map((f) => ({
+              id: f.id,
+              name: f.farmerName,
+              namePa: f.farmerNamePa || f.farmerName,
+              village: f.village || ''
+            }))
+          )
+            .then((aiData) => {
+              if (aiData) {
+                setParsedData((prev) => {
+                  const base = prev || parseSpokenMandiText(finalText, farmersRef.current);
+                  const matched =
+                    farmersRef.current.find((f) => f.id === aiData.matchedFarmerId) ||
+                    base.matchedFarmer;
+                  return {
+                    ...base,
+                    farmerName: aiData.farmerName || base.farmerName,
+                    farmerNamePa: aiData.farmerNamePa || base.farmerNamePa,
+                    matchedFarmer: matched,
+                    bags: aiData.bags !== undefined && aiData.bags > 0 ? aiData.bags : base.bags,
+                    bhartiKg: aiData.bhartiKg || base.bhartiKg,
+                    weightQtl: aiData.weightQtl || base.weightQtl,
+                    rate: aiData.rate || base.rate,
+                    crop: (aiData.crop as any) || base.crop,
+                    labourPakki: aiData.labourPakki ?? base.labourPakki,
+                    labourDouble: aiData.labourDouble ?? base.labourDouble,
+                    labourSukhi: aiData.labourSukhi ?? base.labourSukhi,
+                    confidence: 0.98
+                  };
+                });
+                setIsAiVerified(true);
+              }
+            })
+            .catch((err) => console.warn('AI Refine error:', err))
+            .finally(() => setIsAiRefining(false));
         } else {
           setStatusState('IDLE');
         }
@@ -408,14 +451,29 @@ export const VoiceWeighmentAssistant: React.FC<VoiceWeighmentAssistantProps> = (
                 <Sparkles className="w-4 h-4 text-emerald-600" />
                 {isEn ? 'Super Smart Voice Typing' : 'ਸਮਾਰਟ ਬੋਲੀ ਤੇ ਤੁਲਾਈ ਵੋਇਸ ਅਸਿਸਟੈਂਟ'}
               </span>
-              <span className="text-[10px] bg-emerald-700 text-white font-black px-2 py-0.5 rounded-full shadow-2xs">
-                PRO AI
+              <span className="text-[10px] bg-emerald-700 text-white font-black px-2 py-0.5 rounded-full shadow-2xs flex items-center gap-1">
+                <Sparkles className="w-3 h-3 text-amber-300" />
+                <span>Gemini AI</span>
               </span>
+              {isAiVerified && (
+                <span className="text-[9px] bg-indigo-100 text-indigo-800 font-bold px-1.5 py-0.2 rounded border border-indigo-300">
+                  ✨ AI Verified
+                </span>
+              )}
             </div>
 
             {/* Current Listening Status & Prompt Guidance */}
             <div className="flex items-center gap-2 mt-0.5">
-              {isListening ? (
+              {isAiRefining ? (
+                <div className="flex items-center gap-1.5 text-[11px] font-bold text-indigo-700 animate-pulse">
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin text-indigo-600" />
+                  <span>
+                    {isEn
+                      ? 'Gemini 3.8 Flash AI is understanding Punjabi nuances...'
+                      : 'Gemini AI ਪੰਜਾਬੀ ਬੋਲ ਦਾ ਡੂੰਘਾ ਵਿਸ਼ਲੇਸ਼ਣ ਕਰ ਰਿਹਾ ਹੈ...'}
+                  </span>
+                </div>
+              ) : isListening ? (
                 <div className="flex items-center gap-2">
                   <span className="flex items-center gap-1 text-[11px] font-bold text-rose-700">
                     <span className="w-2 h-2 rounded-full bg-rose-600 animate-ping inline-block"></span>

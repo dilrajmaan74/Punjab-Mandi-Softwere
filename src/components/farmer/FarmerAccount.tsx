@@ -82,6 +82,7 @@ import {
   saveBagTransfer
 } from '../../utils/farmerAdjustmentsStorage';
 import { openWhatsApp, generateAdvanceWhatsAppMessage } from '../../utils/whatsappNotification';
+import { AiWhatsAppVoiceModal } from '../common/AiWhatsAppVoiceModal';
 
 export interface FarmerYearlyProfitLossModalProps {
   isOpen: boolean;
@@ -272,7 +273,11 @@ export const FarmerAccount: React.FC = () => {
     activeCrop,
     activeFirm,
     settings,
-    language
+    language,
+    fiscalYears,
+    activeFiscalYear,
+    getMultiYearFarmerAccount,
+    getFarmerOpeningBalanceForYear
   } = useMandi();
 
   const isEn = language === 'en';
@@ -392,11 +397,28 @@ export const FarmerAccount: React.FC = () => {
     reason: ''
   });
 
-  // Fetch current farmer and complete account with optional season filter
+  // AI Voice-Note & WhatsApp Modal State
+  const [isAiVoiceModalOpen, setIsAiVoiceModalOpen] = useState(false);
+
+  // Fiscal Year Filter & Multi-Year State
+  const [selectedFiscalYearFilter, setSelectedFiscalYearFilter] = useState<string>(activeFiscalYear);
+  const [showMultiYearCard, setShowMultiYearCard] = useState<boolean>(false);
+
+  useEffect(() => {
+    setSelectedFiscalYearFilter(activeFiscalYear);
+  }, [activeFiscalYear]);
+
+  // Fetch current farmer and complete account with optional season & fiscal year filter
   const currentFarmer = farmers.find((f) => f.id === selectedFarmerId);
   const accountSummary: FarmerAccountSummary | null = selectedFarmerId
-    ? getCompleteFarmerAccount(selectedFarmerId, selectedSeasonFilter)
+    ? getCompleteFarmerAccount(selectedFarmerId, selectedSeasonFilter, selectedFiscalYearFilter)
     : null;
+
+  // Multi-Year Summary across all financial years
+  const multiYearData = useMemo(() => {
+    if (!selectedFarmerId) return null;
+    return getMultiYearFarmerAccount(selectedFarmerId);
+  }, [selectedFarmerId, getMultiYearFarmerAccount, accountSummary]);
 
   // Handle Season Settlement & Carrying forward to opening balance
   const handleConfirmSettlement = (settlementData: {
@@ -936,7 +958,26 @@ export const FarmerAccount: React.FC = () => {
           </div>
 
           {/* Search & Select Farmer + Bulk Broadcast Action */}
-          <div className="flex flex-col sm:flex-row items-center gap-2.5 w-full md:w-auto">
+          <div className="flex flex-col sm:flex-row items-center gap-2.5 w-full md:w-auto flex-wrap">
+            {/* Fiscal Year Filter Dropdown */}
+            <div className="flex items-center gap-1.5 bg-emerald-50 border border-emerald-300 rounded-xl px-2.5 py-1.5 shadow-2xs">
+              <Calendar className="w-3.5 h-3.5 text-emerald-700" />
+              <span className="text-[11px] font-black text-emerald-950 hidden sm:inline">ਵਿੱਤੀ ਸਾਲ:</span>
+              <select
+                value={selectedFiscalYearFilter}
+                onChange={(e) => setSelectedFiscalYearFilter(e.target.value)}
+                className="bg-transparent text-xs font-black font-mono text-emerald-950 focus:outline-none cursor-pointer"
+                title="ਵਿੱਤੀ ਸਾਲ ਅਨੁਸਾਰ ਖਾਤਾ ਵੇਖੋ"
+              >
+                {fiscalYears.map((yr) => (
+                  <option key={yr} value={yr}>
+                    {yr} {yr === activeFiscalYear ? '(ਸਰਗਰਮ)' : ''}
+                  </option>
+                ))}
+                <option value="ALL">ਸਾਰੇ ਸਾਲ (All Years)</option>
+              </select>
+            </div>
+
             {/* Season Filter Dropdown */}
             <div className="flex items-center gap-1.5 bg-amber-50 border border-amber-300 rounded-xl px-2.5 py-1.5 shadow-2xs">
               <span className="text-[11px] font-black text-amber-950 flex items-center gap-1">
@@ -953,6 +994,21 @@ export const FarmerAccount: React.FC = () => {
                 <option value="PADDY">ਸਾਉਣੀ (Paddy Season)</option>
               </select>
             </div>
+
+            {/* Toggle Multi-Year Summary Card */}
+            <button
+              type="button"
+              onClick={() => setShowMultiYearCard((prev) => !prev)}
+              className={`px-3 py-1.5 text-xs font-black rounded-xl border transition flex items-center gap-1.5 cursor-pointer shadow-2xs ${
+                showMultiYearCard
+                  ? 'bg-slate-900 text-white border-slate-900'
+                  : 'bg-white text-slate-700 hover:bg-slate-100 border-slate-300'
+              }`}
+              title="ਸਾਰੇ ਵਿੱਤੀ ਸਾਲਾਂ ਦਾ ਤੁਲਨਾਤਮਕ ਖਾਤਾ (Multi-Year View)"
+            >
+              <Calendar className="w-3.5 h-3.5 text-emerald-500" />
+              <span>{showMultiYearCard ? 'ਬਹੁ-ਸਾਲਾ ਬੰਦ ਕਰੋ' : 'ਬਹੁ-ਸਾਲਾ ਖਾਤਾ (Multi-Year)'}</span>
+            </button>
 
             <button
               onClick={() => setIsBulkWhatsAppOpen(true)}
@@ -1152,6 +1208,17 @@ export const FarmerAccount: React.FC = () => {
                   >
                     <Send className="w-4 h-4 text-white" />
                     <span>WhatsApp Share / ਵ੍ਹਟਸਐਪ</span>
+                  </button>
+
+                  {/* AI Punjabi Voice-Note & WhatsApp Statement Button */}
+                  <button
+                    type="button"
+                    onClick={() => setIsAiVoiceModalOpen(true)}
+                    className="px-3.5 py-2.5 bg-gradient-to-r from-teal-700 to-emerald-700 hover:from-teal-600 hover:to-emerald-600 text-white rounded-xl text-xs font-black flex items-center gap-1.5 shadow-sm transition-all cursor-pointer border border-emerald-400/40"
+                    title="ਕਿਸਾਨ ਲਈ AI ਪੰਜਾਬੀ ਬੋਲਦਾ ਵੋਇਸ-ਨੋਟ ਅਤੇ ਵਟਸਐਪ (Gemini AI)"
+                  >
+                    <Volume2 className="w-4 h-4 text-amber-300" />
+                    <span>AI Voice ਵਟਸਐਪ</span>
                   </button>
 
                   {/* Season Settlement / ਖਾਤਾ ਪੱਕਾ ਕਰਨਾ Button */}
@@ -3882,6 +3949,28 @@ export const FarmerAccount: React.FC = () => {
         onClose={() => setIsBulkWhatsAppOpen(false)}
         preSelectedFarmerId={currentFarmer?.id}
       />
+
+      {/* AI Voice-Note & WhatsApp Statement Modal */}
+      {isAiVoiceModalOpen && currentFarmer && accountSummary && (
+        <AiWhatsAppVoiceModal
+          isOpen={isAiVoiceModalOpen}
+          onClose={() => setIsAiVoiceModalOpen(false)}
+          type="SETTLEMENT"
+          data={{
+            season: selectedSeasonFilter || 'ALL',
+            purchasedBags: accountSummary.purchasedBags || accountSummary.mandiArrivalBags,
+            purchasedWeight: accountSummary.purchasedWeightDisplay || accountSummary.mandiArrivalDisplay,
+            totalGrossAmount: accountSummary.totalGrossAmount,
+            totalLabourDeductions: accountSummary.totalLabourDeductions,
+            netPayableAmount: accountSummary.netPayableAmount,
+            paidAmount: accountSummary.paidAmount,
+            totalAdvanceAmount: accountSummary.totalAdvanceAmount,
+            netBalance: accountSummary.finalBalance
+          }}
+          farmer={currentFarmer}
+          firm={activeFirm}
+        />
+      )}
 
       {/* Season Settlement Modal */}
       {isSettlementModalOpen && currentFarmer && accountSummary && (

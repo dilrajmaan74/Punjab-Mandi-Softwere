@@ -45,6 +45,7 @@ export interface Farmer {
   openingBalance?: number; // ਪਿਛਲਾ ਓਪਨਿੰਗ ਬੈਲੇਂਸ (+ ਦੇਣਯੋਗ, - ਬਕਾਇਆ)
   openingBalanceDate?: string; // ਓਪਨਿੰਗ ਬੈਲੇਂਸ ਮਿਤੀ
   openingBalanceSeason?: string; // ਸੀਜ਼ਨ ਜਿਵੇਂ "ਹਾੜ੍ਹੀ 2025"
+  yearOpeningBalances?: Record<string, FarmerYearOpeningBalance>; // ਸਾਲ-ਵਾਰ ਸ਼ੁਰੂਆਤੀ ਬੈਲੈਂਸ (e.g. "2026-27": { amount, type: 'DR'|'CR' })
   
   firmId?: string;
   createdAt: string;
@@ -52,6 +53,14 @@ export interface Farmer {
   isDeleted?: boolean;
   deletedAt?: string;
   deletedBy?: string;
+}
+
+export interface FarmerYearOpeningBalance {
+  amount: number; // in ₹
+  type: 'DR' | 'CR'; // DR = ਲੈਣੇ ਹਨ (Farmer owes Arhtiya), CR = ਦੇਣੇ ਹਨ (Arhtiya owes Farmer)
+  date?: string; // e.g. "01/04/2026"
+  notes?: string; // e.g. "2025-26 ਦਾ ਕਲੋਜ਼ਿੰਗ ਬੈਲੈਂਸ ਕੈਰੀ ਫਾਰਵਰਡ"
+  isCarriedForward?: boolean;
 }
 
 export type AdvanceCategory = 

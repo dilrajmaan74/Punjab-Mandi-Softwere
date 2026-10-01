@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useMandi } from '../../context/MandiContext';
-import { Printer, X, FileText, User, MessageSquare, Send, Smartphone, QrCode } from 'lucide-react';
+import { Printer, X, FileText, User, MessageSquare, Send, Smartphone, QrCode, Volume2, Sparkles } from 'lucide-react';
 import { formatCurrency } from '../../utils/calculations';
 import { generateBagsWeighmentWhatsAppMessage, openWhatsApp } from '../../utils/whatsappNotification';
 import { generateParchiQrCode } from '../../utils/qrCodeGenerator';
+import { AiWhatsAppVoiceModal } from './AiWhatsAppVoiceModal';
 
 export const ReceiptModal: React.FC = () => {
   const { activeReceipt, setActiveReceipt, settings, firms, activeFirm, language } = useMandi();
@@ -13,6 +14,7 @@ export const ReceiptModal: React.FC = () => {
   const [printMode, setPrintMode] = useState<'standard' | 'thermal'>('standard');
   const [showCopySuccess, setShowCopySuccess] = useState(false);
   const [qrCodeUrl, setQrCodeUrl] = useState<string>('');
+  const [isAiVoiceModalOpen, setIsAiVoiceModalOpen] = useState<boolean>(false);
 
   // Generate QR Code for active weighment receipt
   useEffect(() => {
@@ -129,6 +131,17 @@ export const ReceiptModal: React.FC = () => {
                 <span>{isEn ? 'Thermal (3")' : 'ਥਰਮਲ (3-inch)'}</span>
               </button>
             </div>
+
+            {/* AI Voice WhatsApp Button */}
+            <button
+              type="button"
+              onClick={() => setIsAiVoiceModalOpen(true)}
+              className="bg-gradient-to-r from-teal-700 to-emerald-700 hover:from-teal-600 hover:to-emerald-600 text-white font-extrabold px-2.5 py-1.5 rounded-lg text-xs flex items-center gap-1.5 shadow-2xs transition active:scale-95 cursor-pointer border border-emerald-400/40"
+              title={isEn ? 'AI Voice WhatsApp Note (Gemini)' : 'ਕਿਸਾਨ ਲਈ AI ਪੰਜਾਬੀ ਵੋਇਸ-ਨੋਟ ਤੇ ਵਟਸਐਪ'}
+            >
+              <Volume2 className="w-3.5 h-3.5 text-amber-300" />
+              <span>{isEn ? 'AI Voice WA' : 'AI ਆਵਾਜ਼ ਵਟਸਐਪ'}</span>
+            </button>
 
             {/* WhatsApp Send Button */}
             <button
@@ -553,6 +566,14 @@ export const ReceiptModal: React.FC = () => {
             </button>
             <button
               type="button"
+              onClick={() => setIsAiVoiceModalOpen(true)}
+              className="px-3 py-2 bg-gradient-to-r from-teal-700 to-emerald-700 hover:from-teal-600 hover:to-emerald-600 text-white font-bold rounded-lg text-xs flex items-center gap-1.5 shadow-2xs transition active:scale-95 cursor-pointer border border-emerald-400/40"
+            >
+              <Volume2 className="w-3.5 h-3.5 text-amber-300" />
+              <span>{isEn ? 'AI Voice WhatsApp' : 'AI ਆਵਾਜ਼ ਵਟਸਐਪ'}</span>
+            </button>
+            <button
+              type="button"
               onClick={handleSendWhatsApp}
               className="px-3 py-2 bg-emerald-700 hover:bg-emerald-600 text-white font-bold rounded-lg text-xs flex items-center gap-1.5 shadow-2xs transition active:scale-95 cursor-pointer"
             >
@@ -581,6 +602,32 @@ export const ReceiptModal: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* AI Voice-Note & WhatsApp Modal */}
+      <AiWhatsAppVoiceModal
+        isOpen={isAiVoiceModalOpen}
+        onClose={() => setIsAiVoiceModalOpen(false)}
+        type="WEIGHMENT"
+        data={{
+          slipNumber: activeReceipt.entryNumber,
+          date: activeReceipt.date,
+          crop: activeReceipt.cropType || 'WHEAT',
+          bags: activeReceipt.bags,
+          bhartiKg: activeReceipt.weightPerBagKg || 37.5,
+          weightQtl: activeReceipt.grandTotalKg
+            ? activeReceipt.grandTotalKg / 100
+            : (activeReceipt.bags * (activeReceipt.weightPerBagKg || 37.5)) / 100,
+          rate: (activeReceipt as any).rate || 2475,
+          totalAmount: (activeReceipt as any).totalAmount || 0
+        }}
+        farmer={{
+          farmerName: activeReceipt.farmerName,
+          farmerNamePa: activeReceipt.farmerNamePa,
+          village: activeReceipt.farmerVillagePa || activeReceipt.farmerVillage,
+          mobile: activeReceipt.farmerMobile
+        }}
+        firm={receiptFirm}
+      />
     </div>
   );
 };

@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import {
   Farmer,
+  FarmerYearOpeningBalance,
   BankDetails,
   BagsEntryRecord,
   BardanaReceivedRecord,
@@ -41,7 +42,13 @@ import {
   formatDateToDDMMYYYY,
   FIXED_BAG_WEIGHT_KG,
   FIXED_RATE_PER_QTL,
-  calculateAutomaticLabour
+  calculateAutomaticLabour,
+  getFiscalYearFromDate,
+  parseFiscalYear,
+  getFiscalYearDateRange,
+  isDateInFiscalYear,
+  validateDateInFiscalYear,
+  isRecordInFiscalYear
 } from '../utils/calculations';
 import { isSupabaseConfigured } from '../lib/supabase';
 import {
@@ -137,7 +144,7 @@ export const DEFAULT_FIRM: MandiFirm = {
 };
 
 export const DEFAULT_FISCAL_YEARS = ['2024-25', '2025-26', '2026-27'];
-export const DEFAULT_ACTIVE_YEAR = '2025-26';
+export const DEFAULT_ACTIVE_YEAR = '2026-27';
 
 export const DEFAULT_SELLERS: SellerMaster[] = [
   {
@@ -210,7 +217,44 @@ interface MandiContextType {
   fiscalYears: string[];
   activeFiscalYear: string;
   setActiveFiscalYear: (year: string) => void;
-  addFiscalYear: (year: string) => void;
+  addFiscalYear: (year: string) => boolean;
+  lockedYears: string[];
+  isYearLocked: (year?: string) => boolean;
+  toggleYearLock: (year: string) => boolean;
+  carryForwardBalancesToNextYear: (fromYear: string, toYear: string) => {
+    success: boolean;
+    carriedFarmersCount: number;
+    totalDr: number;
+    totalCr: number;
+  };
+  getFarmerOpeningBalanceForYear: (farmerId: string, fiscalYear?: string) => FarmerYearOpeningBalance | null;
+  setFarmerOpeningBalanceForYear: (farmerId: string, balance: FarmerYearOpeningBalance, fiscalYear?: string) => void;
+  validateDateInFiscalYear: (dateStr: string, fiscalYear?: string) => {
+    isValid: boolean;
+    startYear: number;
+    endYear: number;
+    startDateStr: string;
+    endDateStr: string;
+    messagePa?: string;
+    messageEn?: string;
+  };
+  getMultiYearFarmerAccount: (farmerId: string) => {
+    farmer: Farmer;
+    yearSummaries: Array<{
+      fiscalYear: string;
+      openingBalance: FarmerYearOpeningBalance | null;
+      grossAmount: number;
+      labourDeductions: number;
+      netPayable: number;
+      advancesTotal: number;
+      paymentsTotal: number;
+      closingBalance: number;
+      closingType: 'DR' | 'CR';
+      netRaw: number;
+    }>;
+    netGrandBalance: number;
+    netGrandType: 'DR' | 'CR';
+  } | null;
 
   // Multi-Seller Master State & Operations
   sellers: SellerMaster[];
@@ -259,7 +303,7 @@ interface MandiContextType {
   saveFarmerBankDetails: (farmerId: string, bankDetails: BankDetails) => boolean;
 
   // Farmer Account & Summaries
-  getCompleteFarmerAccount: (farmerId: string, cropFilter?: CropFilterType) => FarmerAccountSummary | null;
+  getCompleteFarmerAccount: (farmerId: string, cropFilter?: CropFilterType, fiscalYearFilter?: string) => FarmerAccountSummary | null;
 
   // Payment Operations
   addFarmerPayment: (payment: Omit<FarmerPaymentRecord, 'id' | 'createdAt'>) => FarmerPaymentRecord;
@@ -391,6 +435,7 @@ const LOCAL_STORAGE_KEYS = {
   ACTIVE_FIRM_ID: 'punjab_mandi_active_firm_v2',
   FISCAL_YEARS: 'punjab_mandi_fiscal_years_v2',
   ACTIVE_FISCAL_YEAR: 'punjab_mandi_active_fiscal_year_v2',
+  LOCKED_YEARS: 'punjab_mandi_locked_years_v2',
   SELLERS: 'punjab_mandi_sellers_v2',
   TRUCKS: 'punjab_mandi_trucks_v2',
   LABOUR_MATES: 'punjab_mandi_labour_mates_v2',
@@ -755,6 +800,15 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   });
 
+  const [lockedYears, setLockedYears] = useState<string[]>(() => {
+    try {
+      const stored = localStorage.getItem(LOCAL_STORAGE_KEYS.LOCKED_YEARS);
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
+
   // 19. Multi-Seller Master Management
   const [sellers, setSellers] = useState<SellerMaster[]>(() => {
     try {
@@ -1013,6 +1067,10 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   useEffect(() => {
     localStorage.setItem(LOCAL_STORAGE_KEYS.ACTIVE_FISCAL_YEAR, activeFiscalYear);
   }, [activeFiscalYear]);
+
+  useEffect(() => {
+    localStorage.setItem(LOCAL_STORAGE_KEYS.LOCKED_YEARS, JSON.stringify(lockedYears));
+  }, [lockedYears]);
 
   useEffect(() => {
     localStorage.setItem(LOCAL_STORAGE_KEYS.LANGUAGE, language);
@@ -1311,6 +1369,7 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   ): FarmerPaymentRecord => {
     const newRecord: FarmerPaymentRecord = {
       ...paymentData,
+      fiscalYear: paymentData.fiscalYear || activeFiscalYear,
       id: `PAY-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       createdAt: new Date().toISOString()
     };
@@ -1385,6 +1444,7 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     const newRecord: FarmerAdvanceRecord = {
       ...advanceData,
+      fiscalYear: advanceData.fiscalYear || activeFiscalYear,
       id: nextId,
       date: startDate,
       startDate: startDate,
@@ -1727,6 +1787,7 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   ): BoliRecord => {
     const newRecord: BoliRecord = {
       ...recordData,
+      fiscalYear: recordData.fiscalYear || activeFiscalYear,
       id: `BOLI-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       createdAt: new Date().toISOString()
     };
@@ -1828,8 +1889,70 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   /**
+   * Year-wise Opening Balance Operations per Farmer
+   */
+  const getFarmerOpeningBalanceForYear = (
+    farmerId: string,
+    fiscalYear?: string
+  ): FarmerYearOpeningBalance | null => {
+    const f = getFarmerById(farmerId);
+    if (!f) return null;
+    const yr = fiscalYear || activeFiscalYear;
+    if (f.yearOpeningBalances && f.yearOpeningBalances[yr]) {
+      return f.yearOpeningBalances[yr];
+    }
+    // If base year and has legacy opening balance
+    if (yr === '2024-25' && f.openingBalance !== undefined && f.openingBalance !== null && Number(f.openingBalance) !== 0) {
+      const amt = Number(f.openingBalance) || 0;
+      return {
+        amount: Math.abs(amt),
+        type: amt >= 0 ? 'CR' : 'DR',
+        date: f.openingBalanceDate || '01/04/2024',
+        notes: f.openingBalanceSeason || 'ਸ਼ੁਰੂਆਤੀ ਬਕਾਇਆ (Base Opening)'
+      };
+    }
+    return null;
+  };
+
+  const setFarmerOpeningBalanceForYear = (
+    farmerId: string,
+    balance: FarmerYearOpeningBalance,
+    fiscalYear?: string
+  ): void => {
+    const yr = fiscalYear || activeFiscalYear;
+    setFarmers((prev) => {
+      const updated = prev.map((f) => {
+        if (f.id === farmerId) {
+          const existingYearBalances = f.yearOpeningBalances || {};
+          return {
+            ...f,
+            yearOpeningBalances: {
+              ...existingYearBalances,
+              [yr]: balance
+            },
+            ...(yr === '2024-25'
+              ? {
+                  openingBalance: balance.type === 'CR' ? balance.amount : -balance.amount,
+                  openingBalanceDate: balance.date
+                }
+              : {})
+          };
+        }
+        return f;
+      });
+      const target = updated.find((f) => f.id === farmerId);
+      if (target) {
+        supabaseUpsertFarmer(target, activeFirmId).catch(console.error);
+      }
+      return updated;
+    });
+  };
+
+  /**
    * Get Complete A-to-Z Farmer Account Summary
    * Handles:
+   * - Scoped by target fiscal year or 'ALL'
+   * - Year-specific Opening Balance
    * - Main Farmer with sub-farmers linked (deducting linked purchases automatically)
    * - Linked Farmer linked to a main farmer
    * - Independent Farmer
@@ -1837,9 +1960,15 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
    * - Advances & Date-to-Date Interest Calculations
    * - Final Net Payable Balance
    */
-  const getCompleteFarmerAccount = (farmerId: string, cropFilter?: CropFilterType): FarmerAccountSummary | null => {
+  const getCompleteFarmerAccount = (
+    farmerId: string,
+    cropFilter?: CropFilterType,
+    fiscalYearFilter?: string
+  ): FarmerAccountSummary | null => {
     const farmer = getFarmerById(farmerId);
     if (!farmer) return null;
+
+    const targetFY = fiscalYearFilter || activeFiscalYear;
 
     // Filter by crop if requested and not 'ALL'
     const targetCrop = cropFilter !== undefined ? cropFilter : activeCrop;
@@ -1859,6 +1988,9 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     // 2. Mandi Arrival Entries (Bags Weighment for this farmer)
     const farmerArrivalEntries = bagsEntries.filter((b) => {
       if (b.farmerId !== farmerId) return false;
+      if (targetFY !== 'ALL' && !isRecordInFiscalYear(b.date, b.fiscalYear, targetFY)) {
+        return false;
+      }
       if (shouldFilterCrop) {
         const itemCrop = b.cropType || 'PADDY';
         return itemCrop === targetCrop;
@@ -1872,6 +2004,9 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     // 3. Direct Daily Purchase Entries for this farmer
     const farmerPurchaseEntries = dailyPurchaseRecords.filter((p) => {
       if (p.farmerId !== farmerId) return false;
+      if (targetFY !== 'ALL' && !isRecordInFiscalYear(p.date, p.fiscalYear, targetFY)) {
+        return false;
+      }
       if (shouldFilterCrop) {
         const itemCrop = p.cropType || 'PADDY';
         return itemCrop === targetCrop;
@@ -1893,6 +2028,9 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const subFarmerIds = linkedSubFarmers.map((s) => s.id);
       subPurchases = dailyPurchaseRecords.filter((p) => {
         if (!subFarmerIds.includes(p.farmerId)) return false;
+        if (targetFY !== 'ALL' && !isRecordInFiscalYear(p.date, p.fiscalYear, targetFY)) {
+          return false;
+        }
         if (shouldFilterCrop) {
           const itemCrop = p.cropType || 'PADDY';
           return itemCrop === targetCrop;
@@ -1983,6 +2121,9 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     // 8. Boli Records
     const customBoli = boliRecords.filter((b) => {
       if (b.farmerId !== farmerId) return false;
+      if (targetFY !== 'ALL' && !isRecordInFiscalYear(b.date, b.fiscalYear, targetFY)) {
+        return false;
+      }
       if (shouldFilterCrop) {
         const itemCrop = b.crop || 'PADDY';
         return itemCrop === targetCrop;
@@ -2022,7 +2163,13 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const totalGrossAmount = totalArrivalGrossAmount > 0 ? totalArrivalGrossAmount : purchasedAmount;
 
     // 11. Payments and Agency Purchase Settlements
-    const farmerPaymentEntries = farmerPayments.filter((p) => p.farmerId === farmerId);
+    const farmerPaymentEntries = farmerPayments.filter((p) => {
+      if (p.farmerId !== farmerId) return false;
+      if (targetFY !== 'ALL' && !isRecordInFiscalYear(p.date, p.fiscalYear, targetFY)) {
+        return false;
+      }
+      return true;
+    });
     const paidAmount = farmerPaymentEntries.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
     const totalAgencyPurchasePayment = paidAmount;
 
@@ -2031,10 +2178,21 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     // 13. Advances & Dynamic Date-to-Date Interest
     const todayStr = formatDateToDDMMYYYY(new Date());
-    const rawAdvances = farmerAdvances.filter((a) => a.farmerId === farmerId);
+    const fyDateRange = getFiscalYearDateRange(targetFY === 'ALL' ? activeFiscalYear : targetFY);
+    const isPastFiscalYear = fyDateRange.endDate < new Date();
+    const effectiveTillDate = isPastFiscalYear ? fyDateRange.endDateStr : todayStr;
+
+    const rawAdvances = farmerAdvances.filter((a) => {
+      if (a.farmerId !== farmerId) return false;
+      if (targetFY !== 'ALL' && !isRecordInFiscalYear(a.date, a.fiscalYear, targetFY)) {
+        return false;
+      }
+      return true;
+    });
+
     const recalculatedAdvances: FarmerAdvanceRecord[] = rawAdvances.map((adv) => {
       const startDate = adv.date || adv.startDate || todayStr;
-      const tillDate = adv.interestTillDate || adv.endDate || todayStr;
+      const tillDate = adv.interestTillDate || adv.endDate || effectiveTillDate;
       const amount = Number(adv.amount) || 0;
       const monthlyInterestRate = Number(adv.monthlyInterestRate) || 0;
       const calc = calculateAdvanceInterest({
@@ -2077,18 +2235,63 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const totalAdvanceInterest = Math.round(recalculatedAdvances.reduce((sum, a) => sum + (Number(a.interestAmount) || 0), 0) * 100) / 100;
     const totalAdvanceAmount = Math.round(recalculatedAdvances.reduce((sum, a) => sum + (Number(a.totalPayableWithInterest) || 0), 0) * 100) / 100;
 
-    // 14. Final Balance (Net Payable - Total Advance with Interest + Opening Balance if any)
-    const farmerOpeningBalance = Number(farmer.openingBalance) || 0;
-    const finalBalance = Math.round((netPayableAmount - totalAdvanceAmount + farmerOpeningBalance) * 100) / 100;
-    const pendingAmount = Math.max(0, finalBalance);
+    // 14. Opening Balance for this Fiscal Year
+    let farmerOpeningBalance = 0;
+    let openingBalRecord: FarmerYearOpeningBalance | null = null;
+    if (targetFY !== 'ALL') {
+      const yearBal = getFarmerOpeningBalanceForYear(farmerId, targetFY);
+      if (yearBal) {
+        farmerOpeningBalance = yearBal.type === 'CR' ? yearBal.amount : -yearBal.amount;
+        openingBalRecord = yearBal;
+      } else if (targetFY === '2024-25') {
+        const legacyAmt = Number(farmer.openingBalance) || 0;
+        farmerOpeningBalance = legacyAmt;
+        if (legacyAmt !== 0) {
+          openingBalRecord = {
+            amount: Math.abs(legacyAmt),
+            type: legacyAmt >= 0 ? 'CR' : 'DR',
+            date: farmer.openingBalanceDate || '01/04/2024',
+            notes: farmer.openingBalanceSeason || 'ਸ਼ੁਰੂਆਤੀ ਬਕਾਇਆ (Base Opening)'
+          };
+        }
+      }
+    } else {
+      farmerOpeningBalance = Number(farmer.openingBalance) || 0;
+    }
+
+    // 15. Final Net Balance (Gross Produce Credits + Opening CR - Labour Debits - Payments - Advances - Opening DR)
+    const totalCredits = totalGrossAmount + (farmerOpeningBalance > 0 ? farmerOpeningBalance : 0);
+    const totalDebits = totalLabourDeductions + totalAgencyPurchasePayment + totalAdvanceAmount + (farmerOpeningBalance < 0 ? Math.abs(farmerOpeningBalance) : 0);
+    const finalBalance = Math.round((totalCredits - totalDebits) * 100) / 100;
+    const pendingAmount = finalBalance > 0 ? finalBalance : 0;
 
     // Credit limit check
     const farmerCreditLimit = Number(farmer.creditLimit) || 0;
     const creditLimitExceeded = farmerCreditLimit > 0 && totalAdvanceAmount > farmerCreditLimit;
     const creditLimitRemaining = farmerCreditLimit > 0 ? Math.max(0, farmerCreditLimit - totalAdvanceAmount) : undefined;
 
-    // 15. Unified Chronological Transactions
+    // 16. Unified Chronological Transactions
     const transactions: FarmerAccountSummary['transactions'] = [];
+
+    // Opening Balance Transaction at the start if present
+    if (openingBalRecord && Number(openingBalRecord.amount) > 0) {
+      const isCr = openingBalRecord.type === 'CR';
+      const opYearStart = targetFY !== 'ALL' ? parseFiscalYear(targetFY).startYear : 2024;
+      transactions.push({
+        id: `opening_${farmerId}_${targetFY}`,
+        date: openingBalRecord.date || `01/04/${opYearStart}`,
+        type: 'PAYMENT',
+        typeLabelEn: isCr ? 'Opening Balance (Credit)' : 'Opening Balance (Debit)',
+        typeLabelPa: isCr ? 'ਸ਼ੁਰੂਆਤੀ ਬਕਾਇਆ (ਜਮ੍ਹਾਂ - ਦੇਣੇ ਹਨ)' : 'ਸ਼ੁਰੂਆਤੀ ਬਕਾਇਆ (ਨਾਵੇਂ - ਲੈਣੇ ਹਨ)',
+        agency: '—',
+        reference: isCr ? 'CR (ਜਮ੍ਹਾਂ)' : 'DR (ਨਾਵੇਂ)',
+        totalAmount: Number(openingBalRecord.amount),
+        grossAmount: Number(openingBalRecord.amount),
+        netAmount: isCr ? Number(openingBalRecord.amount) : -Number(openingBalRecord.amount),
+        status: 'PAID',
+        details: openingBalRecord.notes || (isCr ? 'ਪਿਛਲੇ ਸਾਲ ਤੋਂ ਜਮ੍ਹਾਂ ਬਕਾਇਆ' : 'ਪਿਛਲੇ ਸਾਲ ਤੋਂ ਨਾਵੇਂ ਬਕਾਇਆ')
+      });
+    }
 
     // Mandi Arrival Transactions
     farmerArrivalEntries.forEach((b) => {
@@ -2356,6 +2559,7 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const nextEntryNumber = `BAG-${nextParchi.toString().padStart(5, '0')}`;
     const newRecord: BagsEntryRecord = {
       ...entryData,
+      fiscalYear: entryData.fiscalYear || activeFiscalYear,
       id: `be_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       parchiNo: nextParchi,
       entryNumber: nextEntryNumber,
@@ -2376,6 +2580,7 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const rowParchi = data.parchiNo || currentParchi;
       return {
         ...data,
+        fiscalYear: data.fiscalYear || activeFiscalYear,
         id: `be_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 7)}`,
         parchiNo: rowParchi,
         entryNumber: `BAG-${rowParchi.toString().padStart(5, '0')}`,
@@ -3114,6 +3319,7 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     const newRecord: DailyPurchaseRecord = {
       ...purchaseData,
+      fiscalYear: purchaseData.fiscalYear || activeFiscalYear,
       id: nextId,
       mainFarmerId: linkedMainFarmer ? linkedMainFarmer.id : undefined,
       mainFarmerName: linkedMainFarmer ? linkedMainFarmer.farmerName : undefined,
@@ -3812,13 +4018,130 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   /**
    * Fiscal Year Management
    */
-  const addFiscalYear = (year: string) => {
+  const addFiscalYear = (year: string): boolean => {
     const clean = year.trim();
     if (clean && !fiscalYears.includes(clean)) {
-      const updatedYears = [...fiscalYears, clean];
+      const updatedYears = [...fiscalYears, clean].sort((a, b) => {
+        const { startYear: yA } = parseFiscalYear(a);
+        const { startYear: yB } = parseFiscalYear(b);
+        return yA - yB;
+      });
       setFiscalYears(updatedYears);
       supabaseSaveFiscalYears(updatedYears).catch(console.error);
+      return true;
     }
+    return false;
+  };
+
+  const isYearLocked = (year?: string): boolean => {
+    const yr = year || activeFiscalYear;
+    return lockedYears.includes(yr);
+  };
+
+  const toggleYearLock = (year: string): boolean => {
+    const isLocked = lockedYears.includes(year);
+    if (isLocked) {
+      setLockedYears((prev) => prev.filter((y) => y !== year));
+      return false;
+    } else {
+      setLockedYears((prev) => [...prev, year]);
+      return true;
+    }
+  };
+
+  const carryForwardBalancesToNextYear = (fromYear: string, toYear: string) => {
+    const { startYear: toStartYear } = parseFiscalYear(toYear);
+    const toYearStartDate = `01/04/${toStartYear}`;
+    let carriedFarmersCount = 0;
+    let totalDr = 0;
+    let totalCr = 0;
+
+    setFarmers((prev) => {
+      const updatedList = prev.map((f) => {
+        const summary = getCompleteFarmerAccount(f.id, 'ALL', fromYear);
+        if (!summary) return f;
+
+        const closingNet = summary.finalBalance;
+        const absAmount = Math.abs(closingNet);
+        const balType: 'DR' | 'CR' = closingNet >= 0 ? 'CR' : 'DR';
+
+        if (balType === 'DR') totalDr += absAmount;
+        else totalCr += absAmount;
+
+        carriedFarmersCount++;
+
+        const existingYearBalances = f.yearOpeningBalances || {};
+        const newOpening: FarmerYearOpeningBalance = {
+          amount: absAmount,
+          type: balType,
+          date: toYearStartDate,
+          notes: `${fromYear} ਦਾ ਕਲੋਜ਼ਿੰਗ ਬੈਲੈਂਸ ਕੈਰੀ ਫਾਰਵਰਡ (${fromYear} Closing Balance Carried Forward)`,
+          isCarriedForward: true
+        };
+
+        const newFarmer: Farmer = {
+          ...f,
+          yearOpeningBalances: {
+            ...existingYearBalances,
+            [toYear]: newOpening
+          }
+        };
+        supabaseUpsertFarmer(newFarmer, activeFirmId).catch(console.error);
+        return newFarmer;
+      });
+
+      return updatedList;
+    });
+
+    return {
+      success: true,
+      carriedFarmersCount,
+      totalDr: Math.round(totalDr * 100) / 100,
+      totalCr: Math.round(totalCr * 100) / 100
+    };
+  };
+
+  const validateDateInFiscalYearLocal = (dateStr: string, fiscalYear?: string) => {
+    return validateDateInFiscalYear(dateStr, fiscalYear || activeFiscalYear);
+  };
+
+  const getMultiYearFarmerAccount = (farmerId: string) => {
+    const farmer = getFarmerById(farmerId);
+    if (!farmer) return null;
+
+    const yearSummaries = fiscalYears.map((yr) => {
+      const summary = getCompleteFarmerAccount(farmerId, 'ALL', yr);
+      const opening = getFarmerOpeningBalanceForYear(farmerId, yr);
+      const gross = summary?.totalGrossAmount || 0;
+      const labour = summary?.totalLabourDeductions || 0;
+      const netPayable = summary?.netPayableAmount || 0;
+      const adv = summary?.totalAdvanceAmount || 0;
+      const pay = summary?.totalAgencyPurchasePayment || 0;
+      const closing = summary?.finalBalance || 0;
+      return {
+        fiscalYear: yr,
+        openingBalance: opening,
+        grossAmount: gross,
+        labourDeductions: labour,
+        netPayable,
+        advancesTotal: adv,
+        paymentsTotal: pay,
+        closingBalance: Math.abs(closing),
+        closingType: (closing >= 0 ? 'CR' : 'DR') as 'DR' | 'CR',
+        netRaw: closing
+      };
+    });
+
+    const latestSummary = getCompleteFarmerAccount(farmerId, 'ALL', activeFiscalYear);
+    const netGrandBalance = Math.abs(latestSummary?.finalBalance || 0);
+    const netGrandType = (latestSummary && latestSummary.finalBalance >= 0 ? 'CR' : 'DR') as 'DR' | 'CR';
+
+    return {
+      farmer,
+      yearSummaries,
+      netGrandBalance,
+      netGrandType
+    };
   };
 
   /**
@@ -3931,6 +4254,14 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         activeFiscalYear,
         setActiveFiscalYear,
         addFiscalYear,
+        lockedYears,
+        isYearLocked,
+        toggleYearLock,
+        carryForwardBalancesToNextYear,
+        getFarmerOpeningBalanceForYear,
+        setFarmerOpeningBalanceForYear,
+        validateDateInFiscalYear: validateDateInFiscalYearLocal,
+        getMultiYearFarmerAccount,
         sellers,
         addSeller,
         updateSeller,

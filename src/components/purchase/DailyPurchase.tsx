@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { DailyPurchaseRecord, Farmer, FarmerPurchaseSummary, LabourAndDeductions, CropFilterType } from '../../types/mandi';
+import { DailyPurchaseRecord, Farmer, FarmerPurchaseSummary, LabourAndDeductions, CropFilterType, CropType } from '../../types/mandi';
 import { useMandi } from '../../context/MandiContext';
 import { useNotification } from '../../context/NotificationContext';
 import { useFormDraft } from '../../hooks/useFormDraft';
@@ -31,14 +31,20 @@ import {
   RotateCcw,
   Send,
   UserPlus,
-  Boxes
+  Boxes,
+  Mic,
+  Sparkles,
+  Wheat,
+  Keyboard,
+  Briefcase
 } from 'lucide-react';
 import {
   FIXED_BAG_WEIGHT_KG,
   FIXED_RATE_PER_QTL,
   formatKgToQulKg,
   calculatePayableAmount,
-  autoFormatDate
+  autoFormatDate,
+  isRecordInFiscalYear
 } from '../../utils/calculations';
 import { DailyPurchaseViewModal } from './DailyPurchaseViewModal';
 import { DailyPurchaseEditModal } from './DailyPurchaseEditModal';
@@ -49,6 +55,9 @@ import {
 } from '../../utils/purchasePdfExport';
 import { DateInput } from '../common/DateInput';
 import { generateDailyPurchaseWhatsAppMessage, openWhatsApp } from '../../utils/whatsappNotification';
+import { exportDailyPurchaseRegisterExcel } from '../../utils/purchaseExcelExport';
+import { AgencyProcurementModal } from './AgencyProcurementModal';
+import { AiVoiceBoliModal } from './AiVoiceBoliModal';
 
 interface MultiFarmerPurchaseRow {
   rowId: string;
@@ -56,6 +65,7 @@ interface MultiFarmerPurchaseRow {
   newBags: number;
   oldBags: number;
   bags: number;
+  rate?: number;
 }
 
 export const DailyPurchase: React.FC = () => {
@@ -72,7 +82,10 @@ export const DailyPurchase: React.FC = () => {
     setActiveSection,
     language,
     activeCrop,
-    activeCropConfig
+    activeCropConfig,
+    activeFiscalYear,
+    isYearLocked,
+    validateDateInFiscalYear
   } = useMandi();
 
   const isEn = language === 'en';
@@ -140,6 +153,21 @@ export const DailyPurchase: React.FC = () => {
   const [purchaseDate, setPurchaseDate] = useState<string>(draft.purchaseDate || getTodayFormatted());
   const [customRate] = useState<number>(settings.fixedRatePerQtl || FIXED_RATE_PER_QTL);
 
+  // Feature 1.1: Crop Selection & Dynamic Bag Weight
+  const [batchCrop, setBatchCrop] = useState<CropType>(activeCrop || 'WHEAT');
+  const effectiveBagWeight = batchCrop === 'WHEAT' ? 50.0 : batchCrop === 'MAIZE' ? 50.0 : 37.5;
+  const defaultRateForCrop = batchCrop === 'WHEAT' ? 2475 : batchCrop === 'PADDY' ? 2320 : 2225;
+
+  // Feature 1.2: Agency Category (Govt Agencies vs Private Millers / Traders)
+  const [agencyCategory, setAgencyCategory] = useState<'GOVT' | 'PRIVATE'>('GOVT');
+  const [customPrivateAgency, setCustomPrivateAgency] = useState<string>('');
+
+  // Feature 2.4: Agency Inspector Sign Sheet / Consolidated Voucher Modal
+  const [isAgencyModalOpen, setIsAgencyModalOpen] = useState<boolean>(false);
+
+  // Feature 3.1: AI Voice Boli Assistant Modal
+  const [isAiVoiceModalOpen, setIsAiVoiceModalOpen] = useState<boolean>(false);
+
   // Labour auto-calculation state
   const [labourType, setLabourType] = useState<'NONE' | 'PAKKI' | 'DOUBLE' | 'SUKKI' | 'CUSTOM'>(
     draft.labourType || 'NONE'
@@ -183,14 +211,30 @@ export const DailyPurchase: React.FC = () => {
   const [isSaving, setIsSaving] = useState<boolean>(false);
 
   const agencyOptions: SearchableSelectOption[] = useMemo(() => {
-    return agencies.map((ag) => ({
-      value: ag.nameEn,
-      label: isEn ? ag.nameEn : `${ag.nameEn} (${ag.namePa})`,
-      subLabel: isEn ? (ag.namePa || undefined) : ag.nameEn,
-      badge: ag.code,
-      keywords: [ag.nameEn, ag.namePa, ag.code]
-    }));
-  }, [agencies, isEn]);
+    if (agencyCategory === 'GOVT') {
+      return agencies.map((ag) => ({
+        value: ag.nameEn,
+        label: isEn ? ag.nameEn : `${ag.nameEn} (${ag.namePa})`,
+        subLabel: isEn ? (ag.namePa || undefined) : ag.nameEn,
+        badge: ag.code,
+        keywords: [ag.nameEn, ag.namePa, ag.code]
+      }));
+    } else {
+      const commonPrivateTraders = [
+        'ਰਾਮਾ ਰਾਈਸ ਮਿੱਲ (Rama Rice Mill)',
+        'ਸੁਪਰ ਐਗਰੋ ਟਰੇਡਰਜ਼ (Super Agro)',
+        'ਬਾਂਸਲ ਫੂਡਜ਼ (Bansal Foods)',
+        'ਗੁਰੂ ਨਾਨਕ ਸ਼ੈਲਰ (Guru Nanak Sheller)',
+        'ਪ੍ਰਾਈਵੇਟ ਵਪਾਰੀ (Private Trader)'
+      ];
+      return commonPrivateTraders.map((name) => ({
+        value: name.split(' (')[0],
+        label: name,
+        badge: 'PRIVATE',
+        keywords: [name]
+      }));
+    }
+  }, [agencies, agencyCategory, isEn]);
 
   const farmerOptions: SearchableSelectOption[] = useMemo(() => {
     return farmers.map((f) => {
@@ -344,7 +388,7 @@ export const DailyPurchase: React.FC = () => {
   };
 
   // Update a row
-  const updateRow = (rowId: string, field: 'farmerId' | 'newBags' | 'oldBags' | 'bags', val: any) => {
+  const updateRow = (rowId: string, field: 'farmerId' | 'newBags' | 'oldBags' | 'bags' | 'rate', val: any) => {
     setRows((prev) =>
       prev.map((r) => {
         if (r.rowId !== rowId) return r;
@@ -363,9 +407,99 @@ export const DailyPurchase: React.FC = () => {
           const b = Math.max(0, parseInt(val, 10) || 0);
           return { ...r, newBags: b, oldBags: 0, bags: b };
         }
+        if (field === 'rate') {
+          const rt = Math.max(0, parseFloat(val) || 0);
+          return { ...r, rate: rt };
+        }
         return r;
       })
     );
+  };
+
+  // Feature 2.1: Excel-Like Keyboard Navigation & Auto Row Creation
+  const handleCellKeyDown = (
+    e: React.KeyboardEvent<HTMLInputElement>,
+    rowId: string,
+    field: 'newBags' | 'oldBags' | 'rate',
+    rowIndex: number
+  ) => {
+    if (e.key === 'Enter' || e.key === 'Tab') {
+      if (field === 'newBags') {
+        e.preventDefault();
+        document.getElementById(`dp-oldBags-${rowId}`)?.focus();
+      } else if (field === 'oldBags') {
+        e.preventDefault();
+        document.getElementById(`dp-rate-${rowId}`)?.focus();
+      } else if (field === 'rate') {
+        e.preventDefault();
+        if (rowIndex < rows.length - 1) {
+          const nextRow = rows[rowIndex + 1];
+          document.getElementById(`dp-newBags-${nextRow.rowId}`)?.focus();
+        } else {
+          // Enter on the last cell of the last row automatically creates a new row!
+          addRow();
+        }
+      }
+    } else if (e.key === 'ArrowDown') {
+      if (rowIndex < rows.length - 1) {
+        e.preventDefault();
+        const nextRow = rows[rowIndex + 1];
+        document.getElementById(`dp-${field}-${nextRow.rowId}`)?.focus();
+      }
+    } else if (e.key === 'ArrowUp') {
+      if (rowIndex > 0) {
+        e.preventDefault();
+        const prevRow = rows[rowIndex - 1];
+        document.getElementById(`dp-${field}-${prevRow.rowId}`)?.focus();
+      }
+    }
+  };
+
+  // Feature 3.1: Apply AI Parsed Boli
+  const handleApplyAiBoli = (parsed: {
+    farmerId?: string;
+    agency?: string;
+    newBags?: number;
+    oldBags?: number;
+    bags: number;
+    rate?: number;
+  }) => {
+    if (parsed.agency) {
+      setFixedAgency(parsed.agency);
+    }
+    // Find first empty row or append new row
+    setRows((prev) => {
+      const emptyIdx = prev.findIndex((r) => !r.farmerId);
+      if (emptyIdx !== -1) {
+        const updated = [...prev];
+        updated[emptyIdx] = {
+          ...updated[emptyIdx],
+          farmerId: parsed.farmerId || '',
+          newBags: parsed.newBags || parsed.bags || 0,
+          oldBags: parsed.oldBags || 0,
+          bags: parsed.bags || 0,
+          rate: parsed.rate
+        };
+        return updated;
+      }
+      return [
+        ...prev,
+        {
+          ...createEmptyPurchaseRow(prev.length + 1),
+          farmerId: parsed.farmerId || '',
+          newBags: parsed.newBags || parsed.bags || 0,
+          oldBags: parsed.oldBags || 0,
+          bags: parsed.bags || 0,
+          rate: parsed.rate
+        }
+      ];
+    });
+
+    notifySaveSuccess({
+      titlePa: 'AI ਬੋਲੀ ਸਫਲਤਾਪੂਰਵਕ ਸ਼ਾਮਲ ਕੀਤੀ ਗਈ',
+      titleEn: 'AI Boli Applied',
+      messagePa: `${parsed.bags} ਬੋਰੀਆਂ ${parsed.rate ? `@ ₹${parsed.rate}` : ''} ਖਰੀਦ ਕਤਾਰ ਵਿੱਚ ਸ਼ਾਮਲ ਹੋ ਗਈਆਂ ਹਨ।`
+    });
   };
 
   // Active Labour Rate from selection (Pakki ₹7, Double ₹14, Sukki ₹5, Custom)
@@ -393,6 +527,9 @@ export const DailyPurchase: React.FC = () => {
     let totalOldBags = 0;
     let totalBags = 0;
     let validFarmersCount = 0;
+    let totalCalculatedAmount = 0;
+
+    const effectiveRate = defaultRateForCrop || customRate;
 
     rows.forEach((r) => {
       const nb = Math.max(0, Number(r.newBags) || 0);
@@ -403,14 +540,15 @@ export const DailyPurchase: React.FC = () => {
         totalOldBags += ob;
         totalBags += b;
         validFarmersCount++;
+        const rowRate = r.rate || effectiveRate;
+        const rowWt = b * effectiveBagWeight;
+        totalCalculatedAmount += calculatePayableAmount(rowWt, rowRate);
       }
     });
 
-    const effectiveBagWeight = activeCropConfig.defaultBagWeightKg || FIXED_BAG_WEIGHT_KG;
-    const effectiveRate = activeCropConfig.defaultRatePerQtl || customRate;
     const totalWeightKg = totalBags * effectiveBagWeight;
     const bDown = formatKgToQulKg(totalWeightKg);
-    const amount = calculatePayableAmount(totalWeightKg, effectiveRate);
+    const amount = totalCalculatedAmount;
     const totalLabour = getRowLabourAmount(totalBags, totalWeightKg);
     const netAmount = Math.max(0, Math.round((amount - totalLabour) * 100) / 100);
 
@@ -428,7 +566,7 @@ export const DailyPurchase: React.FC = () => {
       totalLabour,
       netAmount
     };
-  }, [rows, customRate, activeLabourRate, labourUnit, activeCropConfig]);
+  }, [rows, customRate, activeLabourRate, labourUnit, effectiveBagWeight, defaultRateForCrop]);
 
   // Handle Save Multi-Farmer Purchases with strict balance reduction checks
   const handleSavePurchases = () => {
@@ -469,11 +607,10 @@ export const DailyPurchase: React.FC = () => {
         const farmer = farmers.find((f) => f.id === row.farmerId);
         if (!farmer) continue;
 
-        const effectiveBagWeight = activeCropConfig.defaultBagWeightKg || FIXED_BAG_WEIGHT_KG;
-        const effectiveRate = activeCropConfig.defaultRatePerQtl || customRate;
+        const rowRate = row.rate || defaultRateForCrop || customRate;
         const totalWeightKg = row.bags * effectiveBagWeight;
         const bDown = formatKgToQulKg(totalWeightKg);
-        const amt = calculatePayableAmount(totalWeightKg, effectiveRate);
+        const amt = calculatePayableAmount(totalWeightKg, rowRate);
         const rowLabour = getRowLabourAmount(row.bags, totalWeightKg);
         const rowNet = Math.max(0, Math.round((amt - rowLabour) * 100) / 100);
 
@@ -497,7 +634,7 @@ export const DailyPurchase: React.FC = () => {
         const result = addDailyPurchase({
           date: purchaseDate.trim(),
           agency: fixedAgency,
-          cropType: activeCrop,
+          cropType: batchCrop,
           farmerId: farmer.id,
           farmerName: farmer.farmerName,
           farmerNamePa: farmer.farmerNamePa,
@@ -512,7 +649,7 @@ export const DailyPurchase: React.FC = () => {
           qul: bDown.qtl,
           kg: bDown.kg,
           totalWeightKg,
-          rate: effectiveRate,
+          rate: rowRate,
           totalAmount: amt,
           labourDeductions: rowLabourDeductions,
           netAmount: rowNet
@@ -589,6 +726,9 @@ export const DailyPurchase: React.FC = () => {
     } = {};
 
     dailyPurchaseRecords.forEach((rec) => {
+      if (!isRecordInFiscalYear(rec.date, rec.fiscalYear, activeFiscalYear)) {
+        return;
+      }
       if (purchaseCropFilter !== 'ALL') {
         const itemCrop = rec.cropType || 'PADDY';
         if (itemCrop !== purchaseCropFilter) {
@@ -841,6 +981,11 @@ export const DailyPurchase: React.FC = () => {
   // Filtered records for "All Farmers View"
   const filteredAllFarmersRecords = useMemo(() => {
     return dailyPurchaseRecords.filter((rec) => {
+      // Fiscal year filter
+      if (!isRecordInFiscalYear(rec.date, rec.fiscalYear, activeFiscalYear)) {
+        return false;
+      }
+
       // Crop filter
       if (purchaseCropFilter !== 'ALL') {
         const itemCrop = rec.cropType || 'PADDY';
@@ -932,6 +1077,7 @@ export const DailyPurchase: React.FC = () => {
   const availableDates = useMemo(() => {
     const dateCounts: { [date: string]: number } = {};
     dailyPurchaseRecords.forEach((r) => {
+      if (!isRecordInFiscalYear(r.date, r.fiscalYear, activeFiscalYear)) return;
       if (purchaseCropFilter !== 'ALL') {
         const itemCrop = r.cropType || 'PADDY';
         if (itemCrop !== purchaseCropFilter) return;
@@ -945,11 +1091,14 @@ export const DailyPurchase: React.FC = () => {
         date,
         count: dateCounts[date]
       }));
-  }, [dailyPurchaseRecords, purchaseCropFilter]);
+  }, [dailyPurchaseRecords, purchaseCropFilter, activeFiscalYear]);
 
   // Filtered records for "Date-wise View" when a date is selected
   const filteredDateRecords = useMemo(() => {
     return dailyPurchaseRecords.filter((rec) => {
+      if (!isRecordInFiscalYear(rec.date, rec.fiscalYear, activeFiscalYear)) {
+        return false;
+      }
       if (purchaseCropFilter !== 'ALL') {
         const itemCrop = rec.cropType || 'PADDY';
         if (itemCrop !== purchaseCropFilter) {
@@ -1055,8 +1204,41 @@ export const DailyPurchase: React.FC = () => {
             </div>
           </div>
 
-          {/* Quick jump actions & Rate indicator badge */}
+          {/* Quick jump actions, Crop, Agency sheet, AI Boli & Excel export */}
           <div className="flex items-center gap-2 flex-wrap">
+            {/* Feature 3.1: AI Voice Boli Assistant Button */}
+            <button
+              type="button"
+              onClick={() => setIsAiVoiceModalOpen(true)}
+              className="text-xs bg-gradient-to-r from-emerald-600 to-indigo-600 hover:from-emerald-500 hover:to-indigo-500 text-white font-extrabold px-3 py-1.5 rounded-lg shadow-sm transition active:scale-95 flex items-center gap-1.5 cursor-pointer"
+              title="ਬੋਲ ਕੇ ਸਿੱਧਾ ਕਿਸਾਨ, ਬੋਰੀਆਂ ਤੇ ਰੇਟ ਦਰਜ ਕਰੋ"
+            >
+              <Mic className="w-3.5 h-3.5 text-amber-300 animate-pulse" />
+              <span>🎙️ AI ਬੋਲੀ ਰਿਕਾਰਡਰ (PRO AI)</span>
+            </button>
+
+            {/* Feature 2.4: Agency Inspector Sign Sheet */}
+            <button
+              type="button"
+              onClick={() => setIsAgencyModalOpen(true)}
+              className="text-xs bg-indigo-50 hover:bg-indigo-100 text-indigo-950 font-bold px-3 py-1.5 rounded-lg border border-indigo-300 shadow-2xs transition active:scale-95 flex items-center gap-1.5 cursor-pointer"
+              title="ਸਰਕਾਰੀ ਏਜੰਸੀ ਖਰੀਦ ਵਾਊਚਰ ਤੇ ਇੰਸਪੈਕਟਰ ਤਸਦੀਕ ਸ਼ੀਟ"
+            >
+              <Building2 className="w-3.5 h-3.5 text-indigo-700" />
+              <span>🏢 ਏਜੰਸੀ ਸ਼ੀਟ ਤੇ ਵਾਊਚਰ</span>
+            </button>
+
+            {/* Feature 3.3: Direct Export to Excel */}
+            <button
+              type="button"
+              onClick={() => exportDailyPurchaseRegisterExcel(dailyPurchaseRecords, activeFirm?.namePa || 'JAMMU TRADING CO.', purchaseDate)}
+              className="text-xs bg-emerald-50 hover:bg-emerald-100 text-emerald-950 font-bold px-3 py-1.5 rounded-lg border border-emerald-300 shadow-2xs transition active:scale-95 flex items-center gap-1.5 cursor-pointer"
+              title="ਸਾਰਾ ਖਰੀਦ ਰਜਿਸਟਰ ਐਕਸਲ (.xlsx) ਵਿੱਚ ਡਾਊਨਲੋਡ ਕਰੋ"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-700" />
+              <span>📊 ਐਕਸਲ (.xlsx)</span>
+            </button>
+
             <button
               type="button"
               onClick={() => setActiveSection('farmer-registration')}
@@ -1075,35 +1257,116 @@ export const DailyPurchase: React.FC = () => {
               <Boxes className="w-3.5 h-3.5 text-amber-600" />
               <span>ਬਾਰਦਾਨਾ</span>
             </button>
-            <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-lg text-xs">
-              <Scale className="w-4 h-4 text-emerald-600" />
-              <span className="text-slate-600 font-bold">{isEn ? 'Crop & Rate:' : 'ਫਸਲ ਤੇ ਭਾਅ:'}</span>
-              <span className="font-mono font-black text-amber-900 bg-amber-100 px-2 py-0.5 rounded border border-amber-300">
-                {activeCropConfig.namePa.split(' ')[0]} (₹{rowTotals.effectiveRate}/Qtl)
-              </span>
-              <span className="text-slate-500 text-[11px] font-mono">
-                ({rowTotals.effectiveBagWeight} Kg / {isEn ? 'bag' : 'ਬੋਰੀ'})
-              </span>
+          </div>
+        </div>
+
+        {/* Feature 1.1: Crop Selector & Dynamic Bag Weight */}
+        <div className="bg-slate-50 border border-slate-200 p-2.5 rounded-xl flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2">
+            <Wheat className="w-4 h-4 text-emerald-600" />
+            <span className="font-bold text-slate-800">ਖਰੀਦ ਫ਼ਸਲ (Crop Selection):</span>
+            <div className="flex items-center gap-1 bg-white border border-slate-300 p-0.5 rounded-lg">
+              <button
+                type="button"
+                onClick={() => setBatchCrop('WHEAT')}
+                className={`px-2.5 py-1 rounded font-bold transition cursor-pointer ${
+                  batchCrop === 'WHEAT'
+                    ? 'bg-amber-500 text-slate-950 font-black shadow-2xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                🌾 ਕਣਕ (Wheat - 50 Kg / ₹2,475)
+              </button>
+              <button
+                type="button"
+                onClick={() => setBatchCrop('PADDY')}
+                className={`px-2.5 py-1 rounded font-bold transition cursor-pointer ${
+                  batchCrop === 'PADDY'
+                    ? 'bg-emerald-600 text-white font-black shadow-2xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                🌾 ਝੋਨਾ (Paddy - 37.5 Kg / ₹2,320)
+              </button>
+              <button
+                type="button"
+                onClick={() => setBatchCrop('MAIZE')}
+                className={`px-2.5 py-1 rounded font-bold transition cursor-pointer ${
+                  batchCrop === 'MAIZE'
+                    ? 'bg-indigo-600 text-white font-black shadow-2xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                🌽 ਮੱਕੀ (Maize - 50 Kg)
+              </button>
             </div>
+          </div>
+
+          <div className="text-[11px] font-mono bg-white px-2.5 py-1 rounded-md border border-slate-200 text-slate-600">
+            ਨਿਰਧਾਰਿਤ ਭਰਤੀ: <strong>{effectiveBagWeight} ਕਿਲੋ/ਬੋਰੀ</strong> • ਸਰਕਾਰੀ ਰੇਟ: <strong className="text-amber-800 font-bold">₹{defaultRateForCrop}/ਕੁਇੰਟਲ</strong>
+          </div>
+        </div>
+
+        {/* Feature 2.1: Keyboard Shortcuts Bar */}
+        <div className="bg-slate-900 text-slate-200 px-3 py-1.5 rounded-lg text-[11px] font-mono flex flex-wrap items-center justify-between gap-2 shadow-2xs">
+          <div className="flex items-center gap-1.5 text-amber-300 font-bold">
+            <Keyboard className="w-3.5 h-3.5" />
+            <span>⚡ ਐਕਸਲ ਵਾਂਗ ਤੇਜ਼ ਕੀਬੋਰਡ ਨੈਵੀਗੇਸ਼ਨ (Excel Keyboard Flow):</span>
+          </div>
+          <div className="flex items-center gap-3 text-slate-300 text-[10px]">
+            <span><kbd className="bg-slate-800 text-white px-1.5 py-0.5 rounded border border-slate-700">Enter / Tab</kbd> ਅਗਲਾ ਖਾਨਾ</span>
+            <span><kbd className="bg-slate-800 text-white px-1.5 py-0.5 rounded border border-slate-700">↑ / ↓</kbd> ਉੱਪਰ/ਹੇਠਾਂ ਕਤਾਰ</span>
+            <span className="text-emerald-400 font-bold"><kbd className="bg-slate-800 text-emerald-300 px-1.5 py-0.5 rounded border border-slate-700">Enter at End</kbd> ਆਟੋ ਨਵੀਂ ਕਤਾਰ (+ Auto Row)</span>
           </div>
         </div>
 
         {/* Agency and Date Selectors */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {/* Agency Selector */}
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1.5">
-              <Building2 className="w-3.5 h-3.5 text-emerald-600" />
-              <span>{isEn ? 'Procurement Agency:' : 'ਖਰੀਦ ਏਜੰਸੀ ਚੁਣੋ (Procurement Agency):'}</span>
-            </label>
+          {/* Agency Selector with Feature 1.2: Govt vs Private Buyer Toggle */}
+          <div className="space-y-1">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                <Building2 className="w-3.5 h-3.5 text-emerald-600" />
+                <span>{isEn ? 'Procurement Agency / Buyer:' : 'ਖਰੀਦਦਾਰ ਏਜੰਸੀ / ਵਪਾਰੀ:'}</span>
+              </label>
+
+              {/* Toggle Govt vs Private */}
+              <div className="flex items-center gap-1 text-[10px] font-bold bg-slate-100 p-0.5 rounded-md border border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAgencyCategory('GOVT');
+                    setFixedAgency('Markfed');
+                  }}
+                  className={`px-1.5 py-0.5 rounded cursor-pointer transition ${
+                    agencyCategory === 'GOVT' ? 'bg-indigo-600 text-white font-black' : 'text-slate-600'
+                  }`}
+                >
+                  🏛️ ਸਰਕਾਰੀ
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAgencyCategory('PRIVATE');
+                    setFixedAgency('ਰਾਮਾ ਰਾਈਸ ਮਿੱਲ');
+                  }}
+                  className={`px-1.5 py-0.5 rounded cursor-pointer transition ${
+                    agencyCategory === 'PRIVATE' ? 'bg-amber-600 text-white font-black' : 'text-slate-600'
+                  }`}
+                >
+                  🏢 ਪ੍ਰਾਈਵੇਟ ਵਪਾਰੀ
+                </button>
+              </div>
+            </div>
+
             <SearchableSelect
               id="daily-purchase-agency"
               value={fixedAgency || ''}
               onChange={(val) => setFixedAgency(val)}
               options={agencyOptions}
-              placeholder={isEn ? "Select agency..." : "ਏਜੰਸੀ ਚੁਣੋ..."}
-              searchPlaceholder={isEn ? "Search agency..." : "ਏਜੰਸੀ ਖੋਜੋ..."}
-              emptyMessage={isEn ? "No agency found" : "ਕੋਈ ਏਜੰਸੀ ਨਹੀਂ ਮਿਲੀ"}
+              placeholder={agencyCategory === 'GOVT' ? "ਸਰਕਾਰੀ ਏਜੰਸੀ ਚੁਣੋ (Markfed, Pungrain...)" : "ਪ੍ਰਾਈਵੇਟ ਵਪਾਰੀ / ਸ਼ੈਲਰ ਚੁਣੋ..."}
+              searchPlaceholder="ਏਜੰਸੀ ਜਾਂ ਵਪਾਰੀ ਖੋਜੋ..."
+              emptyMessage="ਕੋਈ ਏਜੰਸੀ/ਵਪਾਰੀ ਨਹੀਂ ਮਿਲਿਆ"
             />
           </div>
 
@@ -1115,16 +1378,21 @@ export const DailyPurchase: React.FC = () => {
               label={isEn ? "Purchase Date" : "ਖਰੀਦ ਮਿਤੀ (Purchase Date)"}
               required
             />
+            {!validateDateInFiscalYear(purchaseDate, activeFiscalYear).isValid && (
+              <div className="text-[10px] text-amber-700 bg-amber-50 border border-amber-300 rounded px-1.5 py-0.5 mt-1 font-bold">
+                ⚠️ {isEn ? validateDateInFiscalYear(purchaseDate, activeFiscalYear).messageEn : validateDateInFiscalYear(purchaseDate, activeFiscalYear).messagePa}
+              </div>
+            )}
           </div>
 
-          {/* Quick Stats Banner */}
+          {/* Quick Stats Banner for Active Fiscal Year */}
           <div className="bg-emerald-50/70 border border-emerald-200 rounded-lg p-2.5 flex items-center justify-between text-xs sm:col-span-2 lg:col-span-1">
             <div>
               <span className="text-[10px] text-emerald-800 font-bold block">
-                {isEn ? 'Total Purchase Records:' : 'ਕੁੱਲ ਰਜਿਸਟਰਡ ਖਰੀਦ:'}
+                {isEn ? `FY ${activeFiscalYear} Records:` : `ਵਿੱਤੀ ਸਾਲ ${activeFiscalYear} ਖਰੀਦ:`}
               </span>
               <span className="text-base font-mono font-black text-emerald-950">
-                {dailyPurchaseRecords.length} {isEn ? 'Records' : 'ਰਿਕਾਰਡ'}
+                {filteredAllFarmersRecords.length} {isEn ? 'Records' : 'ਰਿਕਾਰਡ'}
               </span>
             </div>
             <div className="text-right">
@@ -1132,7 +1400,7 @@ export const DailyPurchase: React.FC = () => {
                 {isEn ? 'Total Purchased Bags:' : 'ਕੁੱਲ ਖਰੀਦ ਬੋਰੀਆਂ:'}
               </span>
               <span className="text-base font-mono font-black text-emerald-950">
-                {dailyPurchaseRecords.reduce((sum, r) => sum + (Number(r.bags) || 0), 0).toLocaleString('en-IN')}
+                {filteredAllFarmersRecords.reduce((sum, r) => sum + (Number(r.bags) || 0), 0).toLocaleString('en-IN')}
               </span>
             </div>
           </div>
@@ -1389,6 +1657,9 @@ export const DailyPurchase: React.FC = () => {
                   <th className="py-2.5 px-2 w-28 text-center bg-emerald-50 text-emerald-950 font-black">
                     {isEn ? 'Total Bags' : 'Total Bags (ਕੁੱਲ)'}
                   </th>
+                  <th className="py-2.5 px-2 w-24 text-center bg-slate-100 text-slate-900 font-black">
+                    {isEn ? 'Rate (₹/Qtl)' : 'ਦਰ (₹/Qtl)'}
+                  </th>
                   <th className="py-2.5 px-3 min-w-[130px] text-right bg-indigo-50 text-indigo-950 font-black">
                     {isEn ? 'Weight (Qtl + Kg)' : 'Weight (ਕੁਇੰਟਲ + ਕਿਲੋ)'}
                   </th>
@@ -1401,7 +1672,7 @@ export const DailyPurchase: React.FC = () => {
                   const summary = selectedFarmer ? getFarmerPurchaseSummary(selectedFarmer.id) : null;
                   const availableForThisRow = getAvailableBalanceForRow(index, row.farmerId);
                   const bagsCount = Math.max(0, Number(row.bags) || 0);
-                  const weightKg = bagsCount * FIXED_BAG_WEIGHT_KG;
+                  const weightKg = bagsCount * effectiveBagWeight;
                   const bDown = formatKgToQulKg(weightKg);
                   const isOverLimit = row.farmerId && bagsCount > availableForThisRow;
 
@@ -1426,7 +1697,9 @@ export const DailyPurchase: React.FC = () => {
 
                         {/* Continuous Balance Display */}
                         {summary && (
-                          <div className="mt-1 text-[10px] p-1.5 rounded-md border space-y-0.5 bg-emerald-50/60 border-emerald-200">
+                          <div className={`mt-1 text-[10px] p-1.5 rounded-md border space-y-0.5 ${
+                            isOverLimit ? 'bg-rose-50 border-rose-300' : 'bg-slate-50 border-slate-200'
+                          }`}>
                             {summary.isLinkedFarmer ? (
                               <div className="text-emerald-900">
                                 <span className="font-bold">{isEn ? 'Main Farmer Pool: ' : 'ਮੁੱਖ ਕਿਸਾਨ ਪੂਲ: '}</span>
@@ -1437,23 +1710,20 @@ export const DailyPurchase: React.FC = () => {
                                 </span>
                               </div>
                             ) : (
-                              <div className="text-slate-800">
-                                <span>{isEn ? 'Arrival: ' : 'ਮੰਡੀ ਆਮਦ: '}<strong>{summary.mandiArrivalBags}</strong></span>
-                                <span className="mx-1">•</span>
-                                <span>{isEn ? 'Purchased: ' : 'ਪਹਿਲਾਂ ਖਰੀਦ: '}<strong>{summary.alreadyPurchasedBags}</strong></span>
-                                <span className="mx-1">•</span>
-                                <span>{isEn ? 'Remaining: ' : 'ਕੁੱਲ ਬਾਕੀ: '}<strong>{summary.remainingBags}</strong></span>
+                              <div className="text-slate-800 flex items-center justify-between">
+                                <span>{isEn ? 'Arrival: ' : 'ਆਮਦ: '}<strong>{summary.mandiArrivalBags}</strong> • {isEn ? 'Sold: ' : 'ਵਿਕੀਆਂ: '}<strong>{summary.alreadyPurchasedBags}</strong></span>
+                                <span className="font-bold text-emerald-800">ਬਾਕੀ: <strong>{summary.remainingBags}</strong> ਬੋਰੀਆਂ</span>
                               </div>
                             )}
-                            <div className="pt-0.5 border-t border-emerald-200 flex items-center justify-between">
-                              <span className="text-slate-600 font-bold">{isEn ? 'Available for Row:' : 'ਇਸ ਕਤਾਰ ਲਈ ਉਪਲਬਧ (Max for row):'}</span>
+                            <div className="pt-0.5 border-t border-slate-200 flex items-center justify-between">
+                              <span className="text-slate-600 font-bold">{isEn ? 'Available for Row:' : 'ਇਸ ਕਤਾਰ ਲਈ ਉਪਲਬਧ:'}</span>
                               <span className={`font-mono font-black ${availableForThisRow > 0 ? 'text-emerald-950' : 'text-rose-600'}`}>
                                 {availableForThisRow} {isEn ? 'Bags' : 'ਬੋਰੀਆਂ'}
                               </span>
                             </div>
                             {isOverLimit && (
-                              <div className="text-rose-700 bg-rose-100/90 border border-rose-300 px-1.5 py-0.5 rounded font-black text-[9.5px]">
-                                {isEn ? `Excess purchase! Max ${availableForThisRow} bags possible` : `ਵੱਧ ਖਰੀਦ! ਵੱਧ ਤੋਂ ਵੱਧ ${availableForThisRow} ਬੋਰੀਆਂ ਸੰਭਵ ਹਨ`}
+                              <div className="text-rose-700 bg-rose-100 border border-rose-300 px-1.5 py-0.5 rounded font-black text-[9.5px] animate-pulse">
+                                {isEn ? `⚠️ Excess purchase! Max ${availableForThisRow} bags available` : `⚠️ ਓਵਰ-ਸੇਲ ਚਿਤਾਵਨੀ! ਵੱਧ ਤੋਂ ਵੱਧ ${availableForThisRow} ਬੋਰੀਆਂ ਹੀ ਉਪਲਬਧ ਹਨ`}
                               </div>
                             )}
                           </div>
@@ -1493,27 +1763,39 @@ export const DailyPurchase: React.FC = () => {
                         )}
                       </td>
 
-                      {/* 6. New Juths Input (wide enough for 1500) */}
+                      {/* 6. New Juths Input (Keyboard Navigation Enabled) */}
                       <td className="py-2.5 px-2 bg-amber-50/30 text-center">
                         <input
+                          id={`dp-newBags-${row.rowId}`}
                           type="number"
                           min="0"
                           placeholder="0"
                           value={row.newBags || ''}
                           onChange={(e) => updateRow(row.rowId, 'newBags', e.target.value)}
-                          className="w-28 min-w-[6.5rem] mx-auto text-center bg-white border border-amber-400 rounded p-1 text-sm font-mono font-black text-amber-950 focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-2xs"
+                          onKeyDown={(e) => handleCellKeyDown(e, row.rowId, 'newBags', index)}
+                          className={`w-28 min-w-[6.5rem] mx-auto text-center bg-white border rounded p-1 text-sm font-mono font-black focus:outline-none focus:ring-2 shadow-2xs ${
+                            isOverLimit
+                              ? 'border-rose-500 text-rose-950 focus:ring-rose-400 bg-rose-50/50'
+                              : 'border-amber-400 text-amber-950 focus:ring-amber-500'
+                          }`}
                         />
                       </td>
 
-                      {/* 7. Old Juths Input (wide enough for 1500) */}
+                      {/* 7. Old Juths Input (Keyboard Navigation Enabled) */}
                       <td className="py-2.5 px-2 bg-orange-50/30 text-center">
                         <input
+                          id={`dp-oldBags-${row.rowId}`}
                           type="number"
                           min="0"
                           placeholder="0"
                           value={row.oldBags || ''}
                           onChange={(e) => updateRow(row.rowId, 'oldBags', e.target.value)}
-                          className="w-28 min-w-[6.5rem] mx-auto text-center bg-white border border-orange-400 rounded p-1 text-sm font-mono font-black text-orange-950 focus:outline-none focus:ring-2 focus:ring-orange-500 shadow-2xs"
+                          onKeyDown={(e) => handleCellKeyDown(e, row.rowId, 'oldBags', index)}
+                          className={`w-28 min-w-[6.5rem] mx-auto text-center bg-white border rounded p-1 text-sm font-mono font-black focus:outline-none focus:ring-2 shadow-2xs ${
+                            isOverLimit
+                              ? 'border-rose-500 text-rose-950 focus:ring-rose-400 bg-rose-50/50'
+                              : 'border-orange-400 text-orange-950 focus:ring-orange-500'
+                          }`}
                         />
                       </td>
 
@@ -1522,8 +1804,21 @@ export const DailyPurchase: React.FC = () => {
                         {bagsCount}
                       </td>
 
-                      {/* 9. Weight (Qul + Kg) - Never kg only */}
-                      <td className="py-2.5 px-3 bg-indigo-50/40 text-right font-mono font-black text-indigo-950">
+                      {/* 9. Rate (₹/Qtl) Input (Keyboard Navigation Enabled) */}
+                      <td className="py-2.5 px-2 text-center bg-slate-50/40">
+                        <input
+                          id={`dp-rate-${row.rowId}`}
+                          type="number"
+                          placeholder={String(defaultRateForCrop)}
+                          value={row.rate || ''}
+                          onChange={(e) => updateRow(row.rowId, 'rate', e.target.value)}
+                          onKeyDown={(e) => handleCellKeyDown(e, row.rowId, 'rate', index)}
+                          className="w-20 mx-auto text-center bg-white border border-slate-300 rounded p-1 text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-1 focus:ring-indigo-500 shadow-2xs"
+                        />
+                      </td>
+
+                      {/* 10. Weight (Qtl + Kg) */}
+                      <td className="py-2.5 px-3 bg-indigo-50/40 text-right font-mono font-black text-indigo-950 whitespace-nowrap">
                         {bDown.qtl} Qul {bDown.kg} Kg
                       </td>
 
@@ -1532,7 +1827,7 @@ export const DailyPurchase: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => removeRow(row.rowId)}
-                          className="text-slate-400 hover:text-rose-600 transition p-1"
+                          className="text-slate-400 hover:text-rose-600 transition p-1 cursor-pointer"
                           title="ਹਟਾਓ (Remove)"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -2882,6 +3177,26 @@ export const DailyPurchase: React.FC = () => {
           onClose={() => setEditRecord(null)}
         />
       )}
+
+      {/* Feature 2.4: Agency Procurement & Inspector Sign Sheet Modal */}
+      <AgencyProcurementModal
+        isOpen={isAgencyModalOpen}
+        onClose={() => setIsAgencyModalOpen(false)}
+        records={dailyPurchaseRecords}
+        firm={activeFirm}
+        settings={settings}
+        language={language}
+      />
+
+      {/* Feature 3.1: AI Voice Boli Assistant Modal */}
+      <AiVoiceBoliModal
+        isOpen={isAiVoiceModalOpen}
+        onClose={() => setIsAiVoiceModalOpen(false)}
+        farmers={farmers}
+        agencies={agencies}
+        activeCrop={batchCrop}
+        onApplyParsedBoli={handleApplyAiBoli}
+      />
     </div>
   );
 };

@@ -18,12 +18,16 @@ import {
   FileSpreadsheet,
   UserCheck,
   LogOut,
-  ShieldCheck
+  ShieldCheck,
+  Moon,
+  Sparkles
 } from 'lucide-react';
 import { FirmManagerModal } from '../firm/FirmManagerModal';
+import { FiscalYearManagerModal } from '../firm/FiscalYearManagerModal';
 import { SellerMasterModal } from '../seller/SellerMasterModal';
 import { SupabaseSyncModal } from '../supabase/SupabaseSyncModal';
 import { GoogleSheetsSyncModal } from '../farmer/GoogleSheetsSyncModal';
+import { AiMunimSummaryModal } from '../reports/AiMunimSummaryModal';
 import { useGoogleSheetsSync } from '../../context/GoogleSheetsSyncContext';
 import { TopQuickNavigationBar } from './TopQuickNavigationBar';
 import { CropSwitcher } from './CropSwitcher';
@@ -51,8 +55,10 @@ export const Header: React.FC = () => {
   const { currentUser, logout, setIsAuthModalOpen, setAuthModalMode } = useAuth();
 
   const [isFirmModalOpen, setIsFirmModalOpen] = useState(false);
+  const [isFiscalYearModalOpen, setIsFiscalYearModalOpen] = useState(false);
   const [isSellerModalOpen, setIsSellerModalOpen] = useState(false);
   const [isGoogleSheetsModalOpen, setIsGoogleSheetsModalOpen] = useState(false);
+  const [isAiMunimModalOpen, setIsAiMunimModalOpen] = useState(false);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
 
   const totalBags = bagsEntries.reduce((sum, b) => sum + (b.bags || 0), 0);
@@ -128,9 +134,9 @@ export const Header: React.FC = () => {
               </button>
             </div>
 
-            {/* Fiscal Year Selector */}
-            <div className="flex items-center gap-1.5 bg-slate-800/90 px-2 py-1 rounded-lg border border-slate-700">
-              <Calendar className="w-3.5 h-3.5 text-emerald-400" />
+            {/* Fiscal Year Selector & Master Manager */}
+            <div className="flex items-center gap-1 bg-slate-800/90 px-2 py-1 rounded-lg border border-slate-700">
+              <Calendar className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
               <select
                 value={activeFiscalYear}
                 onChange={(e) => setActiveFiscalYear(e.target.value)}
@@ -143,6 +149,14 @@ export const Header: React.FC = () => {
                   </option>
                 ))}
               </select>
+              <button
+                type="button"
+                onClick={() => setIsFiscalYearModalOpen(true)}
+                className="p-1 text-slate-400 hover:text-emerald-400 rounded transition cursor-pointer"
+                title="ਵਿੱਤੀ ਸਾਲ ਪ੍ਰਬੰਧਨ, ਨਵਾਂ ਸਾਲ, ਰੋਲ-ਓਵਰ ਅਤੇ ਲਾਕ (FY Master & Roll Over)"
+              >
+                <Settings2 className="w-3.5 h-3.5" />
+              </button>
             </div>
 
             {/* Active Crop Switcher (Wheat / Maize / Paddy) */}
@@ -226,6 +240,20 @@ export const Header: React.FC = () => {
                   {conflicts.length}
                 </span>
               )}
+            </button>
+
+            {/* Daily AI Munim Evening Summary (Feature 6) */}
+            <button
+              type="button"
+              onClick={() => setIsAiMunimModalOpen(true)}
+              title="Daily Evening AI Munim Intelligence Summary (Gemini 3.8 Flash)"
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-bold transition shadow-xs cursor-pointer bg-gradient-to-r from-amber-950/80 via-indigo-950/80 to-slate-900 border-amber-500/60 text-amber-300 hover:border-amber-400 hover:text-white"
+            >
+              <Moon className="w-3.5 h-3.5 text-amber-400" />
+              <span className="hidden sm:inline">AI ਰੋਜ਼ਨਾਮਚਾ</span>
+              <span className="text-[9px] bg-amber-400 text-slate-950 font-black px-1.5 py-0.2 rounded-md">
+                PRO AI
+              </span>
             </button>
 
             {/* Quick Metrics */}
@@ -361,10 +389,16 @@ export const Header: React.FC = () => {
         <TopQuickNavigationBar />
       </header>
 
-      {/* Firm and Fiscal Year Management Modal */}
+      {/* Firm Management Modal */}
       <FirmManagerModal
         isOpen={isFirmModalOpen}
         onClose={() => setIsFirmModalOpen(false)}
+      />
+
+      {/* Dedicated Fiscal Year Accounting & Roll-Over Master Modal */}
+      <FiscalYearManagerModal
+        isOpen={isFiscalYearModalOpen}
+        onClose={() => setIsFiscalYearModalOpen(false)}
       />
 
       {/* Seller Master Modal */}
@@ -383,6 +417,12 @@ export const Header: React.FC = () => {
       <GoogleSheetsSyncModal
         isOpen={isGoogleSheetsModalOpen}
         onClose={() => setIsGoogleSheetsModalOpen(false)}
+      />
+
+      {/* Daily AI Munim Evening Summary Modal */}
+      <AiMunimSummaryModal
+        isOpen={isAiMunimModalOpen}
+        onClose={() => setIsAiMunimModalOpen(false)}
       />
     </>
   );
