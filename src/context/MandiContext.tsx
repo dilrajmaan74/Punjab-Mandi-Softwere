@@ -34,6 +34,22 @@ import {
   CropConfig,
   CROP_CONFIGS
 } from '../types/mandi';
+import {
+  AppMode,
+  LedgerAccount,
+  VoucherEntry,
+  IFormRecord,
+  JFormRecord,
+  TDSRecord,
+  ProfitAndLossStatement,
+  BalanceSheetStatement
+} from '../types/pakkaAccounting';
+import {
+  INITIAL_SYSTEM_LEDGERS,
+  calculateIFormDetails,
+  generateProfitAndLossReport,
+  generateBalanceSheetReport
+} from '../utils/pakkaCalculations';
 import { INITIAL_PIN_CODES } from '../data/pinCodes';
 import {
   formatKgToQulKg,
@@ -48,7 +64,8 @@ import {
   getFiscalYearDateRange,
   isDateInFiscalYear,
   validateDateInFiscalYear,
-  isRecordInFiscalYear
+  isRecordInFiscalYear,
+  compareDatesChronological
 } from '../utils/calculations';
 import { isSupabaseConfigured } from '../lib/supabase';
 import {
@@ -413,6 +430,46 @@ interface MandiContextType {
   migrateDataToSupabase: () => Promise<{ success: boolean; stats: any; error?: string }>;
   isSupabaseSyncModalOpen: boolean;
   setIsSupabaseSyncModalOpen: (open: boolean) => void;
+
+  // Dual-Book: Pakka (Official & CA Double-Entry Mandi Accounting)
+  appMode: AppMode;
+  setAppMode: (mode: AppMode) => void;
+  pakkaLedgers: LedgerAccount[];
+  addPakkaLedger: (ledger: Omit<LedgerAccount, 'id' | 'createdAt'>) => LedgerAccount;
+  updatePakkaLedger: (id: string, updates: Partial<LedgerAccount>) => void;
+  deletePakkaLedger: (id: string) => boolean;
+  pakkaVouchers: VoucherEntry[];
+  addPakkaVoucher: (voucher: Omit<VoucherEntry, 'id' | 'voucherNo' | 'createdAt'>) => VoucherEntry;
+  deletePakkaVoucher: (id: string) => boolean;
+  iFormRecords: IFormRecord[];
+  jFormRecords: JFormRecord[];
+  generateIFormAndJFormsFromPurchases: (options: {
+    agency: string;
+    agencyPa?: string;
+    date: string;
+    fiscalYear?: string;
+    cropType: string;
+    purchaseIds: string[];
+    rates?: {
+      damamiPercent?: number;
+      mdfPercent?: number;
+      rdfPercent?: number;
+      tdsPercent?: number;
+      unloadingRatePerQtl?: number;
+      sievingRatePerQtl?: number;
+      weighingFillingRatePerQtl?: number;
+      stitchingRatePerBag?: number;
+      loadingRatePerQtl?: number;
+    };
+  }) => { iForm: IFormRecord; jForms: JFormRecord[] };
+  toggleLockIForm: (id: string, reason?: string) => boolean;
+  toggleLockJForm: (id: string) => boolean;
+  tdsRecords: TDSRecord[];
+  addTDSRecord: (tds: Omit<TDSRecord, 'id' | 'createdAt'>) => TDSRecord;
+  updateTDSRecord: (id: string, updates: Partial<TDSRecord>) => void;
+  deleteTDSRecord: (id: string) => boolean;
+  getProfitAndLossReport: (fiscalYear?: string) => ProfitAndLossStatement;
+  getBalanceSheetReport: (fiscalYear?: string) => BalanceSheetStatement;
 }
 
 const MandiContext = createContext<MandiContextType | undefined>(undefined);
@@ -440,7 +497,13 @@ const LOCAL_STORAGE_KEYS = {
   TRUCKS: 'punjab_mandi_trucks_v2',
   LABOUR_MATES: 'punjab_mandi_labour_mates_v2',
   LABOUR_WORK_ENTRIES: 'punjab_mandi_labour_work_entries_v2',
-  LABOUR_ADVANCE_PAYMENTS: 'punjab_mandi_labour_advance_payments_v2'
+  LABOUR_ADVANCE_PAYMENTS: 'punjab_mandi_labour_advance_payments_v2',
+  APP_MODE: 'punjab_mandi_app_mode_v2',
+  PAKKA_LEDGERS: 'punjab_mandi_pakka_ledgers_v2',
+  PAKKA_VOUCHERS: 'punjab_mandi_pakka_vouchers_v2',
+  IFORM_RECORDS: 'punjab_mandi_iform_records_v2',
+  JFORM_RECORDS: 'punjab_mandi_jform_records_v2',
+  TDS_RECORDS: 'punjab_mandi_tds_records_v2'
 };
 
 const DEFAULT_LABOUR_MATES: LabourMate[] = [
@@ -647,9 +710,27 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   });
 
   // 5. Daily Purchase Records - strictly isolated per active firm
+  const purchaseIdCounterRef = useRef<number>(0);
   const [dailyPurchaseRecords, setDailyPurchaseRecords] = useState<DailyPurchaseRecord[]>(() => {
     const list = loadFirmData<DailyPurchaseRecord[]>(LOCAL_STORAGE_KEYS.DAILY_PURCHASES, activeFirmId, []);
-    return Array.isArray(list) ? list : [];
+    if (!Array.isArray(list)) return [];
+    const seen = new Set<string>();
+    let max = 0;
+    list.forEach((r) => {
+      const num = parseInt(r.id?.replace(/\D/g, '') || '0', 10);
+      if (!isNaN(num) && num > max) max = num;
+    });
+    if (purchaseIdCounterRef) purchaseIdCounterRef.current = max;
+    return list.map((r) => {
+      if (!r.id || seen.has(r.id)) {
+        max++;
+        const newId = `PUR-${String(max).padStart(5, '0')}`;
+        seen.add(newId);
+        return { ...r, id: newId };
+      }
+      seen.add(r.id);
+      return r;
+    });
   });
 
   // 6. Farmer Payment Records - strictly isolated per active firm
@@ -820,6 +901,87 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   });
 
   const activeFirm = firms.find((f) => f.id === activeFirmId) || firms[0] || DEFAULT_FIRM;
+
+  // 20. Dual-Book App Mode (Kacha Mandi vs Pakka Official Accounting)
+  const [appMode, setAppModeState] = useState<AppMode>(() => {
+    try {
+      const stored = localStorage.getItem(LOCAL_STORAGE_KEYS.APP_MODE);
+      return stored === 'PAKKA' ? 'PAKKA' : 'KACHA';
+    } catch {
+      return 'KACHA';
+    }
+  });
+
+  const setAppMode = (mode: AppMode) => {
+    setAppModeState(mode);
+    try {
+      localStorage.setItem(LOCAL_STORAGE_KEYS.APP_MODE, mode);
+    } catch (e) {
+      console.warn('Failed to save appMode:', e);
+    }
+  };
+
+  // 21. Pakka Accounting Ledgers
+  const [pakkaLedgers, setPakkaLedgers] = useState<LedgerAccount[]>(() => {
+    try {
+      const stored = localStorage.getItem(LOCAL_STORAGE_KEYS.PAKKA_LEDGERS);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+      return INITIAL_SYSTEM_LEDGERS.map((l, idx) => ({
+        ...l,
+        id: `LED-${String(idx + 1).padStart(3, '0')}`,
+        createdAt: new Date().toLocaleDateString('en-GB')
+      }));
+    } catch {
+      return INITIAL_SYSTEM_LEDGERS.map((l, idx) => ({
+        ...l,
+        id: `LED-${String(idx + 1).padStart(3, '0')}`,
+        createdAt: new Date().toLocaleDateString('en-GB')
+      }));
+    }
+  });
+
+  // 22. Pakka General Ledger Vouchers
+  const [pakkaVouchers, setPakkaVouchers] = useState<VoucherEntry[]>(() => {
+    try {
+      const stored = localStorage.getItem(LOCAL_STORAGE_KEYS.PAKKA_VOUCHERS);
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  // 23. Government Mandi I-Form Records
+  const [iFormRecords, setIFormRecords] = useState<IFormRecord[]>(() => {
+    try {
+      const stored = localStorage.getItem(LOCAL_STORAGE_KEYS.IFORM_RECORDS);
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  // 24. Government Mandi J-Form Records
+  const [jFormRecords, setJFormRecords] = useState<JFormRecord[]>(() => {
+    try {
+      const stored = localStorage.getItem(LOCAL_STORAGE_KEYS.JFORM_RECORDS);
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  // 25. TDS Records
+  const [tdsRecords, setTdsRecords] = useState<TDSRecord[]>(() => {
+    try {
+      const stored = localStorage.getItem(LOCAL_STORAGE_KEYS.TDS_RECORDS);
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
 
   // 12. Navigation & UI States
   const [activeSection, setActiveSection] = useState<NavigationSection>('dashboard');
@@ -1098,6 +1260,26 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   }, [labourAdvancePayments, activeFirmId]);
 
+  useEffect(() => {
+    localStorage.setItem(LOCAL_STORAGE_KEYS.PAKKA_LEDGERS, JSON.stringify(pakkaLedgers));
+  }, [pakkaLedgers]);
+
+  useEffect(() => {
+    localStorage.setItem(LOCAL_STORAGE_KEYS.PAKKA_VOUCHERS, JSON.stringify(pakkaVouchers));
+  }, [pakkaVouchers]);
+
+  useEffect(() => {
+    localStorage.setItem(LOCAL_STORAGE_KEYS.IFORM_RECORDS, JSON.stringify(iFormRecords));
+  }, [iFormRecords]);
+
+  useEffect(() => {
+    localStorage.setItem(LOCAL_STORAGE_KEYS.JFORM_RECORDS, JSON.stringify(jFormRecords));
+  }, [jFormRecords]);
+
+  useEffect(() => {
+    localStorage.setItem(LOCAL_STORAGE_KEYS.TDS_RECORDS, JSON.stringify(tdsRecords));
+  }, [tdsRecords]);
+
   // Keep settings automatically in sync with activeFirm
   useEffect(() => {
     if (activeFirm) {
@@ -1207,8 +1389,8 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       if (
         cleanName &&
         cleanVillage &&
-        f.farmerName.trim().toLowerCase() === cleanName &&
-        f.village.trim().toLowerCase() === cleanVillage
+        (f.farmerName || '').trim().toLowerCase() === cleanName &&
+        (f.village || '').trim().toLowerCase() === cleanVillage
       ) {
         return {
           isDuplicate: true,
@@ -2229,7 +2411,7 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         totalPayableWithInterest: calc.totalPayableWithInterest,
         totalPayable: calc.totalPayableWithInterest
       };
-    });
+    }).sort((a, b) => compareDatesChronological(a.date, b.date, 'ASC'));
 
     const totalAdvancePrincipal = Math.round(recalculatedAdvances.reduce((sum, a) => sum + (Number(a.netPrincipalRemaining !== undefined ? a.netPrincipalRemaining : a.amount) || 0), 0) * 100) / 100;
     const totalAdvanceInterest = Math.round(recalculatedAdvances.reduce((sum, a) => sum + (Number(a.interestAmount) || 0), 0) * 100) / 100;
@@ -2453,12 +2635,8 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
     });
 
-    // Sort transactions by date (newest first)
-    transactions.sort((a, b) => {
-      const dateA = a.date.split('/').reverse().join('-');
-      const dateB = b.date.split('/').reverse().join('-');
-      return dateB.localeCompare(dateA);
-    });
+    // Sort transactions by date (chronological: 15 Sep first, 16 Sep comes after 15 Sep)
+    transactions.sort((a, b) => compareDatesChronological(a.date, b.date, 'ASC'));
 
     return {
       farmer,
@@ -3024,21 +3202,17 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
    * Example: PUR-00001, PUR-00002
    */
   const generateNextPurchaseId = (): string => {
-    if (dailyPurchaseRecords.length === 0) {
-      return 'PUR-00001';
+    let max = purchaseIdCounterRef.current;
+    if (dailyPurchaseRecords && dailyPurchaseRecords.length > 0) {
+      dailyPurchaseRecords.forEach((r) => {
+        const numPart = parseInt(r.id?.replace(/\D/g, '') || '0', 10);
+        if (!isNaN(numPart) && numPart > max) {
+          max = numPart;
+        }
+      });
     }
-    const numbers = dailyPurchaseRecords
-      .map((r) => {
-        const numPart = r.id.replace('PUR-', '');
-        return parseInt(numPart, 10);
-      })
-      .filter((n) => !isNaN(n));
-
-    if (numbers.length === 0) {
-      return 'PUR-00001';
-    }
-    const max = Math.max(...numbers);
     const next = max + 1;
+    purchaseIdCounterRef.current = next;
     return `PUR-${String(next).padStart(5, '0')}`;
   };
 
@@ -3947,8 +4121,8 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       firmLicence: targetFirm.licenceNo,
       firmPan: targetFirm.pan || prev.firmPan,
       firmGstin: targetFirm.gstin || prev.firmGstin,
-      mandiNameEn: targetFirm.address.split(',')[0]?.trim() || prev.mandiNameEn,
-      mandiNamePa: targetFirm.addressPa?.split(',')[0]?.trim() || prev.mandiNamePa,
+      mandiNameEn: (targetFirm.address || '').split(',')[0]?.trim() || prev.mandiNameEn,
+      mandiNamePa: (targetFirm.addressPa || '').split(',')[0]?.trim() || prev.mandiNamePa,
       marketCommitteeEn: `Market Committee ${targetFirm.marketCommittee}`,
       marketCommitteePa: `ਮਾਰਕੀਟ ਕਮੇਟੀ ${targetFirm.marketCommitteePa || targetFirm.marketCommittee}`
     }));
@@ -4226,6 +4400,343 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     localStorage.removeItem(LOCAL_STORAGE_KEYS.ACTIVE_FISCAL_YEAR);
     localStorage.removeItem(LOCAL_STORAGE_KEYS.SELLERS);
     localStorage.removeItem(LOCAL_STORAGE_KEYS.TRUCKS);
+    localStorage.removeItem(LOCAL_STORAGE_KEYS.PAKKA_LEDGERS);
+    localStorage.removeItem(LOCAL_STORAGE_KEYS.PAKKA_VOUCHERS);
+    localStorage.removeItem(LOCAL_STORAGE_KEYS.IFORM_RECORDS);
+    localStorage.removeItem(LOCAL_STORAGE_KEYS.JFORM_RECORDS);
+    localStorage.removeItem(LOCAL_STORAGE_KEYS.TDS_RECORDS);
+  };
+
+  // -------------------------------------------------------------
+  // Pakka (Official & CA Mandi Double-Entry Accounting) Operations
+  // -------------------------------------------------------------
+  const addPakkaLedger = (ledger: Omit<LedgerAccount, 'id' | 'createdAt'>): LedgerAccount => {
+    const nextId = `LED-${String(pakkaLedgers.length + 1).padStart(3, '0')}`;
+    const newLedger: LedgerAccount = {
+      ...ledger,
+      id: nextId,
+      createdAt: new Date().toLocaleDateString('en-GB')
+    };
+    setPakkaLedgers((prev) => [...prev, newLedger]);
+    return newLedger;
+  };
+
+  const updatePakkaLedger = (id: string, updates: Partial<LedgerAccount>) => {
+    setPakkaLedgers((prev) =>
+      prev.map((l) => (l.id === id ? { ...l, ...updates, updatedAt: new Date().toLocaleDateString('en-GB') } : l))
+    );
+  };
+
+  const deletePakkaLedger = (id: string): boolean => {
+    const target = pakkaLedgers.find((l) => l.id === id);
+    if (target?.isSystemLedger) {
+      alert('ਸਿਸਟਮ ਡਿਫਾਲਟ ਖਾਤਾ ਡਿਲੀਟ ਨਹੀਂ ਕੀਤਾ ਜਾ ਸਕਦਾ!');
+      return false;
+    }
+    setPakkaLedgers((prev) => prev.filter((l) => l.id !== id));
+    return true;
+  };
+
+  const addPakkaVoucher = (voucher: Omit<VoucherEntry, 'id' | 'voucherNo' | 'createdAt'>): VoucherEntry => {
+    const nextNo = `VCH-${activeFiscalYear}-${String(pakkaVouchers.length + 1).padStart(3, '0')}`;
+    const newVoucher: VoucherEntry = {
+      ...voucher,
+      id: `VCH-${Date.now()}`,
+      voucherNo: nextNo,
+      createdAt: new Date().toLocaleDateString('en-GB')
+    };
+    setPakkaVouchers((prev) => [newVoucher, ...prev]);
+    return newVoucher;
+  };
+
+  const deletePakkaVoucher = (id: string): boolean => {
+    setPakkaVouchers((prev) => prev.filter((v) => v.id !== id));
+    return true;
+  };
+
+  const generateIFormAndJFormsFromPurchases = (options: {
+    agency: string;
+    agencyPa?: string;
+    date: string;
+    fiscalYear?: string;
+    cropType: string;
+    purchaseIds: string[];
+    rates?: {
+      damamiPercent?: number;
+      mdfPercent?: number;
+      rdfPercent?: number;
+      tdsPercent?: number;
+      unloadingRatePerQtl?: number;
+      sievingRatePerQtl?: number;
+      weighingFillingRatePerQtl?: number;
+      stitchingRatePerBag?: number;
+      loadingRatePerQtl?: number;
+    };
+  }): { iForm: IFormRecord; jForms: JFormRecord[] } => {
+    const targetFY = options.fiscalYear || activeFiscalYear;
+    const selectedPurchases = dailyPurchaseRecords.filter((p) => options.purchaseIds.includes(p.id));
+
+    const totalBags = selectedPurchases.reduce((sum, p) => sum + (Number(p.bags) || 0), 0);
+    const totalWeightKg = selectedPurchases.reduce((sum, p) => sum + (Number(p.weight) || 0), 0);
+    const totalWeightQtl = Math.round((totalWeightKg / 100) * 100) / 100;
+
+    const mspRatePerQtl = selectedPurchases.length > 0 
+      ? Number(selectedPurchases[0].rate) || 2320 
+      : 2320;
+
+    const iformDetails = calculateIFormDetails({
+      totalBags,
+      totalWeightQtl,
+      mspRatePerQtl,
+      rates: options.rates
+    });
+
+    const iFormNo = `IF-${targetFY.replace('-', '')}-${(options.agency || 'AGY').substring(0, 3).toUpperCase()}-${String(iFormRecords.length + 1).padStart(3, '0')}`;
+    const iFormId = `IF-${Date.now()}`;
+
+    // Ensure agency ledger exists
+    let agencyLedger = pakkaLedgers.find((l) => l.name.toLowerCase() === options.agency.toLowerCase() && l.group === 'SUNDRY_DEBTORS');
+    if (!agencyLedger) {
+      agencyLedger = addPakkaLedger({
+        name: options.agency,
+        namePa: options.agencyPa || options.agency,
+        group: 'SUNDRY_DEBTORS',
+        openingBalance: 0,
+        openingBalanceType: 'DR',
+        fiscalYear: targetFY
+      });
+    }
+
+    const newIForm: IFormRecord = {
+      id: iFormId,
+      iFormNo,
+      date: options.date,
+      fiscalYear: targetFY,
+      agency: options.agency,
+      agencyPa: options.agencyPa,
+      agencyLedgerId: agencyLedger.id,
+      cropType: options.cropType,
+      totalBags,
+      totalWeightQtl,
+      mspRatePerQtl,
+      cropGrossAmount: iformDetails.cropGrossAmount,
+      damamiRatePercent: options.rates?.damamiPercent ?? 2.5,
+      damamiAmount: iformDetails.damamiAmount,
+      labourCharges: iformDetails.labourCharges,
+      mdfRatePercent: options.rates?.mdfPercent ?? 3.0,
+      mdfAmount: iformDetails.mdfAmount,
+      rdfRatePercent: options.rates?.rdfPercent ?? 3.0,
+      rdfAmount: iformDetails.rdfAmount,
+      totalBillAmount: iformDetails.totalBillAmount,
+      tdsRatePercent: options.rates?.tdsPercent ?? 2.0,
+      tdsAmount: iformDetails.tdsAmount,
+      netReceivableFromAgency: iformDetails.netReceivableFromAgency,
+      status: 'GENERATED',
+      isLocked: false,
+      transferDate: new Date().toLocaleDateString('en-GB'),
+      linkedPurchaseIds: options.purchaseIds,
+      createdAt: new Date().toLocaleDateString('en-GB')
+    };
+
+    // Generate individual J-Forms for each farmer in the selected purchases
+    const generatedJForms: JFormRecord[] = selectedPurchases.map((purchase, index) => {
+      const farmer = farmers.find((f) => f.id === purchase.farmerId);
+      const farmerWeightQtl = Math.round(((Number(purchase.weight) || 0) / 100) * 100) / 100;
+      const farmerRate = Number(purchase.rate) || mspRatePerQtl;
+      const grossAmount = Math.round(farmerWeightQtl * farmerRate * 100) / 100;
+      const labourDeductions = purchase.labourDeductions?.totalLabourDeduction || 0;
+      const netPayable = Math.round((grossAmount - labourDeductions) * 100) / 100;
+
+      const jFormNo = `JF-${targetFY.replace('-', '')}-${String(jFormRecords.length + index + 1).padStart(4, '0')}`;
+      return {
+        id: `JF-${Date.now()}-${index}`,
+        jFormNo,
+        iFormId,
+        iFormNo,
+        date: options.date,
+        fiscalYear: targetFY,
+        farmerId: purchase.farmerId,
+        farmerName: purchase.farmerName || farmer?.name || 'Farmer',
+        farmerNamePa: farmer?.namePa,
+        fatherName: farmer?.fatherName,
+        fatherNamePa: farmer?.fatherNamePa,
+        village: farmer?.village || '',
+        villagePa: farmer?.villagePa,
+        mobile: farmer?.mobile,
+        aadhaar: farmer?.aadhaar,
+        cropType: options.cropType,
+        bags: Number(purchase.bags) || 0,
+        weightQtl: farmerWeightQtl,
+        ratePerQtl: farmerRate,
+        grossAmount,
+        labourDeductions,
+        netPayableToFarmer: netPayable,
+        status: 'GENERATED',
+        isLocked: false,
+        createdAt: new Date().toLocaleDateString('en-GB')
+      };
+    });
+
+    // Create automatic double entry vouchers in Pakka accounting
+    const commissionLedger = pakkaLedgers.find((l) => l.group === 'DIRECT_INCOME') || pakkaLedgers[0];
+    const labourLedger = pakkaLedgers.find((l) => l.group === 'DIRECT_EXPENSES') || pakkaLedgers[0];
+
+    const voucherEntriesToCreate: VoucherEntry[] = [
+      {
+        id: `VCH-${Date.now()}-1`,
+        voucherNo: `VCH-${targetFY}-${String(pakkaVouchers.length + 1).padStart(3, '0')}`,
+        date: options.date,
+        fiscalYear: targetFY,
+        voucherType: 'PURCHASE',
+        debitLedgerId: agencyLedger.id,
+        debitLedgerName: agencyLedger.name,
+        creditLedgerId: commissionLedger.id,
+        creditLedgerName: commissionLedger.name,
+        amount: iformDetails.damamiAmount,
+        narration: `Official Damami (2.5% Commission) on ${options.agency} I-Form ${iFormNo} (${totalBags} Bags / ${totalWeightQtl} Qtl)`,
+        narrationPa: `ਆਈ-ਫਾਰਮ ${iFormNo} ਅਧੀਨ 2.5% ਆੜ੍ਹਤ ਦਾਮਾਮੀ ਕਮਿਸ਼ਨ (${options.agency})`,
+        linkedIFormId: iFormId,
+        createdAt: new Date().toLocaleDateString('en-GB')
+      },
+      {
+        id: `VCH-${Date.now()}-2`,
+        voucherNo: `VCH-${targetFY}-${String(pakkaVouchers.length + 2).padStart(3, '0')}`,
+        date: options.date,
+        fiscalYear: targetFY,
+        voucherType: 'JOURNAL',
+        debitLedgerId: agencyLedger.id,
+        debitLedgerName: agencyLedger.name,
+        creditLedgerId: labourLedger.id,
+        creditLedgerName: labourLedger.name,
+        amount: iformDetails.labourCharges.totalLabourAmount,
+        narration: `Mandi Labour handling charges on I-Form ${iFormNo}`,
+        narrationPa: `ਆਈ-ਫਾਰਮ ${iFormNo} ਅਧੀਨ ਮੰਡੀ ਪੱਲੇਦਾਰੀ ਤੇ ਲੇਬਰ ਖਰਚਾ`,
+        linkedIFormId: iFormId,
+        createdAt: new Date().toLocaleDateString('en-GB')
+      }
+    ];
+
+    if (iformDetails.tdsAmount > 0) {
+      const tdsLedger = pakkaLedgers.find((l) => l.group === 'CURRENT_ASSETS' && l.name.includes('TDS')) || pakkaLedgers[0];
+      const newTds: TDSRecord = {
+        id: `TDS-${Date.now()}`,
+        date: options.date,
+        fiscalYear: targetFY,
+        quarter: 'Q3',
+        section: '194H',
+        type: 'RECEIVABLE',
+        partyName: options.agency,
+        partyLedgerId: agencyLedger.id,
+        grossAmount: iformDetails.damamiAmount,
+        tdsRatePercent: options.rates?.tdsPercent ?? 2.0,
+        tdsAmount: iformDetails.tdsAmount,
+        status: 'PENDING',
+        createdAt: new Date().toLocaleDateString('en-GB')
+      };
+      setTdsRecords((prev) => [newTds, ...prev]);
+
+      voucherEntriesToCreate.push({
+        id: `VCH-${Date.now()}-3`,
+        voucherNo: `VCH-${targetFY}-${String(pakkaVouchers.length + 3).padStart(3, '0')}`,
+        date: options.date,
+        fiscalYear: targetFY,
+        voucherType: 'JOURNAL',
+        debitLedgerId: tdsLedger.id,
+        debitLedgerName: tdsLedger.name,
+        creditLedgerId: agencyLedger.id,
+        creditLedgerName: agencyLedger.name,
+        amount: iformDetails.tdsAmount,
+        narration: `TDS u/s 194H @ 2% deducted by ${options.agency} on I-Form ${iFormNo}`,
+        narrationPa: `ਏਜੰਸੀ ${options.agency} ਵੱਲੋਂ ਆਈ-ਫਾਰਮ 'ਤੇ 2% ਟੀ.ਡੀ.ਐਸ. ਕਟੌਤੀ`,
+        tdsDeducted: iformDetails.tdsAmount,
+        tdsSection: '194H',
+        linkedIFormId: iFormId,
+        createdAt: new Date().toLocaleDateString('en-GB')
+      });
+    }
+
+    setIFormRecords((prev) => [newIForm, ...prev]);
+    setJFormRecords((prev) => [...generatedJForms, ...prev]);
+    setPakkaVouchers((prev) => [...voucherEntriesToCreate, ...prev]);
+
+    // Mark daily purchases as transferred
+    setDailyPurchaseRecords((prev) =>
+      prev.map((p) =>
+        options.purchaseIds.includes(p.id)
+          ? {
+              ...p,
+              isTransferredToPakka: true,
+              transferredIFormId: iFormId,
+              transferredIFormNo: iFormNo
+            }
+          : p
+      )
+    );
+
+    return { iForm: newIForm, jForms: generatedJForms };
+  };
+
+  const toggleLockIForm = (id: string, reason?: string): boolean => {
+    setIFormRecords((prev) =>
+      prev.map((rec) => {
+        if (rec.id === id) {
+          const nextLocked = !rec.isLocked;
+          return {
+            ...rec,
+            isLocked: nextLocked,
+            status: nextLocked ? 'LOCKED' : 'GENERATED',
+            lockedAt: nextLocked ? new Date().toISOString() : undefined,
+            lockReason: nextLocked ? reason || 'Official Portal Freeze / ਸਰਕਾਰੀ ਪੋਰਟਲ ਲਾਕ' : undefined
+          };
+        }
+        return rec;
+      })
+    );
+    return true;
+  };
+
+  const toggleLockJForm = (id: string): boolean => {
+    setJFormRecords((prev) =>
+      prev.map((rec) => {
+        if (rec.id === id) {
+          const nextLocked = !rec.isLocked;
+          return {
+            ...rec,
+            isLocked: nextLocked,
+            status: nextLocked ? 'LOCKED' : 'GENERATED'
+          };
+        }
+        return rec;
+      })
+    );
+    return true;
+  };
+
+  const addTDSRecord = (tds: Omit<TDSRecord, 'id' | 'createdAt'>): TDSRecord => {
+    const newTds: TDSRecord = {
+      ...tds,
+      id: `TDS-${Date.now()}`,
+      createdAt: new Date().toLocaleDateString('en-GB')
+    };
+    setTdsRecords((prev) => [newTds, ...prev]);
+    return newTds;
+  };
+
+  const updateTDSRecord = (id: string, updates: Partial<TDSRecord>) => {
+    setTdsRecords((prev) => prev.map((t) => (t.id === id ? { ...t, ...updates } : t)));
+  };
+
+  const deleteTDSRecord = (id: string): boolean => {
+    setTdsRecords((prev) => prev.filter((t) => t.id !== id));
+    return true;
+  };
+
+  const getProfitAndLossReport = (fiscalYear?: string): ProfitAndLossStatement => {
+    return generateProfitAndLossReport(pakkaLedgers, pakkaVouchers, fiscalYear || activeFiscalYear);
+  };
+
+  const getBalanceSheetReport = (fiscalYear?: string): BalanceSheetStatement => {
+    return generateBalanceSheetReport(pakkaLedgers, pakkaVouchers, fiscalYear || activeFiscalYear);
   };
 
   return (
@@ -4357,7 +4868,28 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         syncWithSupabase,
         migrateDataToSupabase,
         isSupabaseSyncModalOpen,
-        setIsSupabaseSyncModalOpen
+        setIsSupabaseSyncModalOpen,
+        // Pakka Mandi Accounting & Government Registers
+        appMode,
+        setAppMode,
+        pakkaLedgers,
+        addPakkaLedger,
+        updatePakkaLedger,
+        deletePakkaLedger,
+        pakkaVouchers,
+        addPakkaVoucher,
+        deletePakkaVoucher,
+        iFormRecords,
+        jFormRecords,
+        generateIFormAndJFormsFromPurchases,
+        toggleLockIForm,
+        toggleLockJForm,
+        tdsRecords,
+        addTDSRecord,
+        updateTDSRecord,
+        deleteTDSRecord,
+        getProfitAndLossReport,
+        getBalanceSheetReport
       }}
     >
       {children}

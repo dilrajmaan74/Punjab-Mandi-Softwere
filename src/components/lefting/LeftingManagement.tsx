@@ -30,7 +30,7 @@ import {
   ShieldCheck,
   Maximize2
 } from 'lucide-react';
-import { formatCurrencyINR, autoFormatDate, FIXED_BAG_WEIGHT_KG, formatLeftingWeightQtlKg } from '../../utils/calculations';
+import { formatCurrencyINR, autoFormatDate, FIXED_BAG_WEIGHT_KG, formatLeftingWeightQtlKg, compareDatesChronological } from '../../utils/calculations';
 import { exportLeftingVoucherPDF } from '../../utils/leftingPdfExport';
 import { SellerMasterModal } from '../seller/SellerMasterModal';
 import { TruckMasterModal } from '../truck/TruckMasterModal';
@@ -134,8 +134,8 @@ export const LeftingManagement: React.FC = () => {
   const agencyOptions: SearchableSelectOption[] = useMemo(() => {
     const opts: SearchableSelectOption[] = STANDARD_AGENCIES.map((ag) => ({
       value: ag,
-      label: isEn ? ag.split('(')[0].trim() : ag,
-      subLabel: isEn ? ag.split('(')[1]?.replace(')', '') : undefined,
+      label: isEn ? (ag || '').split('(')[0]?.trim() || ag : ag,
+      subLabel: isEn ? (ag || '').split('(')[1]?.replace(')', '') : undefined,
       keywords: [ag]
     }));
     opts.push({
@@ -176,7 +176,7 @@ export const LeftingManagement: React.FC = () => {
     { value: 'ALL', label: isEn ? 'All Agencies' : 'ਸਾਰੀਆਂ ਏਜੰਸੀਆਂ (All Agencies)' },
     ...STANDARD_AGENCIES.map((ag) => ({
       value: ag,
-      label: isEn ? ag.split('(')[0].trim() : ag,
+      label: isEn ? (ag || '').split('(')[0]?.trim() || ag : ag,
       keywords: [ag]
     }))
   ], [isEn]);
@@ -445,6 +445,10 @@ export const LeftingManagement: React.FC = () => {
     if (filterAgency !== 'ALL' && rec.sellerOrAgency !== filterAgency) return false;
     if (filterStatus !== 'ALL' && rec.status !== filterStatus) return false;
     return true;
+  }).sort((a, b) => {
+    const d = compareDatesChronological(a.dispatchDate || a.date, b.dispatchDate || b.date, 'ASC');
+    if (d !== 0) return d;
+    return a.id.localeCompare(b.id);
   });
 
   return (
@@ -745,7 +749,7 @@ export const LeftingManagement: React.FC = () => {
                     <div className="flex flex-wrap gap-1">
                       {selectedSeller.agencies.map((ag) => (
                         <span key={ag} className="text-[9px] bg-slate-100 text-slate-700 px-2 py-0.5 rounded font-bold">
-                          {ag.split('(')[0].trim()}
+                          {(ag || '').split('(')[0]?.trim() || ag}
                         </span>
                       ))}
                     </div>
@@ -1115,8 +1119,8 @@ export const LeftingManagement: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {filteredRecords.map((rec) => (
-                    <tr key={rec.id} className="hover:bg-slate-50 transition-colors">
+                  {filteredRecords.map((rec, idx) => (
+                    <tr key={`${rec.id}-${idx}`} className="hover:bg-slate-50 transition-colors">
                       <td className="p-3 font-medium text-slate-900">{rec.dispatchDate}</td>
                       <td className="p-3">
                         <div className="font-mono font-bold text-slate-800">{rec.gatePassNo || rec.id}</div>

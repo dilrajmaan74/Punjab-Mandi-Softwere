@@ -44,7 +44,8 @@ import {
   formatKgToQulKg,
   calculatePayableAmount,
   autoFormatDate,
-  isRecordInFiscalYear
+  isRecordInFiscalYear,
+  compareDatesChronological
 } from '../../utils/calculations';
 import { DailyPurchaseViewModal } from './DailyPurchaseViewModal';
 import { DailyPurchaseEditModal } from './DailyPurchaseEditModal';
@@ -761,17 +762,8 @@ export const DailyPurchase: React.FC = () => {
       groups[rec.date].totalNetAmount += net;
     });
 
-    // Sort dates descending (newest first)
-    const sortedDates = Object.keys(groups).sort((a, b) => {
-      const partsA = a.split('/');
-      const partsB = b.split('/');
-      if (partsA.length === 3 && partsB.length === 3) {
-        const dA = new Date(parseInt(partsA[2], 10), parseInt(partsA[1], 10) - 1, parseInt(partsA[0], 10));
-        const dB = new Date(parseInt(partsB[2], 10), parseInt(partsB[1], 10) - 1, parseInt(partsB[0], 10));
-        return dB.getTime() - dA.getTime();
-      }
-      return b.localeCompare(a);
-    });
+    // Sort dates chronological ascending (15 Sep first, 16 Sep after 15 Sep)
+    const sortedDates = Object.keys(groups).sort((a, b) => compareDatesChronological(a, b, 'ASC'));
 
     return sortedDates.map((date) => ({
       date,
@@ -1018,9 +1010,9 @@ export const DailyPurchase: React.FC = () => {
 
       return true;
     }).sort((a, b) => {
-      const dateDiff = normalizeDateToComparable(b.date) - normalizeDateToComparable(a.date);
+      const dateDiff = compareDatesChronological(a.date, b.date, 'ASC');
       if (dateDiff !== 0) return dateDiff;
-      return b.id.localeCompare(a.id);
+      return a.id.localeCompare(b.id);
     });
   }, [dailyPurchaseRecords, allFarmersAgency, allFarmersSearch, purchaseCropFilter]);
 
@@ -1086,7 +1078,7 @@ export const DailyPurchase: React.FC = () => {
     });
 
     return Object.keys(dateCounts)
-      .sort((a, b) => normalizeDateToComparable(b) - normalizeDateToComparable(a))
+      .sort((a, b) => compareDatesChronological(a, b, 'ASC'))
       .map((date) => ({
         date,
         count: dateCounts[date]
@@ -1125,9 +1117,9 @@ export const DailyPurchase: React.FC = () => {
       }
       return true;
     }).sort((a, b) => {
-      const dateDiff = normalizeDateToComparable(b.date) - normalizeDateToComparable(a.date);
+      const dateDiff = compareDatesChronological(a.date, b.date, 'ASC');
       if (dateDiff !== 0) return dateDiff;
-      return b.id.localeCompare(a.id);
+      return a.id.localeCompare(b.id);
     });
   }, [dailyPurchaseRecords, selectedFilterDate, dateViewAgency, dateViewSearch, purchaseCropFilter]);
 
@@ -1206,6 +1198,17 @@ export const DailyPurchase: React.FC = () => {
 
           {/* Quick jump actions, Crop, Agency sheet, AI Boli & Excel export */}
           <div className="flex items-center gap-2 flex-wrap">
+            {/* Transfer to Pakka I-Form / J-Form Button */}
+            <button
+              type="button"
+              onClick={() => setActiveSection('pakka-transfer')}
+              className="text-xs bg-gradient-to-r from-blue-700 via-indigo-700 to-purple-700 hover:from-blue-600 hover:to-indigo-600 text-white font-black px-3 py-1.5 rounded-lg shadow-sm transition active:scale-95 flex items-center gap-1.5 cursor-pointer"
+              title="ਇਸ ਮਿਤੀ ਦੀ ਰੋਜ਼ਾਨਾ ਖਰੀਦ ਤੋਂ ਪੱਕੇ ਸਰਕਾਰੀ I-Form ਤੇ J-Forms ਬਣਾਓ"
+            >
+              <Scale className="w-3.5 h-3.5 text-amber-300" />
+              <span>⚖️ ਪੱਕੇ I-Form / J-Form 'ਚ ਟਰਾਂਸਫਰ ਕਰੋ</span>
+            </button>
+
             {/* Feature 3.1: AI Voice Boli Assistant Button */}
             <button
               type="button"
@@ -2256,7 +2259,7 @@ export const DailyPurchase: React.FC = () => {
 
                         return (
                           <tr
-                            key={rec.id}
+                            key={`${rec.id}-${idx}`}
                             className={`transition hover:bg-slate-50/80 ${
                               isSelected ? 'bg-emerald-50/70 hover:bg-emerald-50' : idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'
                             }`}
@@ -2708,7 +2711,7 @@ export const DailyPurchase: React.FC = () => {
 
                             return (
                               <tr
-                                key={rec.id}
+                                key={`${rec.id}-${idx}`}
                                 className={`transition hover:bg-slate-50/80 ${
                                   isSelected ? 'bg-emerald-50/70 hover:bg-emerald-50' : idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/30'
                                 }`}
@@ -3009,7 +3012,7 @@ export const DailyPurchase: React.FC = () => {
                                       const isRowSelected = selectedRecordIds.has(rec.id);
                                       return (
                                         <tr
-                                          key={rec.id}
+                                          key={`${rec.id}-${idx}`}
                                           className={`hover:bg-slate-50/70 ${
                                             isRowSelected ? 'bg-emerald-50/70 hover:bg-emerald-50' : ''
                                           }`}

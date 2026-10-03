@@ -12,7 +12,7 @@ import {
   Receipt
 } from 'lucide-react';
 import { FarmerAccountSummary, Farmer, MandiSettings } from '../../types/mandi';
-import { formatCurrency, formatCurrencyINR } from '../../utils/calculations';
+import { formatCurrency, formatCurrencyINR, compareDatesChronological } from '../../utils/calculations';
 import { openWhatsApp } from '../../utils/whatsappNotification';
 
 interface FarmerTFormatLedgerProps {
@@ -212,6 +212,10 @@ export const FarmerTFormatLedger: React.FC<FarmerTFormatLedgerProps> = ({
       }
     });
   }
+
+  // Sort both debit and credit entries chronologically so 15 Sep appears first, and 16 Sep comes after 15 Sep
+  debitList.sort((a, b) => compareDatesChronological(a.date, b.date, 'ASC'));
+  creditList.sort((a, b) => compareDatesChronological(a.date, b.date, 'ASC'));
 
   // Equalize row counts so left & right align like a real Munim book
   const maxRows = Math.max(debitList.length, creditList.length, 1);

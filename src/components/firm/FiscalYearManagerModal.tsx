@@ -121,16 +121,16 @@ export const FiscalYearManagerModal: React.FC<FiscalYearManagerModalProps> = ({
 
   // Filtered farmers for opening balance master
   const filteredOpeningFarmers = useMemo(() => {
-    if (!openingSearch.trim()) return farmers;
+    if (!openingSearch?.trim()) return farmers;
     const q = openingSearch.toLowerCase().trim();
     return farmers.filter(
       (f) =>
-        f.farmerName.toLowerCase().includes(q) ||
+        (f.farmerName || '').toLowerCase().includes(q) ||
         (f.farmerNamePa && f.farmerNamePa.includes(q)) ||
-        f.village.toLowerCase().includes(q) ||
+        (f.village || '').toLowerCase().includes(q) ||
         (f.villagePa && f.villagePa.includes(q)) ||
-        f.mobile.includes(q) ||
-        f.id.toLowerCase().includes(q)
+        (f.mobile || '').includes(q) ||
+        (f.id || '').toLowerCase().includes(q)
     );
   }, [farmers, openingSearch]);
 

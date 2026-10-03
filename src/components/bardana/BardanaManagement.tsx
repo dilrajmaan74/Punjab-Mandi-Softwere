@@ -44,6 +44,7 @@ import {
   exportBardanaReceivedVoucherPDF,
   exportBardanaRegisterPDF
 } from '../../utils/bardanaPdfExport';
+import { compareDatesChronological } from '../../utils/calculations';
 
 const STANDARD_AGENCIES = [
   'Punjab Mandi Board Agency',
@@ -146,8 +147,8 @@ export const BardanaManagement: React.FC = () => {
   const agencyOptions: SearchableSelectOption[] = useMemo(() => {
     const opts: SearchableSelectOption[] = STANDARD_AGENCIES.map((ag) => ({
       value: ag,
-      label: isEn ? ag.split('(')[0].trim() : ag,
-      subLabel: isEn ? ag.split('(')[1]?.replace(')', '') : undefined,
+      label: isEn ? (ag || '').split('(')[0]?.trim() || ag : ag,
+      subLabel: isEn ? (ag || '').split('(')[1]?.replace(')', '') : undefined,
       keywords: [ag]
     }));
     opts.push({
@@ -407,7 +408,7 @@ export const BardanaManagement: React.FC = () => {
     { value: 'ALL', label: isEn ? 'All Agencies' : 'ਸਾਰੀਆਂ ਏਜੰਸੀਆਂ (All Agencies)' },
     ...recordedAgencies.map((ag) => ({
       value: ag,
-      label: isEn ? ag.split('(')[0].trim() : ag,
+      label: isEn ? (ag || '').split('(')[0]?.trim() || ag : ag,
       keywords: [ag]
     }))
   ], [recordedAgencies, isEn]);
@@ -525,7 +526,11 @@ export const BardanaManagement: React.FC = () => {
       }
       return results;
     })
-  ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  ].sort((a, b) => {
+    const d = compareDatesChronological(a.date, b.date, 'ASC');
+    if (d !== 0) return d;
+    return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+  });
 
   const filteredHistory = unifiedHistory.filter((item) => {
     if (bardanaCropFilter !== 'ALL') {

@@ -3,7 +3,7 @@ import { useMandi } from '../../context/MandiContext';
 import { useNotification } from '../../context/NotificationContext';
 import { LabourMate, LabourWorkEntry, LabourAdvancePayment } from '../../types/mandi';
 import { DateInput } from '../common/DateInput';
-import { formatCurrency } from '../../utils/calculations';
+import { formatCurrency, compareDatesChronological } from '../../utils/calculations';
 import {
   Users,
   Plus,
@@ -137,8 +137,8 @@ export const LabourGangLedger: React.FC = () => {
       });
     });
 
-    // Sort by date (latest first)
-    list.sort((a, b) => b.date.localeCompare(a.date));
+    // Sort by date (chronological: 15 Sep first, 16 Sep comes after 15 Sep)
+    list.sort((a, b) => compareDatesChronological(a.date, b.date, 'ASC'));
 
     return { totalEarned, totalAdvance, netBalance, transactions: list };
   }, [activeMate, labourWorkEntries, labourAdvancePayments]);

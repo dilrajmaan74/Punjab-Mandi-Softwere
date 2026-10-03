@@ -53,7 +53,7 @@ export const PinVillageSelector: React.FC<PinVillageSelectorProps> = ({
   // Merge runtime pinCodesList with authoritative INITIAL_PIN_CODES to guarantee 100% data availability
   const combinedMap: PinCodeVillageMapping[] = [...(pinCodesList || [])];
   INITIAL_PIN_CODES.forEach((initP) => {
-    const foundIdx = combinedMap.findIndex((p) => p.pinCode === initP.pinCode);
+    const foundIdx = combinedMap.findIndex((p) => (p?.pinCode || '').toString() === initP.pinCode);
     if (foundIdx === -1) {
       combinedMap.push(initP);
     } else {
@@ -68,7 +68,7 @@ export const PinVillageSelector: React.FC<PinVillageSelectorProps> = ({
   });
 
   // Find matching PIN code mapping
-  const matchedMapping = combinedMap.find((p) => p.pinCode.trim() === cleanPin);
+  const matchedMapping = combinedMap.find((p) => (p?.pinCode || '').toString().trim() === cleanPin);
   const matchingVillages: VillageOption[] = matchedMapping ? matchedMapping.villages : [];
 
   // Filter villages by search query in both English and Punjabi (Requirement 2, 3, 4, 5, 6)

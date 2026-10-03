@@ -94,7 +94,7 @@ export const MultiFarmerAdd: React.FC = () => {
   const handleSaveAndAddNext = (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!newFarmer.farmerName.trim()) {
+    if (!newFarmer.farmerName?.trim()) {
       notifyError({
         titlePa: 'ਕਿਸਾਨ ਦਾ ਨਾਂ ਲੋੜੀਂਦਾ ਹੈ',
         titleEn: 'Farmer Name Required',
@@ -102,7 +102,8 @@ export const MultiFarmerAdd: React.FC = () => {
       });
       return;
     }
-    if (!newFarmer.aadhaar.trim() || newFarmer.aadhaar.replace(/\s+/g, '').length !== 12) {
+    const cleanAadhaar = (newFarmer.aadhaar || '').replace(/\s+/g, '');
+    if (!cleanAadhaar || cleanAadhaar.length !== 12) {
       notifyError({
         titlePa: 'ਅਵੈਧ ਆਧਾਰ ਨੰਬਰ',
         titleEn: 'Invalid Aadhaar Number',
@@ -114,10 +115,10 @@ export const MultiFarmerAdd: React.FC = () => {
     setIsSaving(true);
 
     const result = registerFarmer({
-      farmerName: newFarmer.farmerName.trim(),
-      farmerNamePa: newFarmer.farmerNamePa.trim() || newFarmer.farmerName.trim(),
-      fatherName: newFarmer.fatherName.trim(),
-      fatherNamePa: newFarmer.fatherNamePa.trim() || newFarmer.fatherName.trim(),
+      farmerName: (newFarmer.farmerName || '').trim(),
+      farmerNamePa: (newFarmer.farmerNamePa || '').trim() || (newFarmer.farmerName || '').trim(),
+      fatherName: (newFarmer.fatherName || '').trim(),
+      fatherNamePa: (newFarmer.fatherNamePa || '').trim() || (newFarmer.fatherName || '').trim(),
       pinCode: newFarmer.pinCode,
       village: newFarmer.village,
       villagePa: newFarmer.villagePa,

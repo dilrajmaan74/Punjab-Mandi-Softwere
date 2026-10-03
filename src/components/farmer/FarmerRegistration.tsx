@@ -255,7 +255,7 @@ export const FarmerRegistration: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
 
   // Selected PIN Code mapping (fallback if matching standard list)
-  const selectedPinMapping = pinCodes.find((p) => p.pinCode === formData.pinCode.trim());
+  const selectedPinMapping = pinCodes.find((p) => (p?.pinCode || '').trim() === (formData?.pinCode || '').trim());
 
   // Auto-transliterate English names into Punjabi as typed
   const handleNameChange = (val: string) => {
@@ -294,11 +294,11 @@ export const FarmerRegistration: React.FC = () => {
 
   // Real-time Duplicate Check
   useEffect(() => {
-    if (formData.farmerName.trim() || formData.aadhaar.trim()) {
+    if ((formData?.farmerName || '').trim() || (formData?.aadhaar || '').trim()) {
       const dup = checkDuplicateFarmer({
-        farmerName: formData.farmerName,
-        aadhaar: formData.aadhaar,
-        village: formData.village
+        farmerName: formData?.farmerName || '',
+        aadhaar: formData?.aadhaar || '',
+        village: formData?.village || ''
       });
       if (dup.isDuplicate && dup.existingFarmer) {
         setDuplicateWarning({
@@ -312,7 +312,7 @@ export const FarmerRegistration: React.FC = () => {
     } else {
       setDuplicateWarning(null);
     }
-  }, [formData.farmerName, formData.aadhaar, formData.village, farmers]);
+  }, [formData?.farmerName, formData?.aadhaar, formData?.village, farmers]);
 
   // Automatic OCR trigger when Front or Back Aadhaar image is updated
   const triggerAutoOCR = async (frontUrl?: string, backUrl?: string) => {
@@ -395,7 +395,7 @@ export const FarmerRegistration: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.farmerName.trim()) {
+    if (!formData.farmerName?.trim()) {
       notifyError({
         titlePa: 'ਕਿਸਾਨ ਦਾ ਨਾਂ ਲੋੜੀਂਦਾ ਹੈ',
         titleEn: 'Farmer Name Required',
@@ -414,7 +414,7 @@ export const FarmerRegistration: React.FC = () => {
       return;
     }
 
-    const cleanAadhaar = formData.aadhaar.replace(/\s+/g, '');
+    const cleanAadhaar = (formData.aadhaar || '').replace(/\s+/g, '');
     if (!cleanAadhaar || cleanAadhaar.length !== 12) {
       notifyError({
         titlePa: 'ਅਵੈਧ ਆਧਾਰ ਨੰਬਰ',
@@ -427,18 +427,18 @@ export const FarmerRegistration: React.FC = () => {
     setIsSaving(true);
 
     const result = registerFarmer({
-      farmerName: formData.farmerName.trim(),
-      farmerNamePa: formData.farmerNamePa.trim() || formData.farmerName.trim(),
-      fatherName: formData.fatherName.trim(),
-      fatherNamePa: formData.fatherNamePa.trim() || formData.fatherName.trim(),
-      address: formData.address.trim(),
-      pinCode: formData.pinCode.trim(),
-      village: formData.village.trim(),
-      villagePa: formData.villagePa.trim() || formData.village.trim(),
+      farmerName: (formData.farmerName || '').trim(),
+      farmerNamePa: (formData.farmerNamePa || '').trim() || (formData.farmerName || '').trim(),
+      fatherName: (formData.fatherName || '').trim(),
+      fatherNamePa: (formData.fatherNamePa || '').trim() || (formData.fatherName || '').trim(),
+      address: (formData.address || '').trim(),
+      pinCode: (formData.pinCode || '').trim(),
+      village: (formData.village || '').trim(),
+      villagePa: (formData.villagePa || '').trim() || (formData.village || '').trim(),
       mobile: autoFormatMobile(formData.mobile),
       aadhaar: autoFormatAadhaar(formData.aadhaar),
-      linkedMainFarmerId: formData.linkedMainFarmerId.trim() || undefined,
-      linkedMainFarmerName: formData.linkedMainFarmerName.trim() || undefined,
+      linkedMainFarmerId: (formData.linkedMainFarmerId || '').trim() || undefined,
+      linkedMainFarmerName: (formData.linkedMainFarmerName || '').trim() || undefined,
       photoUrl: formData.photoUrl || undefined,
       aadhaarFrontUrl: formData.aadhaarFrontUrl || undefined,
       aadhaarBackUrl: formData.aadhaarBackUrl || undefined,

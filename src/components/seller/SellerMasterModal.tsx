@@ -433,7 +433,7 @@ export const SellerMasterModal: React.FC<SellerMasterModalProps> = ({
                           key={agency}
                           className="text-[10px] bg-slate-100 text-slate-700 px-2 py-0.5 rounded-md font-semibold"
                         >
-                          {agency.split('(')[0].trim()}
+                          {(agency || '').split('(')[0]?.trim() || agency}
                         </span>
                       ))}
                     </div>

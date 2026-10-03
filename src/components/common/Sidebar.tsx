@@ -19,7 +19,15 @@ import {
   Settings,
   Scale,
   Gavel,
-  Briefcase
+  Briefcase,
+  FileText,
+  FileCheck,
+  ArrowRightLeft,
+  Landmark,
+  Receipt,
+  TrendingUp,
+  FileCheck2,
+  Wheat
 } from 'lucide-react';
 import { GoogleSheetsSyncModal } from '../farmer/GoogleSheetsSyncModal';
 import { useGoogleSheetsSync } from '../../context/GoogleSheetsSyncContext';
@@ -32,7 +40,7 @@ interface NavItem {
   badgeColor?: string;
 }
 
-const NAV_ITEMS: NavItem[] = [
+const KACHA_NAV_ITEMS: NavItem[] = [
   {
     id: 'dashboard',
     titleEn: 'Dashboard',
@@ -154,6 +162,92 @@ const NAV_ITEMS: NavItem[] = [
   }
 ];
 
+const PAKKA_NAV_ITEMS: NavItem[] = [
+  {
+    id: 'pakka-dashboard',
+    titleEn: 'Pakka Dashboard',
+    titlePa: 'ਪੱਕਾ ਡੈਸ਼ਬੋਰਡ',
+    icon: LayoutDashboard,
+    badgeColor: 'bg-blue-700'
+  },
+  {
+    id: 'iform-register',
+    titleEn: 'I-Form (Agency Bills)',
+    titlePa: 'ਸਰਕਾਰੀ ਆਈ-ਫਾਰਮ',
+    icon: FileText,
+    badgeColor: 'bg-blue-600'
+  },
+  {
+    id: 'jform-register',
+    titleEn: 'J-Form (Farmer Sales)',
+    titlePa: 'ਸਰਕਾਰੀ ਜੇ-ਫਾਰਮ',
+    icon: FileCheck,
+    badgeColor: 'bg-emerald-600'
+  },
+  {
+    id: 'pakka-transfer',
+    titleEn: 'Transfer Kacha to Pakka',
+    titlePa: 'ਕੱਚਾ ➔ ਪੱਕਾ ਟਰਾਂਸਫਰ',
+    icon: ArrowRightLeft,
+    badgeColor: 'bg-amber-600'
+  },
+  {
+    id: 'pakka-ledgers',
+    titleEn: 'Ledgers & Chart of A/c',
+    titlePa: 'ਲੈੱਜਰ ਮਾਸਟਰ ਤੇ ਗਰੁੱਪ',
+    icon: Landmark,
+    badgeColor: 'bg-indigo-600'
+  },
+  {
+    id: 'pakka-vouchers',
+    titleEn: 'Voucher Entries',
+    titlePa: 'ਵਾਊਚਰ ਐਂਟਰੀ (ਡਬਲ ਐਂਟਰੀ)',
+    icon: Receipt,
+    badgeColor: 'bg-purple-600'
+  },
+  {
+    id: 'pakka-balancesheet',
+    titleEn: 'Balance Sheet',
+    titlePa: 'ਪੱਕੀ ਬੈਲੇਂਸ ਸ਼ੀਟ',
+    icon: Scale,
+    badgeColor: 'bg-blue-800'
+  },
+  {
+    id: 'pakka-profitloss',
+    titleEn: 'Profit & Loss A/c',
+    titlePa: 'ਨਫ਼ਾ-ਨੁਕਸਾਨ ਖਾਤਾ',
+    icon: TrendingUp,
+    badgeColor: 'bg-emerald-700'
+  },
+  {
+    id: 'pakka-bankcash',
+    titleEn: 'Bank & Cash Books',
+    titlePa: 'ਬੈਂਕ ਤੇ ਰੋਕੜ ਵਹੀ',
+    icon: Landmark,
+    badgeColor: 'bg-teal-600'
+  },
+  {
+    id: 'pakka-debtors-creditors',
+    titleEn: 'Debtors & Creditors',
+    titlePa: 'ਸੰਡਰੀ ਡੈਬਟਰਜ਼ / ਕ੍ਰੈਡਿਟਰਜ਼',
+    icon: Users,
+    badgeColor: 'bg-indigo-700'
+  },
+  {
+    id: 'pakka-tds',
+    titleEn: 'TDS Register (194H/C)',
+    titlePa: 'ਟੀ.ਡੀ.ਐੱਸ. ਰਜਿਸਟਰ',
+    icon: FileCheck2,
+    badgeColor: 'bg-rose-700'
+  },
+  {
+    id: 'settings',
+    titleEn: 'Firm & Year Settings',
+    titlePa: 'ਫਰਮ ਤੇ ਸਾਲ ਸੈਟਿੰਗਜ਼',
+    icon: Settings
+  }
+];
+
 export const Sidebar: React.FC = () => {
   const {
     activeSection,
@@ -164,22 +258,72 @@ export const Sidebar: React.FC = () => {
     dailyPurchaseRecords,
     leftingRecords,
     recycleBinItems,
-    language
+    language,
+    appMode,
+    setAppMode,
+    iFormRecords,
+    jFormRecords
   } = useMandi();
   const { syncStatus, autoSyncEnabled, conflicts } = useGoogleSheetsSync();
 
   const [isGoogleSheetsModalOpen, setIsGoogleSheetsModalOpen] = useState(false);
 
   const isEn = language === 'en';
+  const isPakka = appMode === 'PAKKA';
+  const navItems = isPakka ? PAKKA_NAV_ITEMS : KACHA_NAV_ITEMS;
 
   return (
     <aside className="w-64 bg-white border-r border-slate-200 hidden lg:flex flex-col justify-between shrink-0 shadow-2xs print:hidden">
       <div className="p-3 space-y-1 overflow-y-auto">
-        <div className="px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
-          {isEn ? 'MANDI MODULES' : 'ਮੰਡੀ ਮੌਡਿਊਲ (Mandi Modules)'}
+        {/* Mode Switch Card inside Sidebar */}
+        <div
+          onClick={() => {
+            if (isPakka) {
+              setAppMode('KACHA');
+              setActiveSection('dashboard');
+            } else {
+              setAppMode('PAKKA');
+              setActiveSection('pakka-dashboard');
+            }
+          }}
+          className={`p-2.5 rounded-xl border transition cursor-pointer mb-2 flex items-center justify-between ${
+            isPakka
+              ? 'bg-blue-900 border-blue-700 text-white'
+              : 'bg-emerald-900 border-emerald-700 text-white'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            {isPakka ? (
+              <Scale className="w-4 h-4 text-amber-300 shrink-0" />
+            ) : (
+              <Wheat className="w-4 h-4 text-amber-300 shrink-0" />
+            )}
+            <div>
+              <div className="text-[10px] font-bold text-slate-300 uppercase tracking-wider">
+                {isPakka ? 'ਪੱਕਾ ਅਕਾਊਂਟਿੰਗ ਸਿਸਟਮ' : 'ਕੱਚਾ ਮੰਡੀ ਕੰਮ'}
+              </div>
+              <div className="text-xs font-black">
+                {isPakka ? 'I/J-Form & Balance Sheet' : 'ਮੰਡੀ ਆੜ੍ਹਤ ਤੇ ਕਿਸਾਨ ਕੰਮ'}
+              </div>
+            </div>
+          </div>
+
+          <span className="text-[10px] font-bold bg-white/20 px-2 py-0.5 rounded-full shrink-0">
+            ਬਦਲੋ
+          </span>
         </div>
 
-        {NAV_ITEMS.map((item) => {
+        <div className="px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
+          {isPakka
+            ? isEn
+              ? 'PAKKA ACCOUNTING MODULES'
+              : 'ਪੱਕਾ ਅਕਾਊਂਟਿੰਗ ਮੌਡਿਊਲ'
+            : isEn
+            ? 'MANDI MODULES'
+            : 'ਮੰਡੀ ਮੌਡਿਊਲ (Mandi Modules)'}
+        </div>
+
+        {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = activeSection === item.id;
           return (
@@ -188,7 +332,9 @@ export const Sidebar: React.FC = () => {
               onClick={() => setActiveSection(item.id)}
               className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-xs transition font-semibold ${
                 isActive
-                  ? 'bg-emerald-600 text-white font-bold shadow-2xs'
+                  ? isPakka
+                    ? 'bg-blue-800 text-white font-bold shadow-2xs'
+                    : 'bg-emerald-600 text-white font-bold shadow-2xs'
                   : 'text-slate-700 hover:bg-slate-100/80 hover:text-slate-900'
               }`}
             >
@@ -199,14 +345,15 @@ export const Sidebar: React.FC = () => {
                 ) : (
                   <>
                     <div className="truncate text-xs font-bold leading-tight">{item.titlePa}</div>
-                    <div className={`text-[10px] truncate leading-tight ${isActive ? 'text-emerald-100' : 'text-slate-400'}`}>
+                    <div className={`text-[10px] truncate leading-tight ${isActive ? 'text-white/80' : 'text-slate-400'}`}>
                       {item.titleEn}
                     </div>
                   </>
                 )}
               </div>
 
-              {item.id === 'daily-purchase' && dailyPurchaseRecords.length > 0 && (
+              {/* Dynamic Badges */}
+              {!isPakka && item.id === 'daily-purchase' && dailyPurchaseRecords.length > 0 && (
                 <span
                   className={`text-[10px] font-mono px-1.5 py-0.2 rounded-full ${
                     isActive ? 'bg-emerald-700 text-white' : 'bg-emerald-100 text-emerald-800 font-bold'
@@ -216,7 +363,7 @@ export const Sidebar: React.FC = () => {
                 </span>
               )}
 
-              {item.id === 'farmer-registration' && farmers.length > 0 && (
+              {!isPakka && item.id === 'farmer-registration' && farmers.length > 0 && (
                 <span
                   className={`text-[10px] font-mono px-1.5 py-0.2 rounded-full ${
                     isActive ? 'bg-emerald-700 text-white' : 'bg-slate-100 text-slate-600'
@@ -225,42 +372,24 @@ export const Sidebar: React.FC = () => {
                   {farmers.length}
                 </span>
               )}
-              {item.id === 'bardana' && bardanaRecords.length > 0 && (
+
+              {isPakka && item.id === 'iform-register' && iFormRecords.length > 0 && (
                 <span
                   className={`text-[10px] font-mono px-1.5 py-0.2 rounded-full ${
-                    isActive ? 'bg-emerald-700 text-white' : 'bg-slate-100 text-slate-600'
+                    isActive ? 'bg-blue-900 text-white' : 'bg-blue-100 text-blue-900 font-bold'
                   }`}
                 >
-                  {bardanaRecords.length}
-                </span>
-              )}
-              {item.id === 'bags-entry' && bagsEntries.length > 0 && (
-                <span
-                  className={`text-[10px] font-mono px-1.5 py-0.2 rounded-full ${
-                    isActive ? 'bg-emerald-700 text-white' : 'bg-slate-100 text-slate-600'
-                  }`}
-                >
-                  {bagsEntries.length}
+                  {iFormRecords.length}
                 </span>
               )}
 
-              {item.id === 'lefting' && leftingRecords.length > 0 && (
+              {isPakka && item.id === 'jform-register' && jFormRecords.length > 0 && (
                 <span
                   className={`text-[10px] font-mono px-1.5 py-0.2 rounded-full ${
-                    isActive ? 'bg-blue-800 text-white' : 'bg-blue-100 text-blue-800 font-bold'
+                    isActive ? 'bg-emerald-900 text-white' : 'bg-emerald-100 text-emerald-900 font-bold'
                   }`}
                 >
-                  {leftingRecords.length}
-                </span>
-              )}
-
-              {item.id === 'recycle-bin' && recycleBinItems.length > 0 && (
-                <span
-                  className={`text-[10px] font-mono px-1.5 py-0.2 rounded-full ${
-                    isActive ? 'bg-rose-800 text-white' : 'bg-rose-100 text-rose-800 font-bold'
-                  }`}
-                >
-                  {recycleBinItems.length}
+                  {jFormRecords.length}
                 </span>
               )}
             </button>

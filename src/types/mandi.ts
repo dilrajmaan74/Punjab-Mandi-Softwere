@@ -499,6 +499,9 @@ export interface DailyPurchaseRecord {
   gatePassNumber?: string;
   status?: 'COMPLETED' | 'PENDING' | 'VERIFIED';
   remarks?: string;
+  isTransferredToPakka?: boolean;
+  transferredIFormId?: string;
+  transferredIFormNo?: string;
   firmId?: string;
   fiscalYear?: string;
   createdAt: string;
@@ -926,4 +929,16 @@ export type NavigationSection =
   | 'search-farmer'
   | 'reports'
   | 'recycle-bin'
-  | 'settings';
+  | 'settings'
+  // Pakka (Official & CA Accounting) Sections
+  | 'pakka-dashboard'
+  | 'iform-register'
+  | 'jform-register'
+  | 'pakka-transfer'
+  | 'pakka-ledgers'
+  | 'pakka-vouchers'
+  | 'pakka-balancesheet'
+  | 'pakka-profitloss'
+  | 'pakka-bankcash'
+  | 'pakka-debtors-creditors'
+  | 'pakka-tds';

@@ -20,7 +20,9 @@ import {
   LogOut,
   ShieldCheck,
   Moon,
-  Sparkles
+  Sparkles,
+  Scale,
+  ArrowRightLeft
 } from 'lucide-react';
 import { FirmManagerModal } from '../firm/FirmManagerModal';
 import { FiscalYearManagerModal } from '../firm/FiscalYearManagerModal';
@@ -49,7 +51,10 @@ export const Header: React.FC = () => {
     supabaseSyncStatus,
     isSupabaseSyncModalOpen,
     setIsSupabaseSyncModalOpen,
-    isSupabaseConfigured
+    isSupabaseConfigured,
+    appMode,
+    setAppMode,
+    setActiveSection
   } = useMandi();
   const { syncStatus: sheetsSyncStatus, lastSyncTime, conflicts } = useGoogleSheetsSync();
   const { currentUser, logout, setIsAuthModalOpen, setAuthModalMode } = useAuth();
@@ -108,6 +113,43 @@ export const Header: React.FC = () => {
 
           {/* Quick Selectors & Metrics */}
           <div className="flex items-center justify-between md:justify-end gap-2 sm:gap-3 flex-wrap">
+            {/* Dual Software Switcher (ਕੱਚਾ ਮੰਡੀ ਸਿਸਟਮ vs ਪੱਕਾ ਅਕਾਊਂਟਿੰਗ ਸਿਸਟਮ) */}
+            <div className="flex items-center p-0.5 bg-slate-950/80 rounded-xl border border-slate-700 shadow-2xs">
+              <button
+                type="button"
+                onClick={() => {
+                  setAppMode('KACHA');
+                  setActiveSection('dashboard');
+                }}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                  appMode === 'KACHA'
+                    ? 'bg-emerald-600 text-white shadow-xs font-black'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+                title="ਕੱਚਾ ਮੰਡੀ ਕੰਮ (Mandi Operations, Farmers, Bags, Boli, Purchase)"
+              >
+                <Wheat className="w-3.5 h-3.5 text-amber-300" />
+                <span>ਕੱਚਾ ਮੰਡੀ ਕੰਮ</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setAppMode('PAKKA');
+                  setActiveSection('pakka-dashboard');
+                }}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                  appMode === 'PAKKA'
+                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-xs font-black'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+                title="ਪੱਕਾ ਅਕਾਊਂਟਿੰਗ ਸਿਸਟਮ (I-Form, J-Form, Ledgers, Balance Sheet, TDS)"
+              >
+                <Scale className="w-3.5 h-3.5 text-amber-300" />
+                <span>ਪੱਕਾ ਅਕਾਊਂਟਿੰਗ (I/J-Form)</span>
+              </button>
+            </div>
+
             {/* Firm Selector */}
             <div className="hidden sm:flex items-center gap-1.5 bg-slate-800/90 px-2.5 py-1.5 rounded-xl border border-slate-700 shadow-2xs">
               <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" title="Active Firm (Isolated Data)" />

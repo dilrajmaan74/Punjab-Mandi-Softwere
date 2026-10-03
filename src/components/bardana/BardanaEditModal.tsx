@@ -63,8 +63,8 @@ export const BardanaEditModal: React.FC<BardanaEditModalProps> = ({
   const agencyOptions: SearchableSelectOption[] = useMemo(() => {
     const opts: SearchableSelectOption[] = STANDARD_AGENCIES.map((ag) => ({
       value: ag,
-      label: isEn ? ag.split('(')[0].trim() : ag,
-      subLabel: isEn ? ag.split('(')[1]?.replace(')', '') : undefined,
+      label: isEn ? (ag || '').split('(')[0]?.trim() || ag : ag,
+      subLabel: isEn ? (ag || '').split('(')[1]?.replace(')', '') : undefined,
       keywords: [ag]
     }));
     opts.push({

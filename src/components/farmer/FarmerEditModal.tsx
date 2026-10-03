@@ -160,7 +160,7 @@ export const FarmerEditModal: React.FC<FarmerEditModalProps> = ({
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.farmerName.trim()) {
+    if (!formData.farmerName?.trim()) {
       setErrorMsg('ਕਿਰਪਾ ਕਰਕੇ ਕਿਸਾਨ ਦਾ ਨਾਂ ਦਰਜ ਕਰੋ (Please enter Farmer Name)');
       notifyError({
         titlePa: 'ਕਿਸਾਨ ਦਾ ਨਾਂ ਲੋੜੀਂਦਾ ਹੈ',
@@ -170,7 +170,7 @@ export const FarmerEditModal: React.FC<FarmerEditModalProps> = ({
       return;
     }
 
-    const cleanAadhaar = formData.aadhaar.replace(/\s+/g, '');
+    const cleanAadhaar = (formData.aadhaar || '').replace(/\s+/g, '');
     if (!cleanAadhaar || cleanAadhaar.length !== 12) {
       setErrorMsg('ਕਿਰਪਾ ਕਰਕੇ ਪੂਰਾ 12-ਅੰਕੀ ਆਧਾਰ ਨੰਬਰ ਦਰਜ ਕਰੋ (Please enter valid 12-digit Aadhaar)');
       notifyError({
@@ -186,18 +186,18 @@ export const FarmerEditModal: React.FC<FarmerEditModalProps> = ({
     // Keep the EXACT same unique Farmer ID!
     const updatedRecord: Farmer = {
       ...farmer,
-      farmerName: formData.farmerName.trim(),
-      farmerNamePa: formData.farmerNamePa.trim() || formData.farmerName.trim(),
-      fatherName: formData.fatherName.trim(),
-      fatherNamePa: formData.fatherNamePa.trim() || formData.fatherName.trim(),
-      address: formData.address.trim(),
-      pinCode: formData.pinCode.trim(),
-      village: formData.village.trim(),
-      villagePa: formData.villagePa.trim() || formData.village.trim(),
+      farmerName: (formData.farmerName || '').trim(),
+      farmerNamePa: (formData.farmerNamePa || '').trim() || (formData.farmerName || '').trim(),
+      fatherName: (formData.fatherName || '').trim(),
+      fatherNamePa: (formData.fatherNamePa || '').trim() || (formData.fatherName || '').trim(),
+      address: (formData.address || '').trim(),
+      pinCode: (formData.pinCode || '').trim(),
+      village: (formData.village || '').trim(),
+      villagePa: (formData.villagePa || '').trim() || (formData.village || '').trim(),
       mobile: autoFormatMobile(formData.mobile),
       aadhaar: autoFormatAadhaar(formData.aadhaar),
-      linkedMainFarmerId: formData.linkedMainFarmerId.trim() || undefined,
-      linkedMainFarmerName: formData.linkedMainFarmerName.trim() || undefined,
+      linkedMainFarmerId: (formData.linkedMainFarmerId || '').trim() || undefined,
+      linkedMainFarmerName: (formData.linkedMainFarmerName || '').trim() || undefined,
       photoUrl: formData.photoUrl || undefined,
       aadhaarFrontUrl: formData.aadhaarFrontUrl || undefined,
       aadhaarBackUrl: formData.aadhaarBackUrl || undefined,

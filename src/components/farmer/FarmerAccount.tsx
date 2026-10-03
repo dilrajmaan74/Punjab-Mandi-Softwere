@@ -701,8 +701,8 @@ export const FarmerAccount: React.FC = () => {
     const amt = parseFloat(advanceForm.amount);
     const monthlyRate = parseFloat(advanceForm.monthlyInterestRate) || 0;
     const annualRate = parseFloat(advanceForm.annualInterestRate) || (monthlyRate * 12);
-    const startDate = advanceForm.date.trim();
-    const endDate = advanceForm.interestTillDate.trim() || new Date().toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const startDate = (advanceForm.date || '').trim() || new Date().toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const endDate = (advanceForm.interestTillDate || '').trim() || new Date().toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
     if (isNaN(amt) || amt <= 0) {
       notifyError({
@@ -722,7 +722,7 @@ export const FarmerAccount: React.FC = () => {
       amount: amt,
       principal: amt,
       category: advanceForm.category,
-      itemDescription: advanceForm.itemDescription.trim(),
+      itemDescription: (advanceForm.itemDescription || '').trim(),
       cropSeason: (advanceForm.cropSeason as CropType) || undefined,
       isInterestFree: advanceForm.isInterestFree,
       interestMode: advanceForm.interestMode,
@@ -730,23 +730,23 @@ export const FarmerAccount: React.FC = () => {
       annualInterestRate: annualRate,
       compounding: advanceForm.compounding,
       guarantorFarmerId: advanceForm.guarantorFarmerId || undefined,
-      guarantorName: advanceForm.guarantorName.trim() || undefined,
-      guarantorMobile: advanceForm.guarantorMobile.trim() || undefined,
+      guarantorName: (advanceForm.guarantorName || '').trim() || undefined,
+      guarantorMobile: (advanceForm.guarantorMobile || '').trim() || undefined,
       voucherPhotoUrl: advanceForm.voucherPhotoUrl || undefined,
       voucherPhotoName: advanceForm.voucherPhotoName || undefined,
       paymentMode: advanceForm.paymentMode,
-      referenceNumber: advanceForm.referenceNumber.trim(),
-      chequeNumber: advanceForm.chequeNumber.trim() || undefined,
-      chequeDate: advanceForm.chequeDate.trim() || undefined,
-      chequeBank: advanceForm.chequeBank.trim() || undefined,
-      transactionId: advanceForm.transactionId.trim() || undefined,
-      upiId: advanceForm.upiId.trim() || undefined,
-      fromBankName: advanceForm.fromBankName.trim() || undefined,
-      fromAccountNumber: advanceForm.fromAccountNumber.trim() || undefined,
-      toBankName: advanceForm.toBankName.trim() || undefined,
-      toAccountNumber: advanceForm.toAccountNumber.trim() || undefined,
-      toIfscCode: advanceForm.toIfscCode.trim() || undefined,
-      remarks: advanceForm.remarks.trim()
+      referenceNumber: (advanceForm.referenceNumber || '').trim(),
+      chequeNumber: (advanceForm.chequeNumber || '').trim() || undefined,
+      chequeDate: (advanceForm.chequeDate || '').trim() || undefined,
+      chequeBank: (advanceForm.chequeBank || '').trim() || undefined,
+      transactionId: (advanceForm.transactionId || '').trim() || undefined,
+      upiId: (advanceForm.upiId || '').trim() || undefined,
+      fromBankName: (advanceForm.fromBankName || '').trim() || undefined,
+      fromAccountNumber: (advanceForm.fromAccountNumber || '').trim() || undefined,
+      toBankName: (advanceForm.toBankName || '').trim() || undefined,
+      toAccountNumber: (advanceForm.toAccountNumber || '').trim() || undefined,
+      toIfscCode: (advanceForm.toIfscCode || '').trim() || undefined,
+      remarks: (advanceForm.remarks || '').trim()
     };
 
     if (editingAdvance) {
@@ -886,12 +886,12 @@ export const FarmerAccount: React.FC = () => {
 
     addFarmerPayment({
       farmerId: currentFarmer.id,
-      date: paymentForm.date.trim(),
+      date: (paymentForm.date || '').trim() || new Date().toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }),
       amount: amt,
       paymentMode: paymentForm.paymentMode,
-      referenceNumber: paymentForm.referenceNumber.trim(),
-      agency: paymentForm.agency.trim(),
-      remarks: paymentForm.remarks.trim(),
+      referenceNumber: (paymentForm.referenceNumber || '').trim(),
+      agency: (paymentForm.agency || '').trim(),
+      remarks: (paymentForm.remarks || '').trim(),
       status: 'PAID'
     });
 
@@ -916,8 +916,8 @@ export const FarmerAccount: React.FC = () => {
   // Advance Live Calculator Preview in Modal
   const previewCalculation = (() => {
     const amt = parseFloat(advanceForm.amount) || 0;
-    const startDateStr = advanceForm.date.trim();
-    const endDateStr = advanceForm.interestTillDate.trim() || new Date().toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const startDateStr = (advanceForm.date || '').trim();
+    const endDateStr = (advanceForm.interestTillDate || '').trim() || new Date().toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
     if (amt <= 0 || !startDateStr) {
       return { totalDays: 0, months: 0, days: 0, interest: 0, totalPayable: amt };
     }

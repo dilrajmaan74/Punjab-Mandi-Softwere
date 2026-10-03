@@ -5,7 +5,7 @@ import { BoliRecord } from '../../types/mandi';
 import { DateInput } from '../common/DateInput';
 import { SearchableSelect, SearchableSelectOption } from '../common/SearchableSelect';
 import { VoiceWeighmentAssistant, ParsedVoiceData } from '../common/VoiceWeighmentAssistant';
-import { formatCurrency } from '../../utils/calculations';
+import { formatCurrency, compareDatesChronological } from '../../utils/calculations';
 import {
   Gavel,
   Plus,
@@ -247,6 +247,10 @@ export const BoliRegister: React.FC = () => {
         (b.agency && b.agency.toLowerCase().includes(q)) ||
         b.date.includes(q)
       );
+    }).sort((a, b) => {
+      const d = compareDatesChronological(a.date, b.date, 'ASC');
+      if (d !== 0) return d;
+      return a.id.localeCompare(b.id);
     });
   }, [boliRecords, selectedCropFilter, searchQuery]);
 
@@ -414,8 +418,8 @@ export const BoliRegister: React.FC = () => {
                   </td>
                 </tr>
               ) : (
-                filteredBoli.map((b) => (
-                  <tr key={b.id} className="hover:bg-amber-50/40 transition">
+                filteredBoli.map((b, idx) => (
+                  <tr key={`${b.id}-${idx}`} className="hover:bg-amber-50/40 transition">
                     <td className="py-2 px-3 font-mono font-black text-amber-900">{b.heapNumber || b.id.slice(-6)}</td>
                     <td className="py-2 px-3 font-medium text-slate-600">{b.date}</td>
                     <td className="py-2 px-3">

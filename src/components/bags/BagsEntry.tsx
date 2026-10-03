@@ -34,7 +34,8 @@ import {
   formatCurrency,
   calculateAutomaticLabour,
   calculateMoistureCut,
-  isRecordInFiscalYear
+  isRecordInFiscalYear,
+  compareDatesChronological
 } from '../../utils/calculations';
 import { BagsEntryRecord, BardanaType, LabourAndDeductions, CropFilterType } from '../../types/mandi';
 import { SearchableSelect, SearchableSelectOption } from '../common/SearchableSelect';
@@ -294,21 +295,28 @@ export const BagsEntry: React.FC = () => {
     if (savedCropFilter !== 'ALL') {
       list = list.filter((b) => (b.cropType || 'PADDY') === savedCropFilter);
     }
-    if (!savedSearchQuery.trim()) return list;
-    const q = savedSearchQuery.toLowerCase().trim();
-    return list.filter(
-      (b) =>
-        b.entryNumber.toLowerCase().includes(q) ||
-        (b.parchiNo && b.parchiNo.toString().includes(q)) ||
-        b.farmerId.toLowerCase().includes(q) ||
-        b.farmerName.toLowerCase().includes(q) ||
-        (b.farmerNamePa && b.farmerNamePa.includes(q)) ||
-        (b.farmerFatherName && b.farmerFatherName.toLowerCase().includes(q)) ||
-        b.farmerVillage.toLowerCase().includes(q) ||
-        (b.farmerVillagePa && b.farmerVillagePa.includes(q)) ||
-        b.farmerMobile.includes(q) ||
-        b.date.includes(q)
-    );
+    let result = list;
+    if (savedSearchQuery.trim()) {
+      const q = savedSearchQuery.toLowerCase().trim();
+      result = list.filter(
+        (b) =>
+          b.entryNumber.toLowerCase().includes(q) ||
+          (b.parchiNo && b.parchiNo.toString().includes(q)) ||
+          b.farmerId.toLowerCase().includes(q) ||
+          b.farmerName.toLowerCase().includes(q) ||
+          (b.farmerNamePa && b.farmerNamePa.includes(q)) ||
+          (b.farmerFatherName && b.farmerFatherName.toLowerCase().includes(q)) ||
+          b.farmerVillage.toLowerCase().includes(q) ||
+          (b.farmerVillagePa && b.farmerVillagePa.includes(q)) ||
+          b.farmerMobile.includes(q) ||
+          b.date.includes(q)
+      );
+    }
+    return result.sort((a, b) => {
+      const d = compareDatesChronological(a.date, b.date, 'ASC');
+      if (d !== 0) return d;
+      return a.entryNumber.localeCompare(b.entryNumber);
+    });
   }, [bagsEntries, savedSearchQuery, savedCropFilter]);
 
   const handleDeleteBagsEntry = (entry: BagsEntryRecord) => {
@@ -1470,7 +1478,7 @@ export const BagsEntry: React.FC = () => {
                   </td>
                 </tr>
               ) : (
-                filteredSavedEntries.map((entry) => {
+                filteredSavedEntries.map((entry, idx) => {
                   const matchedFarmer = farmers.find((f) => f.id === entry.farmerId);
                   const farmerNameEn = entry.farmerName || matchedFarmer?.farmerName || entry.farmerNamePa;
                   const farmerId = entry.farmerId || matchedFarmer?.id || '';
@@ -1478,7 +1486,7 @@ export const BagsEntry: React.FC = () => {
                   const villageEn = entry.farmerVillage || matchedFarmer?.village || '';
 
                   return (
-                    <tr key={entry.id} className="hover:bg-slate-50/80 transition-colors">
+                    <tr key={`${entry.id}-${idx}`} className="hover:bg-slate-50/80 transition-colors">
                       <td className="py-2 px-3 font-mono font-bold text-slate-900">
                         <div className="flex items-center gap-1.5">
                           <span className="bg-amber-100 text-amber-950 px-1.5 py-0.5 rounded text-[11px] font-black border border-amber-200">

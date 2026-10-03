@@ -788,9 +788,30 @@ export function calculatePurchaseWeightAndAmount(bags: number, rate = FIXED_RATE
  */
 export function parseDateString(dateStr: string): Date {
   if (!dateStr) return new Date();
-  const trimmed = dateStr.trim();
+  const trimmed = (typeof dateStr === 'string' ? dateStr : String(dateStr || '')).trim();
+  if (!trimmed) return new Date();
   
-  // Format: DD/MM/YYYY or DD-MM-YYYY
+  // Format with text months like "15 Sep 2026", "15-Sep-2026", "15/Sep/2026"
+  const MONTH_MAP: Record<string, number> = {
+    jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5,
+    jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11
+  };
+
+  if (/[a-zA-Z]/.test(trimmed)) {
+    const parts = trimmed.split(/[/ -]+/);
+    if (parts.length === 3) {
+      const d = parseInt(parts[0], 10);
+      const mStr = parts[1].toLowerCase().slice(0, 3);
+      const y = parseInt(parts[2], 10);
+      if (!isNaN(d) && MONTH_MAP[mStr] !== undefined && !isNaN(y)) {
+        return new Date(y, MONTH_MAP[mStr], d);
+      }
+    }
+    const parsed = Date.parse(trimmed);
+    if (!isNaN(parsed)) return new Date(parsed);
+  }
+
+  // Format: DD/MM/YYYY or YYYY-MM-DD or DD-MM-YYYY
   if (trimmed.includes('/') || trimmed.includes('-')) {
     const parts = trimmed.split(/[/ -]/);
     if (parts.length === 3) {
@@ -799,19 +820,48 @@ export function parseDateString(dateStr: string): Date {
         const y = parseInt(parts[0], 10);
         const m = parseInt(parts[1], 10) - 1;
         const d = parseInt(parts[2], 10);
-        return new Date(y, m, d);
+        if (!isNaN(y) && !isNaN(m) && !isNaN(d)) {
+          return new Date(y, m, d);
+        }
       } else {
         // DD/MM/YYYY
         const d = parseInt(parts[0], 10);
         const m = parseInt(parts[1], 10) - 1;
         const y = parseInt(parts[2], 10);
-        return new Date(y, m, d);
+        if (!isNaN(y) && !isNaN(m) && !isNaN(d)) {
+          return new Date(y, m, d);
+        }
       }
     }
   }
 
   const timestamp = Date.parse(trimmed);
   return isNaN(timestamp) ? new Date() : new Date(timestamp);
+}
+
+/**
+ * Compare two dates chronologically:
+ * If order === 'ASC' (default):
+ *   15 Sep 2026 comes BEFORE 16 Sep 2026 (so 16 Sep 2026 always comes AFTER 15 Sep 2026).
+ * If order === 'DESC':
+ *   Newer dates come first.
+ */
+export function compareDatesChronological(
+  dateA?: string,
+  dateB?: string,
+  order: 'ASC' | 'DESC' = 'ASC'
+): number {
+  if (!dateA && !dateB) return 0;
+  if (!dateA) return order === 'ASC' ? 1 : -1;
+  if (!dateB) return order === 'ASC' ? -1 : 1;
+
+  const timeA = parseDateString(dateA).getTime();
+  const timeB = parseDateString(dateB).getTime();
+
+  if (timeA !== timeB) {
+    return order === 'ASC' ? timeA - timeB : timeB - timeA;
+  }
+  return order === 'ASC' ? String(dateA).localeCompare(String(dateB)) : String(dateB).localeCompare(String(dateA));
 }
 
 /**
@@ -1041,8 +1091,8 @@ export function getFiscalYearFromDate(dateStr?: string): string {
   }
 }
 
-export function parseFiscalYear(fyStr: string): { startYear: number; endYear: number } {
-  const clean = (fyStr || '2026-27').trim();
+export function parseFiscalYear(fyStr?: string): { startYear: number; endYear: number } {
+  const clean = (fyStr || '2026-27').toString().trim();
   // e.g. "2026-27" or "2026-2027"
   const parts = clean.split('-');
   let startYear = parseInt(parts[0], 10);
@@ -1057,7 +1107,7 @@ export function parseFiscalYear(fyStr: string): { startYear: number; endYear: nu
   return { startYear, endYear };
 }
 
-export function getFiscalYearDateRange(fyStr: string): {
+export function getFiscalYearDateRange(fyStr?: string): {
   startYear: number;
   endYear: number;
   startDateStr: string;
@@ -1078,10 +1128,10 @@ export function getFiscalYearDateRange(fyStr: string): {
   };
 }
 
-export function isDateInFiscalYear(dateStr: string, fyStr: string): boolean {
+export function isDateInFiscalYear(dateStr?: string, fyStr?: string): boolean {
   if (!dateStr || !fyStr) return true;
   const targetFY = getFiscalYearFromDate(dateStr);
-  const cleanFY = fyStr.trim();
+  const cleanFY = (fyStr || '2026-27').toString().trim();
   const { startYear } = parseFiscalYear(cleanFY);
   const targetParsed = parseFiscalYear(targetFY);
   return startYear === targetParsed.startYear;

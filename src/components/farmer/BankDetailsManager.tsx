@@ -230,7 +230,7 @@ export const BankDetailsManager: React.FC = () => {
       });
       return;
     }
-    if (!bankForm.accountNumber.trim()) {
+    if (!bankForm.accountNumber?.trim()) {
       notifyError({
         titlePa: 'ਖਾਤਾ ਨੰਬਰ ਲੋੜੀਂਦਾ ਹੈ',
         titleEn: 'Account Number Required',
@@ -238,7 +238,7 @@ export const BankDetailsManager: React.FC = () => {
       });
       return;
     }
-    if (!bankForm.bankName.trim()) {
+    if (!bankForm.bankName?.trim()) {
       notifyError({
         titlePa: 'ਬੈਂਕ ਦਾ ਨਾਂ ਲੋੜੀਂਦਾ ਹੈ',
         titleEn: 'Bank Name Required',
@@ -252,11 +252,11 @@ export const BankDetailsManager: React.FC = () => {
     const isUpdate = !!selectedFarmer?.bankDetails?.accountNumber;
 
     saveFarmerBankDetails(selectedFarmerId, {
-      accountHolderName: bankForm.accountHolderName.trim() || selectedFarmer?.farmerName || '',
-      accountNumber: bankForm.accountNumber.trim(),
-      ifscCode: bankForm.ifscCode.trim(),
-      bankName: bankForm.bankName.trim(),
-      branchName: bankForm.branchName.trim(),
+      accountHolderName: (bankForm.accountHolderName || '').trim() || selectedFarmer?.farmerName || '',
+      accountNumber: (bankForm.accountNumber || '').trim(),
+      ifscCode: (bankForm.ifscCode || '').trim(),
+      bankName: (bankForm.bankName || '').trim(),
+      branchName: (bankForm.branchName || '').trim(),
       branchAddress: bankForm.branchAddress?.trim() || undefined,
       city: bankForm.city?.trim() || undefined,
       district: bankForm.district?.trim() || undefined,

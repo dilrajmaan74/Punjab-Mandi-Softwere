@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import { FarmerAccountSummary, MandiSettings } from '../../types/mandi';
+import { compareDatesChronological } from '../../utils/calculations';
 import {
   getPaymentTransfers,
   getSameFarmerAdjustments,
@@ -182,11 +183,7 @@ export const FarmerAccountStatementA4: React.FC<FarmerAccountStatementA4Props> =
       }))
     );
 
-    return [...direct, ...advanceReps].sort((a, b) => {
-      const dateA = a.date.split('/').reverse().join('-');
-      const dateB = b.date.split('/').reverse().join('-');
-      return dateB.localeCompare(dateA);
-    });
+    return [...direct, ...advanceReps].sort((a, b) => compareDatesChronological(a.date, b.date, 'ASC'));
   }, [account.paymentRecords, advances]);
 
   const totalRecoveriesAmount = allRecoveries.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);

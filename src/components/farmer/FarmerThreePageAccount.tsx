@@ -9,7 +9,8 @@ import {
 import {
   formatCurrency,
   formatCurrencyINR,
-  formatKgToQulKg
+  formatKgToQulKg,
+  compareDatesChronological
 } from '../../utils/calculations';
 import { openWhatsApp } from '../../utils/whatsappNotification';
 import {
@@ -212,11 +213,7 @@ export const FarmerThreePageAccount: React.FC<FarmerThreePageAccountProps> = ({
       }))
     );
 
-    return [...direct, ...reps].sort((a, b) => {
-      const dateA = a.date.split('/').reverse().join('-');
-      const dateB = b.date.split('/').reverse().join('-');
-      return dateB.localeCompare(dateA);
-    });
+    return [...direct, ...reps].sort((a, b) => compareDatesChronological(a.date, b.date, 'ASC'));
   }, [payments, advances]);
 
   const totalRecoveriesAmount = allRecoveries.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
