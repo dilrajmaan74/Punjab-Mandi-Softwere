@@ -167,7 +167,7 @@ export const LedgerMasterView: React.FC = () => {
     if (selectedGroupFilter !== 'ALL' && l.group !== selectedGroupFilter) return false;
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
-      const matchName = l.name.toLowerCase().includes(q);
+      const matchName = (l.name || '').toLowerCase().includes(q);
       const matchNamePa = l.namePa && l.namePa.includes(q);
       const matchPan = l.pan && l.pan.toLowerCase().includes(q);
       if (!matchName && !matchNamePa && !matchPan) return false;

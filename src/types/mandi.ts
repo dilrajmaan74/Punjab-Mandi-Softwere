@@ -83,10 +83,12 @@ export interface AdvanceRepayment {
   id: string;
   date: string; // DD/MM/YYYY
   amount: number;
-  paymentMode: 'CASH' | 'BANK_TRANSFER' | 'CHEQUE' | 'OTHER';
+  paymentMode: 'CASH' | 'BANK_TRANSFER' | 'CHEQUE' | 'OTHER' | string;
   referenceNumber?: string;
   referenceNo?: string;
   remarks?: string;
+  isSettled?: boolean; // True if this repayment settled accrued interest on a rest date
+  settledRestDate?: string; // The rest date this repayment settled up to
   createdAt: string;
 }
 
@@ -99,6 +101,9 @@ export interface FarmerAdvanceRecord {
   startDate?: string; // Explicit Start Date
   amount: number; // Principal advance amount in ₹
   principal?: number; // Explicit Principal Amount
+  originalStartDate?: string; // The original issuance date if rolled forward
+  originalAmount?: number; // The original principal amount before rest settlements
+  lastInterestSettledDate?: string; // Date up to which interest has been paid/settled
   monthlyInterestRate: number; // Interest % per Month (e.g. 2.0)
   annualInterestRate?: number; // Annual Interest % (e.g. 24.0)
   interestMode?: InterestCalculationMode; // 'MONTHLY' | 'YEARLY' | 'INTEREST_FREE'

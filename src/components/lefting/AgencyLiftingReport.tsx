@@ -176,7 +176,7 @@ export const AgencyLiftingReport: React.FC = () => {
       }
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
-        return item.agencyName.toLowerCase().includes(q);
+        return (item.agencyName || '').toLowerCase().includes(q);
       }
       return true;
     });

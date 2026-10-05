@@ -172,7 +172,7 @@ export const BagsEntry: React.FC = () => {
     const q = farmerSearchTerm.toLowerCase();
     return farmers.filter(
       (f) =>
-        f.id.toLowerCase().includes(q) ||
+        (f.id || '').toLowerCase().includes(q) ||
         (f.farmerName && f.farmerName.toLowerCase().includes(q)) ||
         (f.farmerNamePa && f.farmerNamePa.includes(q)) ||
         (f.mobile && f.mobile.includes(q)) ||
@@ -300,16 +300,16 @@ export const BagsEntry: React.FC = () => {
       const q = savedSearchQuery.toLowerCase().trim();
       result = list.filter(
         (b) =>
-          b.entryNumber.toLowerCase().includes(q) ||
+          (b.entryNumber || '').toLowerCase().includes(q) ||
           (b.parchiNo && b.parchiNo.toString().includes(q)) ||
-          b.farmerId.toLowerCase().includes(q) ||
-          b.farmerName.toLowerCase().includes(q) ||
+          (b.farmerId || '').toLowerCase().includes(q) ||
+          (b.farmerName || '').toLowerCase().includes(q) ||
           (b.farmerNamePa && b.farmerNamePa.includes(q)) ||
           (b.farmerFatherName && b.farmerFatherName.toLowerCase().includes(q)) ||
-          b.farmerVillage.toLowerCase().includes(q) ||
+          (b.farmerVillage || '').toLowerCase().includes(q) ||
           (b.farmerVillagePa && b.farmerVillagePa.includes(q)) ||
-          b.farmerMobile.includes(q) ||
-          b.date.includes(q)
+          (b.farmerMobile || '').includes(q) ||
+          (b.date || '').includes(q)
       );
     }
     return result.sort((a, b) => {

@@ -44,7 +44,7 @@ import {
   exportBardanaReceivedVoucherPDF,
   exportBardanaRegisterPDF
 } from '../../utils/bardanaPdfExport';
-import { compareDatesChronological } from '../../utils/calculations';
+import { compareDatesChronological, autoFormatDate } from '../../utils/calculations';
 
 const STANDARD_AGENCIES = [
   'Punjab Mandi Board Agency',
@@ -366,11 +366,11 @@ export const BardanaManagement: React.FC = () => {
     // Search query
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
-      const matchId = rec.id.toLowerCase().includes(q);
-      const matchAgency = rec.agency.toLowerCase().includes(q);
-      const matchSource = rec.sourceName.toLowerCase().includes(q);
-      const matchRemarks = rec.remarks?.toLowerCase().includes(q) || false;
-      const matchDate = rec.date.includes(q);
+      const matchId = (rec.id || '').toLowerCase().includes(q);
+      const matchAgency = (rec.agency || '').toLowerCase().includes(q);
+      const matchSource = (rec.sourceName || '').toLowerCase().includes(q);
+      const matchRemarks = (rec.remarks || '').toLowerCase().includes(q);
+      const matchDate = (rec.date || '').includes(q);
       if (!matchId && !matchAgency && !matchSource && !matchRemarks && !matchDate) {
         return false;
       }
@@ -547,8 +547,8 @@ export const BardanaManagement: React.FC = () => {
     }
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
-      const matchId = item.id.toLowerCase().includes(q);
-      const matchDate = item.date.includes(q);
+      const matchId = (item.id || '').toLowerCase().includes(q);
+      const matchDate = (item.date || '').includes(q);
       const matchAgency = item.agency?.toLowerCase().includes(q) || false;
       const matchSource = item.sourceName?.toLowerCase().includes(q) || false;
       const matchFarmer = item.farmerName?.toLowerCase().includes(q) || false;
@@ -932,7 +932,8 @@ export const BardanaManagement: React.FC = () => {
                     <input
                       type="text"
                       value={date}
-                      onChange={(e) => setDate(e.target.value)}
+                      onChange={(e) => setDate(autoFormatDate(e.target.value))}
+                      maxLength={10}
                       placeholder="DD/MM/YYYY"
                       className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-bold text-slate-900 focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
                     />

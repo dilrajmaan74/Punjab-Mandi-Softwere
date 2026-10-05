@@ -42,7 +42,7 @@ export const DebtorsCreditorsView: React.FC = () => {
   const filteredParties = partyList.filter((p) => {
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
-      const matchName = p.ledger.name.toLowerCase().includes(q);
+      const matchName = (p.ledger.name || '').toLowerCase().includes(q);
       const matchNamePa = p.ledger.namePa && p.ledger.namePa.includes(q);
       const matchMobile = p.ledger.mobile && p.ledger.mobile.includes(q);
       if (!matchName && !matchNamePa && !matchMobile) return false;

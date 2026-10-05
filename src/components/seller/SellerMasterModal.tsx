@@ -170,9 +170,9 @@ export const SellerMasterModal: React.FC<SellerMasterModalProps> = ({
   const filteredSellers = sellers.filter((s) => {
     const q = searchQuery.toLowerCase();
     return (
-      s.name.toLowerCase().includes(q) ||
+      (s.name || '').toLowerCase().includes(q) ||
       (s.namePa && s.namePa.toLowerCase().includes(q)) ||
-      s.address.toLowerCase().includes(q) ||
+      (s.address || '').toLowerCase().includes(q) ||
       (s.mobile && s.mobile.includes(q))
     );
   });

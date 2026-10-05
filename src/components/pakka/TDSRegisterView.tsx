@@ -112,7 +112,7 @@ export const TDSRegisterView: React.FC = () => {
     if (selectedQuarterFilter !== 'ALL' && rec.quarter !== selectedQuarterFilter) return false;
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
-      const matchParty = rec.partyName.toLowerCase().includes(q);
+      const matchParty = (rec.partyName || '').toLowerCase().includes(q);
       const matchPan = rec.partyPan && rec.partyPan.toLowerCase().includes(q);
       const matchChallan = rec.challanNo && rec.challanNo.toLowerCase().includes(q);
       if (!matchParty && !matchPan && !matchChallan) return false;

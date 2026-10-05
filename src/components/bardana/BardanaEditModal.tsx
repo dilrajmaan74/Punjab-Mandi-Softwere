@@ -5,6 +5,7 @@ import { useNotification } from '../../context/NotificationContext';
 import { SearchableSelect, SearchableSelectOption } from '../common/SearchableSelect';
 import { ParchiUploadWidget } from './ParchiUploadWidget';
 import { ParchiViewerModal } from './ParchiViewerModal';
+import { autoFormatDate } from '../../utils/calculations';
 import {
   Edit,
   X,
@@ -320,7 +321,8 @@ export const BardanaEditModal: React.FC<BardanaEditModalProps> = ({
                 <input
                   type="text"
                   value={date}
-                  onChange={(e) => setDate(e.target.value)}
+                  onChange={(e) => setDate(autoFormatDate(e.target.value))}
+                  maxLength={10}
                   placeholder="DD/MM/YYYY"
                   className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-bold text-slate-900 focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
                 />

@@ -39,10 +39,10 @@ export const JFormRegister: React.FC = () => {
     if (statusFilter === 'GENERATED' && rec.isLocked) return false;
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
-      const matchNo = rec.jFormNo.toLowerCase().includes(q);
-      const matchFarmer = rec.farmerName.toLowerCase().includes(q) || (rec.farmerNamePa && rec.farmerNamePa.includes(q));
-      const matchVillage = rec.village.toLowerCase().includes(q) || (rec.villagePa && rec.villagePa.includes(q));
-      const matchIForm = rec.iFormNo.toLowerCase().includes(q);
+      const matchNo = (rec.jFormNo || '').toLowerCase().includes(q);
+      const matchFarmer = (rec.farmerName || '').toLowerCase().includes(q) || (rec.farmerNamePa && rec.farmerNamePa.includes(q));
+      const matchVillage = (rec.village || '').toLowerCase().includes(q) || (rec.villagePa && rec.villagePa.includes(q));
+      const matchIForm = (rec.iFormNo || '').toLowerCase().includes(q);
       if (!matchNo && !matchFarmer && !matchVillage && !matchIForm) return false;
     }
     return true;

@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { FarmerAdvanceRecord, AdvanceRepayment, Farmer } from '../../types/mandi';
 import { useMandi } from '../../context/MandiContext';
 import { useNotification } from '../../context/NotificationContext';
-import { formatCurrency, formatDateToDDMMYYYY } from '../../utils/calculations';
+import { formatCurrency, formatDateToDDMMYYYY, calculateAdvanceInterest, autoFormatDate } from '../../utils/calculations';
 import {
   X,
   Plus,
@@ -13,7 +13,8 @@ import {
   FileText,
   Clock,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  RotateCcw
 } from 'lucide-react';
 
 interface AdvanceRepaymentModalProps {
@@ -33,7 +34,6 @@ export const AdvanceRepaymentModal: React.FC<AdvanceRepaymentModalProps> = ({
 }) => {
   const { addAdvanceRepayment, deleteAdvanceRepayment, language } = useMandi();
   const { notifySaveSuccess, notifyDeleteSuccess, notifyError, confirmDelete } = useNotification();
-
   const isPa = language === 'pa';
   const todayStr = formatDateToDDMMYYYY(new Date());
 
@@ -44,14 +44,40 @@ export const AdvanceRepaymentModal: React.FC<AdvanceRepaymentModalProps> = ({
   const [paymentMode, setPaymentMode] = useState<'CASH' | 'BANK_TRANSFER' | 'CHEQUE' | 'OTHER'>('CASH');
   const [referenceNo, setReferenceNo] = useState('');
   const [remarks, setRemarks] = useState('');
+  const [settleAndRollForward, setSettleAndRollForward] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const repayments: AdvanceRepayment[] = Array.isArray(advance.repayments) ? advance.repayments : [];
   const totalRepaid = advance.totalRepaid || repayments.reduce((s, r) => s + (Number(r.amount) || 0), 0);
-  const originalPrincipal = Number(advance.amount) || 0;
-  const netPrincipal = Math.max(0, originalPrincipal - totalRepaid);
-  const interestAmount = Number(advance.interestAmount) || 0;
-  const totalPayable = advance.totalPayableWithInterest ?? Math.max(0, netPrincipal + interestAmount);
+  const originalPrincipal = Number(advance.principal ?? advance.amount) || 0;
+
+  // Accrued interest from advance start date up to the entered return date
+  const accruedInterestTillReturnDate = useMemo(() => {
+    const calc = calculateAdvanceInterest({
+      principal: originalPrincipal,
+      monthlyInterestRate: advance.monthlyInterestRate,
+      annualInterestRate: advance.annualInterestRate,
+      interestMode: advance.interestMode,
+      compounding: advance.compounding,
+      isInterestFree: advance.isInterestFree,
+      startDate: advance.startDate || advance.date,
+      endDate: date.trim() || todayStr
+    });
+    return calc.interestAmount;
+  }, [originalPrincipal, advance, date, todayStr]);
+
+  const interestAmount = accruedInterestTillReturnDate;
+  const interestPaid = Math.min(interestAmount, totalRepaid);
+  const principalPaid = Math.max(0, Math.round((totalRepaid - interestPaid) * 100) / 100);
+  const netPrincipal = Math.max(0, Math.round((originalPrincipal - principalPaid) * 100) / 100);
+  const unpaidInterest = Math.max(0, Math.round((interestAmount - interestPaid) * 100) / 100);
+  const totalPayable = Math.round((netPrincipal + unpaidInterest) * 100) / 100;
+
+  // Live preview for current input
+  const numInputAmount = parseFloat(amount) || 0;
+  const previewInterestPaid = Math.min(interestAmount, numInputAmount);
+  const previewPrincipalPaid = Math.max(0, Math.round((numInputAmount - previewInterestPaid) * 100) / 100);
+  const previewClosingBalance = Math.max(0, Math.round((originalPrincipal - previewPrincipalPaid + (interestAmount - previewInterestPaid)) * 100) / 100);
 
   const handleAddRepayment = (e: React.FormEvent) => {
     e.preventDefault();
@@ -69,7 +95,7 @@ export const AdvanceRepaymentModal: React.FC<AdvanceRepaymentModalProps> = ({
     if (numAmount > totalPayable && totalPayable > 0) {
       const confirmOverpay = window.confirm(
         isPa
-          ? `ਰਕਮ (₹${numAmount}) ਕੁੱਲ ਦੇਣਯੋਗ (₹${totalPayable}) ਨਾਲੋਂ ਵੱਧ ਹੈ। ਕੀ ਤੁਸੀਂ ਜਾਰੀ ਰੱਖਣਾ ਚਾਹੁੰਦੇ ਹੋ?`
+          ? `ਰਕਮ (₹${numAmount.toLocaleString('en-IN')}) ਕੁੱਲ ਦੇਣਯੋਗ (₹${totalPayable.toLocaleString('en-IN')}) ਨਾਲੋਂ ਵੱਧ ਹੈ। ਕੀ ਤੁਸੀਂ ਜਾਰੀ ਰੱਖਣਾ ਚਾਹੁੰਦੇ ਹੋ?`
           : `Amount (₹${numAmount}) exceeds remaining payable (₹${totalPayable}). Do you want to proceed?`
       );
       if (!confirmOverpay) return;
@@ -83,7 +109,8 @@ export const AdvanceRepaymentModal: React.FC<AdvanceRepaymentModalProps> = ({
         paymentMode,
         referenceNumber: referenceNo.trim() || undefined,
         referenceNo: referenceNo.trim() || undefined,
-        remarks: remarks.trim() || undefined
+        remarks: remarks.trim() || undefined,
+        settleInterestAndRollForward: settleAndRollForward
       });
 
       if (success) {
@@ -91,7 +118,7 @@ export const AdvanceRepaymentModal: React.FC<AdvanceRepaymentModalProps> = ({
           titleEn: 'Repayment Recorded',
           titlePa: 'ਕਿਸ਼ਤ ਵਾਪਸੀ ਦਰਜ ਹੋ ਗਈ',
           messageEn: `Repayment of ₹${numAmount.toLocaleString('en-IN')} added successfully.`,
-          messagePa: `₹${numAmount.toLocaleString('en-IN')} ਦੀ ਕਿਸ਼ਤ ਸਫਲਤਾਪੂਰਵਕ ਦਰਜ ਕੀਤੀ ਗਈ।`
+          messagePa: `₹${numAmount.toLocaleString('en-IN')} ਦੀ ਕਿਸ਼ਤ ਸਫਲਤਾਪੂਰਵਕ ਦਰਜ ਕੀਤੀ ਗਈ। ਬਾਕੀ ਬਕਾਇਆ: ₹${previewClosingBalance.toLocaleString('en-IN')}`
         });
         setAmount('');
         setReferenceNo('');
@@ -221,7 +248,8 @@ export const AdvanceRepaymentModal: React.FC<AdvanceRepaymentModalProps> = ({
                   <input
                     type="text"
                     value={date}
-                    onChange={(e) => setDate(e.target.value)}
+                    onChange={(e) => setDate(autoFormatDate(e.target.value))}
+                    maxLength={10}
                     placeholder="DD/MM/YYYY"
                     className="w-full pl-9 pr-3 py-1.5 bg-white border border-slate-300 rounded-lg text-sm text-slate-800 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
                     required
@@ -264,6 +292,44 @@ export const AdvanceRepaymentModal: React.FC<AdvanceRepaymentModalProps> = ({
                 </select>
               </div>
             </div>
+
+            {numInputAmount > 0 && (
+              <div className="bg-emerald-50/90 border border-emerald-300 rounded-xl p-3 space-y-2 text-xs">
+                <div className="flex items-center justify-between font-bold text-emerald-950">
+                  <span>ਰਕਮ ਵੰਡ (Munimi Repayment Breakdown):</span>
+                  <span>ਕੁੱਲ ਭਰੀ: {formatCurrency(numInputAmount)}</span>
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  <div className="bg-white p-2 rounded-lg border border-amber-200">
+                    <span className="text-[10px] text-amber-800 block">ਵਿਆਜ ਚੁਕਤਾ (Interest Paid)</span>
+                    <strong className="text-amber-900 text-sm">{formatCurrency(previewInterestPaid)}</strong>
+                  </div>
+                  <div className="bg-white p-2 rounded-lg border border-slate-200">
+                    <span className="text-[10px] text-slate-600 block">ਮੂਲ ਕਟੌਤੀ (Principal Paid)</span>
+                    <strong className="text-slate-800 text-sm">{formatCurrency(previewPrincipalPaid)}</strong>
+                  </div>
+                  <div className="bg-white p-2 rounded-lg border border-emerald-300">
+                    <span className="text-[10px] text-emerald-800 block">ਨਵਾਂ ਬਾਕੀ ਬਕਾਇਆ (Closing Balance)</span>
+                    <strong className="text-emerald-900 text-sm">{formatCurrency(previewClosingBalance)}</strong>
+                  </div>
+                </div>
+
+                <label className="flex items-start gap-2 pt-1.5 cursor-pointer text-slate-800">
+                  <input
+                    type="checkbox"
+                    checked={settleAndRollForward}
+                    onChange={(e) => setSettleAndRollForward(e.target.checked)}
+                    className="mt-0.5 rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4 cursor-pointer"
+                  />
+                  <span className="text-[11px] leading-tight">
+                    <strong>ਮਿਤੀ {date} ਤੱਕ ਦਾ ਵਿਆਜ ਨਿਬੇੜ ਕੇ ਨਵਾਂ ਹਿਸਾਬ ਇਸ ਮਿਤੀ ਤੋਂ ਸ਼ੁਰੂ ਕਰੋ</strong>
+                    <span className="block text-[10px] text-slate-500">
+                      (ਇਸ ਮਿਤੀ ਤੱਕ ਦਾ ਵਿਆਜ ਚੁਕਤਾ ਹੋ ਜਾਵੇਗਾ, ਅਤੇ ਬਾਕੀ ਬਕਾਏ ₹{previewClosingBalance.toLocaleString('en-IN')} 'ਤੇ ਅਗਲਾ ਵਿਆਜ ਇਸ ਮਿਤੀ ਤੋਂ ਚੱਲੇਗਾ)
+                    </span>
+                  </span>
+                </label>
+              </div>
+            )}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>

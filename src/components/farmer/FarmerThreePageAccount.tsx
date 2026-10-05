@@ -1198,7 +1198,7 @@ export const FarmerThreePageAccount: React.FC<FarmerThreePageAccountProps> = ({
                                 ਮਿਤੀ: <strong className="text-emerald-950">{rep.date}</strong>
                               </td>
                               <td className="py-2 px-2 text-right font-mono text-slate-700 text-xs">
-                                ਬਾਕੀ ਮੂਲ: <strong className="text-slate-950">₹{Math.round(adv.netPrincipalRemaining ?? (adv.amount - (adv.totalRepaid || 0))).toLocaleString('en-IN')}</strong>
+                                ਬਾਕੀ ਮੂਲ: <strong className="text-slate-950">₹{Math.round(adv.netPrincipalRemaining !== undefined ? adv.netPrincipalRemaining : (Number(adv.principal ?? adv.amount) || 0)).toLocaleString('en-IN')}</strong>
                               </td>
                               <td className="py-2 px-2 text-right font-mono font-black text-emerald-900">
                                 -₹{Math.round(rep.amount).toLocaleString('en-IN')}
@@ -2138,7 +2138,7 @@ export const FarmerThreePageAccount: React.FC<FarmerThreePageAccountProps> = ({
                              rep.paymentMode}
                           </td>
                           <td className="p-1.5" colSpan={2}>
-                            ਕਿਸਾਨ ਵੱਲੋਂ ਕਿਸ਼ਤ ਵਾਪਸ: -₹{Math.round(rep.amount).toLocaleString('en-IN')} {rep.remarks ? `• ${rep.remarks}` : ''} | ਬਾਕੀ ਮੂਲ: ₹{Math.round(adv.netPrincipalRemaining ?? (adv.amount - (adv.totalRepaid || 0))).toLocaleString('en-IN')}
+                            ਕਿਸਾਨ ਵੱਲੋਂ ਕਿਸ਼ਤ ਵਾਪਸ: -₹{Math.round(rep.amount).toLocaleString('en-IN')} {rep.remarks ? `• ${rep.remarks}` : ''} | ਬਾਕੀ ਮੂਲ: ₹{Math.round(adv.netPrincipalRemaining !== undefined ? adv.netPrincipalRemaining : (Number(adv.principal ?? adv.amount) || 0)).toLocaleString('en-IN')}
                           </td>
                           <td className="p-1.5 text-center text-slate-600 font-mono">ਮਿਤੀ: {rep.date}</td>
                           <td className="p-1.5 text-right font-mono text-emerald-800 font-bold">ਕਿਸ਼ਤ #{rIdx + 1}</td>

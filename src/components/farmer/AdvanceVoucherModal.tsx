@@ -61,8 +61,9 @@ export const AdvanceVoucherModal: React.FC<AdvanceVoucherModalProps> = ({
   const catMeta = advance.category ? categoryLabels[advance.category] : categoryLabels['CASH'];
   const repayments = Array.isArray(advance.repayments) ? advance.repayments : [];
   const totalRepaid = advance.totalRepaid || repayments.reduce((s, r) => s + (Number(r.amount) || 0), 0);
-  const originalPrincipal = Number(advance.amount) || 0;
-  const netPrincipal = advance.netPrincipalRemaining !== undefined ? advance.netPrincipalRemaining : Math.max(0, originalPrincipal - totalRepaid);
+  const originalPrincipal = Number(advance.originalAmount ?? advance.principal ?? advance.amount) || 0;
+  const currentPrincipal = Number(advance.principal ?? advance.amount) || 0;
+  const netPrincipal = advance.netPrincipalRemaining !== undefined ? advance.netPrincipalRemaining : currentPrincipal;
   const interestAmount = Number(advance.interestAmount) || 0;
   const totalPayable = advance.totalPayableWithInterest ?? Math.max(0, netPrincipal + interestAmount);
 

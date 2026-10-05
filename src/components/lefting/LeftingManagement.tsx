@@ -434,12 +434,12 @@ export const LeftingManagement: React.FC = () => {
     }
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
-      const mId = rec.id.toLowerCase().includes(q);
-      const mGate = rec.gatePassNo?.toLowerCase().includes(q) || false;
-      const mTruck = rec.truckNo.toLowerCase().includes(q);
-      const mDriver = rec.driverName.toLowerCase().includes(q);
-      const mDest = rec.destination.toLowerCase().includes(q);
-      const mFarmer = rec.farmerName.toLowerCase().includes(q) || rec.farmerNamePa.toLowerCase().includes(q);
+      const mId = (rec.id || '').toLowerCase().includes(q);
+      const mGate = (rec.gatePassNo || '').toLowerCase().includes(q);
+      const mTruck = (rec.truckNo || '').toLowerCase().includes(q);
+      const mDriver = (rec.driverName || '').toLowerCase().includes(q);
+      const mDest = (rec.destination || '').toLowerCase().includes(q);
+      const mFarmer = (rec.farmerName || '').toLowerCase().includes(q) || (rec.farmerNamePa || '').toLowerCase().includes(q);
       if (!mId && !mGate && !mTruck && !mDriver && !mDest && !mFarmer) return false;
     }
     if (filterAgency !== 'ALL' && rec.sellerOrAgency !== filterAgency) return false;

@@ -135,7 +135,7 @@ export const AiVoiceBoliModal: React.FC<AiVoiceBoliModalProps> = ({
       const lower = transcript.toLowerCase();
       let matchedAgency = '';
       for (const ag of agencies) {
-        const enLower = ag.nameEn.toLowerCase();
+        const enLower = (ag.nameEn || '').toLowerCase();
         const paLower = (ag.namePa || '').toLowerCase();
         if (lower.includes(enLower) || (paLower && lower.includes(paLower))) {
           matchedAgency = ag.nameEn;

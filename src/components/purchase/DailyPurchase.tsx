@@ -1549,15 +1549,15 @@ export const DailyPurchase: React.FC = () => {
             <div className="absolute top-full left-0 right-0 z-30 mt-1 max-h-56 overflow-y-auto border border-emerald-300 rounded-xl bg-white shadow-xl divide-y divide-slate-100">
               {farmers
                 .filter((f) => {
-                  const q = farmerSearchQuery.toLowerCase().trim();
+                  const q = (farmerSearchQuery || '').toLowerCase().trim();
                   const cleanNums = q.replace(/[^0-9]/g, '');
                   return (
-                    f.farmerName.toLowerCase().includes(q) ||
+                    (f.farmerName || '').toLowerCase().includes(q) ||
                     (f.farmerNamePa && f.farmerNamePa.toLowerCase().includes(q)) ||
                     (f.fatherName && f.fatherName.toLowerCase().includes(q)) ||
-                    f.village.toLowerCase().includes(q) ||
+                    (f.village || '').toLowerCase().includes(q) ||
                     (f.villagePa && f.villagePa.toLowerCase().includes(q)) ||
-                    f.id.toLowerCase().includes(q) ||
+                    (f.id || '').toLowerCase().includes(q) ||
                     (cleanNums && f.mobile && f.mobile.includes(cleanNums))
                   );
                 })

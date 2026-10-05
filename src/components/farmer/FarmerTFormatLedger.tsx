@@ -9,10 +9,13 @@ import {
   FileDown, 
   Calendar,
   Share2,
-  Receipt
+  Receipt,
+  Clock,
+  Calculator
 } from 'lucide-react';
-import { FarmerAccountSummary, Farmer, MandiSettings } from '../../types/mandi';
-import { formatCurrency, formatCurrencyINR, compareDatesChronological } from '../../utils/calculations';
+import { FarmerAccountSummary, Farmer, MandiSettings, FarmerAdvanceRecord } from '../../types/mandi';
+import { useMandi } from '../../context/MandiContext';
+import { formatCurrency, formatCurrencyINR, compareDatesChronological, addMonthsToDateString, formatDateToDDMMYYYY } from '../../utils/calculations';
 import { openWhatsApp } from '../../utils/whatsappNotification';
 
 interface FarmerTFormatLedgerProps {
@@ -30,11 +33,19 @@ interface DebitEntry {
   date: string;
   title: string;
   subTitle?: string;
-  category: 'ADVANCE' | 'LABOUR' | 'PAYMENT' | 'ADJUSTMENT' | 'OTHER';
+  category: 'ADVANCE' | 'LABOUR' | 'PAYMENT' | 'ADJUSTMENT' | 'OPENING_BALANCE' | 'OTHER';
   amount: number;
   bags?: number;
   weight?: string;
   ref?: string;
+  advanceRecord?: FarmerAdvanceRecord;
+  principal?: number;
+  interest?: number;
+  monthlyRate?: number;
+  monthsElapsed?: number;
+  daysElapsed?: number;
+  totalDays?: number;
+  tillDate?: string;
 }
 
 interface CreditEntry {
@@ -60,11 +71,61 @@ export const FarmerTFormatLedger: React.FC<FarmerTFormatLedgerProps> = ({
   onClose,
   onOpenMiniSlip
 }) => {
+  const { updateFarmerAdvance } = useMandi();
   const [filterPeriod, setFilterPeriod] = useState<'all' | 'crop'>('all');
+  const [ledgerTillDate, setLedgerTillDate] = useState<string>(() => formatDateToDDMMYYYY(new Date()));
+  const [bulkCustomMonths, setBulkCustomMonths] = useState<string>('6');
+
+  const handleApplyTillDateToAll = (newDate: string) => {
+    if (!account.advances || account.advances.length === 0 || !newDate) return;
+    account.advances.forEach((adv) => {
+      updateFarmerAdvance(adv.id, { interestTillDate: newDate });
+    });
+  };
+
+  const handleAddMonthsToAll = (months: number) => {
+    if (!account.advances || account.advances.length === 0) return;
+    account.advances.forEach((adv) => {
+      const baseDate = adv.startDate || adv.date || formatDateToDDMMYYYY(new Date());
+      const newDate = addMonthsToDateString(baseDate, months);
+      updateFarmerAdvance(adv.id, { interestTillDate: newDate });
+    });
+  };
+
+  const handleUpdateSingleAdvanceDate = (advId: string, newTillDate: string) => {
+    if (!newTillDate) return;
+    updateFarmerAdvance(advId, { interestTillDate: newTillDate });
+  };
+
+  const handleAddMonthsToSingleAdvance = (adv: FarmerAdvanceRecord, months: number) => {
+    const baseDate = adv.startDate || adv.date || formatDateToDDMMYYYY(new Date());
+    const newTillDate = addMonthsToDateString(baseDate, months);
+    updateFarmerAdvance(adv.id, { interestTillDate: newTillDate });
+  };
+
+  const handleUpdateSingleAdvanceRate = (advId: string, rate: number) => {
+    if (isNaN(rate) || rate < 0) return;
+    updateFarmerAdvance(advId, { monthlyInterestRate: rate });
+  };
 
   // 1. Build Debit (ਨਾਮੇ / Dr.) Entries:
   // Farmer draws cash/advances, deductions/labour cut, and payments issued to farmer.
   const debitList: DebitEntry[] = [];
+
+  // Opening Balance from previous season (e.g. 15 Oct settlement balance)
+  const openingBal = Number(farmer.openingBalance) || 0;
+  if (openingBal > 0) {
+    debitList.push({
+      id: 'open-bal-dr',
+      date: farmer.openingBalanceDate || '15/10/2026',
+      title: 'ਪਿਛਲਾ ਬਕਾਇਆ (Previous Balance / 15 Oct Closing)',
+      subTitle: `ਪਿਛਲੇ ਸੀਜ਼ਨ ਦਾ ਬਕਾਇਆ ਦੇਣਦਾਰੀ ${farmer.openingBalanceDate ? `(ਹਿਸਾਬ ਮਿਤੀ: ${farmer.openingBalanceDate})` : ''}`,
+      category: 'OPENING_BALANCE',
+      amount: openingBal,
+      principal: openingBal,
+      ref: '15 ਅਕਤੂਬਰ ਨਿਬੇੜਾ ਬਕਾਇਆ'
+    });
+  }
 
   // A. Mandi Labour & Deductions
   if (account.labourRecords && account.labourRecords.length > 0) {
@@ -95,9 +156,13 @@ export const FarmerTFormatLedger: React.FC<FarmerTFormatLedgerProps> = ({
   // B. Advance Records (Principal + Interest)
   if (account.advances && account.advances.length > 0) {
     account.advances.forEach((adv) => {
-      const remainingPrincipal = Math.max(0, adv.amount - (adv.repaidPrincipal || 0));
+      const origPrincipal = Number(adv.principal ?? adv.amount) || 0;
       const interest = adv.interestAmount || 0;
-      const totalAdvance = remainingPrincipal + interest;
+
+      // In the T-Format Ledger:
+      // When active repayments are listed on the Credit side (Cr.), the Debit side must show
+      // the gross advance (Principal + Interest) so that: Gross Debit - Credit Repayment = Net Balance!
+      const totalAdvance = origPrincipal + interest;
 
       if (totalAdvance > 0) {
         debitList.push({
@@ -105,11 +170,19 @@ export const FarmerTFormatLedger: React.FC<FarmerTFormatLedgerProps> = ({
           date: adv.date || '—',
           title: `ਲਿਆ ਪੇਸ਼ਗੀ ਐਡਵਾਂਸ (${adv.category || 'ਨਕਦ'})`,
           subTitle: interest > 0 
-            ? `ਮੂਲ: ₹${remainingPrincipal.toLocaleString('en-IN')} + ਵਿਆਜ: ₹${Math.round(interest).toLocaleString('en-IN')}`
-            : `ਮੂਲ ਰਕਮ: ₹${remainingPrincipal.toLocaleString('en-IN')} (ਬਿਨਾਂ ਵਿਆਜ)`,
+            ? `ਮੂਲ ₹${origPrincipal.toLocaleString('en-IN')} • ਦਰ ${adv.monthlyInterestRate ?? 2}% • ${adv.monthsElapsed || 0} ਮਹੀਨੇ, ${adv.daysElapsed || 0} ਦਿਨ (ਵਿਆਜ ₹${Math.round(interest).toLocaleString('en-IN')})`
+            : `ਮੂਲ ਰਕਮ: ₹${origPrincipal.toLocaleString('en-IN')}${adv.lastInterestSettledDate ? ` (ਮਿਤੀ ${adv.lastInterestSettledDate} ਤੱਕ ਵਿਆਜ ਚੁਕਤਾ ਬਕਾਇਆ)` : ' (ਬਿਨਾਂ ਵਿਆਜ)'}`,
           category: 'ADVANCE',
           amount: totalAdvance,
-          ref: adv.itemDescription
+          ref: adv.interestTillDate ? `ਹਿਸਾਬ ਮਿਤੀ: ${adv.interestTillDate} ਤੱਕ` : adv.itemDescription,
+          advanceRecord: adv,
+          principal: origPrincipal,
+          interest: interest,
+          monthlyRate: adv.monthlyInterestRate ?? 2,
+          monthsElapsed: adv.monthsElapsed || 0,
+          daysElapsed: adv.daysElapsed || 0,
+          totalDays: adv.totalDays || 0,
+          tillDate: adv.interestTillDate || adv.endDate || formatDateToDDMMYYYY(new Date())
         });
       }
     });
@@ -197,19 +270,22 @@ export const FarmerTFormatLedger: React.FC<FarmerTFormatLedgerProps> = ({
   // B. Farmer Advance Repayments (ਕਿਸਾਨ ਵੱਲੋਂ ਕਿਸ਼ਤ ਵਾਪਸ / ਜਮ੍ਹਾਂ with exact return date)
   if (account.advances && account.advances.length > 0) {
     account.advances.forEach((adv) => {
-      if (adv.repayments && adv.repayments.length > 0) {
-        adv.repayments.forEach((rep) => {
-          creditList.push({
-            id: `rep-${adv.id}-${rep.id}`,
-            date: rep.date || '—',
-            title: `ਕਿਸਾਨ ਵੱਲੋਂ ਕਿਸ਼ਤ ਵਾਪਸ (ਪੇਸ਼ਗੀ #${adv.id})`,
-            subTitle: `ਵਾਪਸੀ ਮਿਤੀ: ${rep.date} • ${rep.paymentMode === 'CASH' ? 'ਨਕਦ (Cash)' : rep.paymentMode} ${rep.remarks ? `• ${rep.remarks}` : ''}`,
-            category: 'REPAYMENT',
-            amount: rep.amount,
-            ref: rep.referenceNo || rep.referenceNumber || adv.id
-          });
+      const allRepayments = Array.isArray(adv.repayments) ? adv.repayments : [];
+      allRepayments.forEach((rep) => {
+        // If this repayment was settled to roll into the starting principal,
+        // it is already accounted for in the principal balance and must not reduce it again!
+        if (rep.isSettled) return;
+
+        creditList.push({
+          id: `rep-${adv.id}-${rep.id}`,
+          date: rep.date || '—',
+          title: `ਕਿਸਾਨ ਵੱਲੋਂ ਕਿਸ਼ਤ ਵਾਪਸ (ਪੇਸ਼ਗੀ #${adv.id})`,
+          subTitle: `ਵਾਪਸੀ ਮਿਤੀ: ${rep.date} • ${rep.paymentMode === 'CASH' ? 'ਨਕਦ (Cash)' : rep.paymentMode} ${rep.remarks ? `• ${rep.remarks}` : ''}`,
+          category: 'REPAYMENT',
+          amount: rep.amount,
+          ref: rep.referenceNo || rep.referenceNumber || adv.id
         });
-      }
+      });
     });
   }
 
@@ -315,6 +391,101 @@ export const FarmerTFormatLedger: React.FC<FarmerTFormatLedgerProps> = ({
         </div>
       </div>
 
+      {/* Interactive Interest Till Date & Months Strip (Hidden on Print) */}
+      {account.advances && account.advances.length > 0 && (
+        <div className="bg-amber-50 border border-amber-300 rounded-2xl p-3 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs print:hidden">
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 bg-amber-600 text-white rounded-lg">
+              <Calculator className="w-4 h-4" />
+            </div>
+            <div>
+              <span className="font-black text-amber-950 block">ਵਿਆਜ ਗਣਨਾ ਮਿਤੀ ਤੇ ਮਹੀਨੇ (Interest Till Date & Months)</span>
+              <span className="text-[11px] text-amber-800">ਲੇਜ਼ਰ ਵਿੱਚ ਸਾਰੇ ਐਡਵਾਂਸਾਂ 'ਤੇ ਇਸ ਮਿਤੀ ਤੱਕ ਦਾ ਵਿਆਜ ਆਪਣੇ ਆਪ ਲੱਗੇਗਾ</span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-1.5 bg-white border border-amber-300 rounded-xl px-2 py-1 shadow-2xs">
+              <span className="text-[11px] font-bold text-slate-600">ਮਿਤੀ ਤੱਕ:</span>
+              <input
+                type="text"
+                value={ledgerTillDate}
+                onChange={(e) => {
+                  const formatted = autoFormatDate(e.target.value);
+                  setLedgerTillDate(formatted);
+                  handleApplyTillDateToAll(formatted);
+                }}
+                maxLength={10}
+                placeholder="DD/MM/YYYY"
+                className="w-24 text-xs font-mono font-bold text-slate-900 border-0 focus:outline-none"
+              />
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                const today = formatDateToDDMMYYYY(new Date());
+                setLedgerTillDate(today);
+                handleApplyTillDateToAll(today);
+              }}
+              className="px-2.5 py-1.5 bg-white hover:bg-amber-100 border border-amber-300 text-amber-900 rounded-xl text-[11px] font-bold shadow-2xs transition cursor-pointer"
+            >
+              ਅੱਜ ਤੱਕ
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleAddMonthsToAll(1)}
+              className="px-2.5 py-1.5 bg-white hover:bg-amber-100 border border-amber-300 text-amber-900 rounded-xl text-[11px] font-bold shadow-2xs transition cursor-pointer"
+            >
+              +1 ਮਹੀਨਾ
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleAddMonthsToAll(3)}
+              className="px-2.5 py-1.5 bg-white hover:bg-amber-100 border border-amber-300 text-amber-900 rounded-xl text-[11px] font-bold shadow-2xs transition cursor-pointer"
+            >
+              +3 ਮਹੀਨੇ
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleAddMonthsToAll(6)}
+              className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-[11px] font-black shadow-2xs transition cursor-pointer"
+            >
+              +6 ਮਹੀਨੇ (ਛਿਮਾਹੀ)
+            </button>
+
+            {/* Custom Months Input for Bulk */}
+            <div className="flex items-center gap-1 bg-white border border-amber-300 rounded-xl px-2 py-1 shadow-2xs">
+              <span className="text-[11px] font-bold text-slate-600">ਕਸਟਮ ਮਹੀਨੇ:</span>
+              <input
+                type="number"
+                min="1"
+                max="60"
+                value={bulkCustomMonths}
+                onChange={(e) => setBulkCustomMonths(e.target.value)}
+                className="w-10 text-xs font-mono font-bold text-center text-slate-900 border-0 focus:outline-none"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  const m = parseInt(bulkCustomMonths, 10);
+                  if (!isNaN(m) && m > 0) {
+                    handleAddMonthsToAll(m);
+                  }
+                }}
+                className="px-2 py-0.5 bg-amber-700 hover:bg-amber-800 text-white rounded text-[10px] font-bold shadow-2xs transition cursor-pointer"
+                title="ਸਾਰੇ ਐਡਵਾਂਸਾਂ 'ਤੇ ਇਹ ਮਹੀਨੇ ਜੋੜੋ"
+              >
+                ਸਾਰੇ ਲਗਾਓ
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* T-FORMAT LEDGER BOARD */}
       <div className="bg-white rounded-2xl shadow-xl border-2 border-slate-300 overflow-hidden font-sans">
         {/* Ledger Header (Traditional Look) */}
@@ -403,13 +574,137 @@ export const FarmerTFormatLedger: React.FC<FarmerTFormatLedgerProps> = ({
                       {debit?.date || ''}
                     </td>
                     {/* --- DEBIT (LEFT) CELL 2: PARTICULARS --- */}
-                    <td className="py-2 px-3 border-r border-slate-200 align-top">
+                    <td className="py-2.5 px-3 border-r border-slate-200 align-top">
                       {debit ? (
                         <div>
-                          <div className="font-bold text-slate-900">{debit.title}</div>
-                          {debit.subTitle && (
-                            <div className="text-[10px] text-slate-500 font-medium">{debit.subTitle}</div>
+                          <div className="font-bold text-slate-900 flex items-center justify-between gap-1 flex-wrap">
+                            <span>{debit.title}</span>
+                            {debit.advanceRecord && (
+                              <div className="flex items-center gap-1">
+                                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300 font-bold">
+                                  ਰੇਟ: {debit.monthlyRate}%/ਮਹੀਨਾ
+                                </span>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Print mode clean textual particulars */}
+                          <div className="hidden print:block text-[10px] text-slate-700 mt-0.5">
+                            {debit.advanceRecord ? (
+                              <div>
+                                <span>ਮੂਲ: ₹{debit.principal?.toLocaleString('en-IN')} | </span>
+                                <span>ਵਿਆਜ ਮਿਤੀ {debit.tillDate} ਤੱਕ ({debit.monthsElapsed} ਮਹੀਨੇ, {debit.daysElapsed} ਦਿਨ): ₹{Math.round(debit.interest || 0).toLocaleString('en-IN')}</span>
+                              </div>
+                            ) : (
+                              debit.subTitle
+                            )}
+                          </div>
+
+                          {/* Screen mode: Interactive Feature right in front of the amount */}
+                          {debit.advanceRecord ? (
+                            <div className="print:hidden mt-2 bg-amber-50/90 border border-amber-300 rounded-xl p-2.5 space-y-2 text-xs shadow-2xs">
+                              {/* Row 1: Till Date input + Live Auto Days & Months Calculation */}
+                              <div className="flex items-center justify-between gap-2 flex-wrap">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-[10px] font-bold text-slate-700 whitespace-nowrap">
+                                    ਤਾਰੀਖ਼ ਤੱਕ:
+                                  </span>
+                                  <input
+                                    type="text"
+                                    defaultValue={debit.tillDate}
+                                    onChange={(e) => {
+                                      const formatted = autoFormatDate(e.target.value);
+                                      e.target.value = formatted;
+                                      if (formatted.length === 10) {
+                                        handleUpdateSingleAdvanceDate(debit.advanceRecord!.id, formatted);
+                                      }
+                                    }}
+                                    onBlur={(e) => handleUpdateSingleAdvanceDate(debit.advanceRecord!.id, e.target.value)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') {
+                                        handleUpdateSingleAdvanceDate(debit.advanceRecord!.id, (e.target as HTMLInputElement).value);
+                                      }
+                                    }}
+                                    maxLength={10}
+                                    placeholder="DD/MM/YYYY"
+                                    className="w-24 px-1.5 py-0.5 bg-white border border-amber-300 rounded font-mono font-bold text-xs text-slate-900 focus:ring-1 focus:ring-amber-500 focus:outline-none"
+                                    title="ਇਸ ਮਿਤੀ ਤੱਕ ਦਾ ਵਿਆਜ ਆਟੋਮੈਟਿਕ ਗਿਣਿਆ ਜਾਵੇਗਾ (Enter ਦਬਾਓ)"
+                                  />
+                                </div>
+
+                                {/* Auto Day & Month Calculation badge */}
+                                <div className="flex items-center gap-1 bg-amber-200/80 text-amber-950 px-2 py-0.5 rounded-lg text-[10px] font-black font-mono shadow-2xs">
+                                  <Clock className="w-3 h-3 text-amber-700 shrink-0" />
+                                  <span>{debit.monthsElapsed || 0} ਮਹੀਨੇ, {debit.daysElapsed || 0} ਦਿਨ ({debit.totalDays || 0} ਦਿਨ)</span>
+                                </div>
+                              </div>
+
+                              {/* Row 2: Add Month Feature (Custom input + Quick buttons) */}
+                              <div className="flex items-center justify-between gap-2 flex-wrap pt-1.5 border-t border-amber-200">
+                                <div className="flex items-center gap-1">
+                                  <span className="text-[10px] font-bold text-amber-900">ਮਹੀਨੇ ਜੋੜੋ:</span>
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    max="60"
+                                    placeholder="ਮਹੀਨੇ"
+                                    defaultValue="6"
+                                    id={`months-input-${debit.advanceRecord.id}`}
+                                    className="w-12 px-1 py-0.5 bg-white border border-amber-300 rounded font-mono font-bold text-xs text-center text-slate-900 focus:outline-none"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const input = document.getElementById(`months-input-${debit.advanceRecord!.id}`) as HTMLInputElement;
+                                      const m = parseInt(input?.value || '1', 10);
+                                      if (!isNaN(m) && m > 0) {
+                                        handleAddMonthsToSingleAdvance(debit.advanceRecord!, m);
+                                      }
+                                    }}
+                                    className="px-2 py-0.5 bg-amber-700 hover:bg-amber-800 text-white rounded text-[10px] font-bold transition cursor-pointer shadow-2xs"
+                                    title="ਇਸ ਐਂਟਰੀ 'ਤੇ ਦਿੱਤੇ ਮਹੀਨੇ ਜੋੜੋ"
+                                  >
+                                    ਲਾਗੂ ਕਰੋ
+                                  </button>
+                                </div>
+
+                                {/* Quick Month Buttons */}
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleAddMonthsToSingleAdvance(debit.advanceRecord!, 1)}
+                                    className="px-1.5 py-0.5 bg-white hover:bg-amber-100 border border-amber-300 text-slate-800 rounded text-[9px] font-bold shadow-2xs transition cursor-pointer"
+                                    title="1 ਮਹੀਨਾ ਜੋੜੋ"
+                                  >
+                                    +1 ਮ.
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleAddMonthsToSingleAdvance(debit.advanceRecord!, 3)}
+                                    className="px-1.5 py-0.5 bg-white hover:bg-amber-100 border border-amber-300 text-slate-800 rounded text-[9px] font-bold shadow-2xs transition cursor-pointer"
+                                    title="3 ਮਹੀਨੇ ਜੋੜੋ"
+                                  >
+                                    +3 ਮ.
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleAddMonthsToSingleAdvance(debit.advanceRecord!, 6)}
+                                    className="px-2 py-0.5 bg-amber-600 hover:bg-amber-700 text-white rounded text-[9px] font-black shadow-2xs transition cursor-pointer"
+                                    title="6 ਮਹੀਨੇ (ਛਿਮਾਹੀ) ਜੋੜੋ"
+                                  >
+                                    +6 ਮ. (ਛਿਮਾਹੀ)
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="print:hidden">
+                              {debit.subTitle && (
+                                <div className="text-[10px] text-slate-500 font-medium">{debit.subTitle}</div>
+                              )}
+                            </div>
                           )}
+
                           {debit.ref && (
                             <span className="inline-block mt-0.5 text-[9px] bg-slate-100 text-slate-600 px-1 py-0.2 rounded font-mono">
                               {debit.ref}
@@ -419,8 +714,26 @@ export const FarmerTFormatLedger: React.FC<FarmerTFormatLedgerProps> = ({
                       ) : null}
                     </td>
                     {/* --- DEBIT (LEFT) CELL 3: AMOUNT --- */}
-                    <td className="py-2 px-3 border-r-4 border-slate-800 text-right font-black font-mono text-slate-900 align-top bg-rose-50/20">
-                      {debit ? formatCurrency(debit.amount) : ''}
+                    <td className="py-2.5 px-3 border-r-4 border-slate-800 text-right font-mono text-slate-900 align-top bg-rose-50/20">
+                      {debit ? (
+                        <div>
+                          <div className="text-sm font-black font-mono text-rose-950">
+                            {formatCurrency(debit.amount)}
+                          </div>
+                          {debit.advanceRecord && (
+                            <div className="mt-1 text-[10px] text-slate-600 space-y-0.5 border-t border-rose-200/60 pt-1">
+                              <div className="flex justify-between gap-1">
+                                <span className="text-slate-500">ਮੂਲ:</span>
+                                <span className="font-semibold text-slate-800">₹{debit.principal?.toLocaleString('en-IN')}</span>
+                              </div>
+                              <div className="flex justify-between gap-1 text-amber-800 font-bold">
+                                <span>ਵਿਆਜ:</span>
+                                <span>+₹{Math.round(debit.interest || 0).toLocaleString('en-IN')}</span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ) : ''}
                     </td>
 
                     {/* --- CREDIT (RIGHT) CELL 1: DATE --- */}

@@ -28,6 +28,7 @@ import { LabourGangLedger } from './components/labour/LabourGangLedger';
 import { SettingsManager } from './components/settings/SettingsManager';
 import { ReceiptModal } from './components/common/ReceiptModal';
 import { BagsEntryEditModal } from './components/bags/BagsEntryEditModal';
+import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { PakkaDashboard } from './components/pakka/PakkaDashboard';
 import { IFormRegister } from './components/pakka/IFormRegister';
 import { JFormRegister } from './components/pakka/JFormRegister';
@@ -244,14 +245,16 @@ const MainAppContent: React.FC = () => {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <MandiProvider>
-        <NotificationProvider>
-          <GoogleSheetsSyncProvider>
-            <MainAppContent />
-          </GoogleSheetsSyncProvider>
-        </NotificationProvider>
-      </MandiProvider>
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <MandiProvider>
+          <NotificationProvider>
+            <GoogleSheetsSyncProvider>
+              <MainAppContent />
+            </GoogleSheetsSyncProvider>
+          </NotificationProvider>
+        </MandiProvider>
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }

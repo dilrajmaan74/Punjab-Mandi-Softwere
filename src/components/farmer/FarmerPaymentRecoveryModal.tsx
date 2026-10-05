@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Farmer, FarmerAdvanceRecord } from '../../types/mandi';
 import { useMandi, MultiAdvanceSettlementPayload } from '../../context/MandiContext';
 import { useNotification } from '../../context/NotificationContext';
-import { calculateAdvanceInterest, formatDateToDDMMYYYY } from '../../utils/calculations';
+import { calculateAdvanceInterest, formatDateToDDMMYYYY, autoFormatDate } from '../../utils/calculations';
 import {
   X,
   IndianRupee,
@@ -663,7 +663,8 @@ export const FarmerPaymentRecoveryModal: React.FC<FarmerPaymentRecoveryModalProp
                     type="text"
                     required
                     value={returnDate}
-                    onChange={(e) => setReturnDate(e.target.value)}
+                    onChange={(e) => setReturnDate(autoFormatDate(e.target.value))}
+                    maxLength={10}
                     placeholder="DD/MM/YYYY"
                     className="w-full pl-9 pr-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-mono font-bold focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                   />

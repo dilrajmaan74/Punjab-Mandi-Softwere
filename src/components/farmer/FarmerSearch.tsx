@@ -92,16 +92,16 @@ export const FarmerSearch: React.FC = () => {
   };
 
   const filteredFarmers = farmers.filter((f) => {
-    const q = query.toLowerCase().trim();
+    const q = (query || '').toLowerCase().trim();
     if (!q) return true;
     return (
-      f.farmerName.toLowerCase().includes(q) ||
-      f.farmerNamePa.toLowerCase().includes(q) ||
-      f.id.toLowerCase().includes(q) ||
-      f.village.toLowerCase().includes(q) ||
-      f.villagePa.toLowerCase().includes(q) ||
-      f.aadhaar.replace(/\s+/g, '').includes(q.replace(/\s+/g, '')) ||
-      f.mobile.includes(q)
+      (f.farmerName || '').toLowerCase().includes(q) ||
+      (f.farmerNamePa || '').toLowerCase().includes(q) ||
+      (f.id || '').toLowerCase().includes(q) ||
+      (f.village || '').toLowerCase().includes(q) ||
+      (f.villagePa || '').toLowerCase().includes(q) ||
+      (f.aadhaar || '').replace(/\s+/g, '').includes(q.replace(/\s+/g, '')) ||
+      (f.mobile || '').includes(q)
     );
   });
 

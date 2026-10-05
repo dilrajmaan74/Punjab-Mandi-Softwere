@@ -809,7 +809,7 @@ export const FarmerAccountStatementA4: React.FC<FarmerAccountStatementA4Props> =
                         ਕਿਸਾਨ ਵੱਲੋਂ ਕਿਸ਼ਤ ਵਾਪਸ: -{fmtINR(rep.amount)} ({rep.paymentMode}) {rep.remarks ? `• ${rep.remarks}` : ''}
                       </td>
                       <td className="py-0.5 px-1.5 border-r border-slate-200 font-mono text-slate-700 text-center">
-                        ਬਾਕੀ ਮੂਲ: {fmtINR(adv.netPrincipalRemaining !== undefined ? adv.netPrincipalRemaining : (adv.amount - (adv.totalRepaid || 0)))}
+                        ਬਾਕੀ ਮੂਲ: {fmtINR(adv.netPrincipalRemaining !== undefined ? adv.netPrincipalRemaining : (Number(adv.principal ?? adv.amount) || 0))}
                       </td>
                       <td className="py-0.5 px-1.5 text-right font-mono text-emerald-900 font-bold">
                         ਕਿਸ਼ਤ #{rIdx + 1}

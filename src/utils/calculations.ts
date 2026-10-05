@@ -143,16 +143,25 @@ export function calculatePayableAmount(grandTotalKg: number, ratePerQtl = FIXED_
  * Converts "28082026" -> "28/08/2026"
  * Handles backspace and raw digits cleanly.
  */
-export function autoFormatDate(input: string): string {
+export function autoFormatDate(input: string, isDeleting: boolean = false): string {
+  if (!input) return '';
   // Strip non-digits
   const digits = input.replace(/\D/g, '').slice(0, 8);
-  if (digits.length <= 2) {
+  if (!digits) return '';
+
+  if (digits.length < 2) {
     return digits;
   }
-  if (digits.length <= 4) {
+  if (digits.length === 2) {
+    return isDeleting ? digits : `${digits}/`;
+  }
+  if (digits.length < 4) {
     return `${digits.slice(0, 2)}/${digits.slice(2)}`;
   }
-  return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4, 8)}`;
+  if (digits.length === 4) {
+    return isDeleting ? `${digits.slice(0, 2)}/${digits.slice(2)}` : `${digits.slice(0, 2)}/${digits.slice(2)}/`;
+  }
+  return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
 }
 
 /**
@@ -801,7 +810,7 @@ export function parseDateString(dateStr: string): Date {
     const parts = trimmed.split(/[/ -]+/);
     if (parts.length === 3) {
       const d = parseInt(parts[0], 10);
-      const mStr = parts[1].toLowerCase().slice(0, 3);
+      const mStr = (parts[1] || '').toLowerCase().slice(0, 3);
       const y = parseInt(parts[2], 10);
       if (!isNaN(d) && MONTH_MAP[mStr] !== undefined && !isNaN(y)) {
         return new Date(y, MONTH_MAP[mStr], d);
@@ -840,6 +849,20 @@ export function parseDateString(dateStr: string): Date {
 }
 
 /**
+ * Add N full calendar months to a DD/MM/YYYY or YYYY-MM-DD date string
+ */
+export function addMonthsToDateString(dateStr: string, monthsToAdd: number): string {
+  const d = parseDateString(dateStr);
+  const targetMonth = d.getMonth() + monthsToAdd;
+  const targetYear = d.getFullYear() + Math.floor(targetMonth / 12);
+  const normalizedMonth = ((targetMonth % 12) + 12) % 12;
+  const originalDay = d.getDate();
+  const daysInNewMonth = new Date(targetYear, normalizedMonth + 1, 0).getDate();
+  const newDate = new Date(targetYear, normalizedMonth, Math.min(originalDay, daysInNewMonth));
+  return formatDateToDDMMYYYY(newDate);
+}
+
+/**
  * Compare two dates chronologically:
  * If order === 'ASC' (default):
  *   15 Sep 2026 comes BEFORE 16 Sep 2026 (so 16 Sep 2026 always comes AFTER 15 Sep 2026).
@@ -847,21 +870,24 @@ export function parseDateString(dateStr: string): Date {
  *   Newer dates come first.
  */
 export function compareDatesChronological(
-  dateA?: string,
-  dateB?: string,
+  dateA?: any,
+  dateB?: any,
   order: 'ASC' | 'DESC' = 'ASC'
 ): number {
   if (!dateA && !dateB) return 0;
   if (!dateA) return order === 'ASC' ? 1 : -1;
   if (!dateB) return order === 'ASC' ? -1 : 1;
 
-  const timeA = parseDateString(dateA).getTime();
-  const timeB = parseDateString(dateB).getTime();
+  const strA = typeof dateA === 'string' ? dateA : String(dateA || '');
+  const strB = typeof dateB === 'string' ? dateB : String(dateB || '');
+
+  const timeA = parseDateString(strA).getTime();
+  const timeB = parseDateString(strB).getTime();
 
   if (timeA !== timeB) {
     return order === 'ASC' ? timeA - timeB : timeB - timeA;
   }
-  return order === 'ASC' ? String(dateA).localeCompare(String(dateB)) : String(dateB).localeCompare(String(dateA));
+  return order === 'ASC' ? strA.localeCompare(strB) : strB.localeCompare(strA);
 }
 
 /**
@@ -912,7 +938,8 @@ export function calculateAdvanceInterest(
         interestMode?: 'MONTHLY' | 'YEARLY' | 'INTEREST_FREE';
         compounding?: 'SIMPLE' | 'HALF_YEARLY' | 'HALF_YEARLY_COMPOUND' | 'YEARLY';
         isInterestFree?: boolean;
-        repayments?: { amount: number; date?: string }[];
+        lastInterestSettledDate?: string;
+        repayments?: { amount: number; date?: string; isSettled?: boolean }[];
         startDateStr?: string;
         startDate?: string;
         endDateStr?: string;
@@ -931,6 +958,7 @@ export function calculateAdvanceInterest(
   let repayments: { amount: number; date?: string }[] = [];
   let start = '';
   let end = '';
+  let lastInterestSettledDate = '';
 
   if (typeof principalOrOptions === 'object' && principalOrOptions !== null) {
     principal = Math.max(0, Number(principalOrOptions.principal) || 0);
@@ -938,6 +966,7 @@ export function calculateAdvanceInterest(
     interestMode = principalOrOptions.interestMode || (isInterestFree ? 'INTEREST_FREE' : 'MONTHLY');
     compounding = principalOrOptions.compounding || 'SIMPLE';
     repayments = Array.isArray(principalOrOptions.repayments) ? principalOrOptions.repayments : [];
+    lastInterestSettledDate = (principalOrOptions.lastInterestSettledDate || '').trim();
 
     if (isInterestFree || interestMode === 'INTEREST_FREE') {
       rate = 0;
@@ -979,38 +1008,40 @@ export function calculateAdvanceInterest(
   let daysElapsed = 0;
 
   if (endD.getTime() > startD.getTime()) {
-    const d = startD.getDate();
-    while (true) {
-      const nextMonths = monthsElapsed + 1;
-      const totalM = startD.getMonth() + nextMonths;
-      const targetYear = startD.getFullYear() + Math.floor(totalM / 12);
-      const targetMonth = ((totalM % 12) + 12) % 12;
-      const daysInTargetMonth = new Date(targetYear, targetMonth + 1, 0).getDate();
-      const nextDate = new Date(targetYear, targetMonth, Math.min(d, daysInTargetMonth), 0, 0, 0, 0);
+    const isStartFirstOfMonth = startD.getDate() === 1;
+    const isEndLastOfMonth = new Date(endD.getFullYear(), endD.getMonth() + 1, 0).getDate() === endD.getDate();
 
-      if (nextDate.getTime() <= endD.getTime()) {
-        monthsElapsed++;
-      } else {
-        break;
+    if (isStartFirstOfMonth && isEndLastOfMonth && endD.getTime() >= startD.getTime()) {
+      monthsElapsed = (endD.getFullYear() - startD.getFullYear()) * 12 + (endD.getMonth() - startD.getMonth()) + 1;
+      daysElapsed = 0;
+    } else {
+      const d = startD.getDate();
+      while (true) {
+        const nextMonths = monthsElapsed + 1;
+        const totalM = startD.getMonth() + nextMonths;
+        const targetYear = startD.getFullYear() + Math.floor(totalM / 12);
+        const targetMonth = ((totalM % 12) + 12) % 12;
+        const daysInTargetMonth = new Date(targetYear, targetMonth + 1, 0).getDate();
+        const nextDate = new Date(targetYear, targetMonth, Math.min(d, daysInTargetMonth), 0, 0, 0, 0);
+
+        if (nextDate.getTime() <= endD.getTime()) {
+          monthsElapsed++;
+        } else {
+          break;
+        }
       }
+
+      // Calculate remaining days from last full calendar month anniversary
+      const fullMonthsTotal = startD.getMonth() + monthsElapsed;
+      const lastYear = startD.getFullYear() + Math.floor(fullMonthsTotal / 12);
+      const lastMonth = ((fullMonthsTotal % 12) + 12) % 12;
+      const daysInLastMonth = new Date(lastYear, lastMonth + 1, 0).getDate();
+      const lastFullMonthDate = new Date(lastYear, lastMonth, Math.min(d, daysInLastMonth), 0, 0, 0, 0);
+
+      const remainingMs = endD.getTime() - lastFullMonthDate.getTime();
+      daysElapsed = Math.max(0, Math.round(remainingMs / (1000 * 60 * 60 * 24)));
     }
-
-    // Calculate remaining days from last full calendar month anniversary
-    const fullMonthsTotal = startD.getMonth() + monthsElapsed;
-    const lastYear = startD.getFullYear() + Math.floor(fullMonthsTotal / 12);
-    const lastMonth = ((fullMonthsTotal % 12) + 12) % 12;
-    const daysInLastMonth = new Date(lastYear, lastMonth + 1, 0).getDate();
-    const lastFullMonthDate = new Date(lastYear, lastMonth, Math.min(d, daysInLastMonth), 0, 0, 0, 0);
-
-    const remainingMs = endD.getTime() - lastFullMonthDate.getTime();
-    daysElapsed = Math.max(0, Math.round(remainingMs / (1000 * 60 * 60 * 24)));
   }
-
-  // Calculate Repayments
-  const totalRepaid = Math.round(
-    repayments.reduce((sum, r) => sum + (Number(r.amount) || 0), 0) * 100
-  ) / 100;
-  const netPrincipalRemaining = Math.max(0, Math.round((principal - totalRepaid) * 100) / 100);
 
   // Interest computation
   let interestAmount = 0;
@@ -1039,10 +1070,33 @@ export function calculateAdvanceInterest(
     }
   }
 
+  // Calculate Repayments: Repayment pays Accrued Interest first!
+  // If an advance was rolled forward or interest was settled up to a rest date,
+  // repayments that were already settled (isSettled: true) or occurred on/before lastInterestSettledDate
+  // must not be deducted again from the new period's principal.
+  const activeRepayments = repayments.filter((r) => {
+    if ((r as any).isSettled) return false;
+    if (lastInterestSettledDate && (r as any).date) {
+      if (compareDatesChronological((r as any).date, lastInterestSettledDate) <= 0) {
+        return false;
+      }
+    }
+    return true;
+  });
+
+  const totalRepaid = Math.round(
+    activeRepayments.reduce((sum, r) => sum + (Number(r.amount) || 0), 0) * 100
+  ) / 100;
+
+  const interestPaid = Math.min(interestAmount, totalRepaid);
+  const principalPaid = Math.max(0, Math.round((totalRepaid - interestPaid) * 100) / 100);
+  const netPrincipalRemaining = Math.max(0, Math.round((principal - principalPaid) * 100) / 100);
+  const unpaidInterestRemaining = Math.max(0, Math.round((interestAmount - interestPaid) * 100) / 100);
+
   // Total payable with interest, accounting for any repayments
   const totalPayableWithInterest = Math.max(
     0,
-    Math.round((principal + interestAmount - totalRepaid) * 100) / 100
+    Math.round((netPrincipalRemaining + unpaidInterestRemaining) * 100) / 100
   );
 
   const formattedDurationEn = `${monthsElapsed} Months ${daysElapsed} Days (${totalDays} Days)`;

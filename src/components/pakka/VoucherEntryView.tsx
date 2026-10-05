@@ -16,7 +16,7 @@ import {
   FileText
 } from 'lucide-react';
 import { VoucherEntry, VoucherType } from '../../types/pakkaAccounting';
-import { formatDateToDDMMYYYY, compareDatesChronological } from '../../utils/calculations';
+import { formatDateToDDMMYYYY, compareDatesChronological, autoFormatDate } from '../../utils/calculations';
 
 export const VoucherEntryView: React.FC = () => {
   const {
@@ -144,9 +144,9 @@ export const VoucherEntryView: React.FC = () => {
     if (selectedTypeFilter !== 'ALL' && v.voucherType !== selectedTypeFilter) return false;
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
-      const matchNo = v.voucherNo.toLowerCase().includes(q);
-      const matchDr = v.debitLedgerName.toLowerCase().includes(q);
-      const matchCr = v.creditLedgerName.toLowerCase().includes(q);
+      const matchNo = (v.voucherNo || '').toLowerCase().includes(q);
+      const matchDr = (v.debitLedgerName || '').toLowerCase().includes(q);
+      const matchCr = (v.creditLedgerName || '').toLowerCase().includes(q);
       const matchNarr = v.narration?.toLowerCase().includes(q) || (v.narrationPa && v.narrationPa.includes(q));
       if (!matchNo && !matchDr && !matchCr && !matchNarr) return false;
     }
@@ -351,7 +351,8 @@ export const VoucherEntryView: React.FC = () => {
                     type="text"
                     required
                     value={formData.date}
-                    onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                    onChange={(e) => setFormData({ ...formData, date: autoFormatDate(e.target.value) })}
+                    maxLength={10}
                     placeholder="DD/MM/YYYY"
                     className="w-full p-2 border border-slate-300 rounded-lg font-mono focus:ring-1 focus:ring-indigo-500"
                   />
@@ -461,7 +462,8 @@ export const VoucherEntryView: React.FC = () => {
                   <input
                     type="text"
                     value={formData.chequeDate}
-                    onChange={(e) => setFormData({ ...formData, chequeDate: e.target.value })}
+                    onChange={(e) => setFormData({ ...formData, chequeDate: autoFormatDate(e.target.value) })}
+                    maxLength={10}
                     placeholder="DD/MM/YYYY"
                     className="w-full p-2 border border-slate-300 rounded-lg font-mono"
                   />

@@ -33,9 +33,9 @@ export const FarmerAuditLogModal: React.FC<FarmerAuditLogModalProps> = ({
     const q = search.toLowerCase().trim();
     return logs.filter((log) => {
       return (
-        log.farmerId.toLowerCase().includes(q) ||
-        log.farmerName.toLowerCase().includes(q) ||
-        log.farmerNamePa.toLowerCase().includes(q) ||
+        (log.farmerId || '').toLowerCase().includes(q) ||
+        (log.farmerName || '').toLowerCase().includes(q) ||
+        (log.farmerNamePa || '').toLowerCase().includes(q) ||
         (log.village && log.village.toLowerCase().includes(q)) ||
         (log.performedBy && log.performedBy.toLowerCase().includes(q))
       );

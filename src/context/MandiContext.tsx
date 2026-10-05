@@ -331,7 +331,7 @@ interface MandiContextType {
   addFarmerAdvance: (advance: Omit<FarmerAdvanceRecord, 'id' | 'createdAt' | 'interestAmount' | 'totalDays' | 'monthsElapsed' | 'daysElapsed' | 'totalPayableWithInterest'> & { id?: string }) => FarmerAdvanceRecord;
   updateFarmerAdvance: (id: string, updates: Partial<FarmerAdvanceRecord>) => boolean;
   deleteFarmerAdvance: (id: string) => boolean;
-  addAdvanceRepayment: (advanceId: string, repayment: Omit<AdvanceRepayment, 'id' | 'createdAt'>) => boolean;
+  addAdvanceRepayment: (advanceId: string, repayment: Omit<AdvanceRepayment, 'id' | 'createdAt'> & { settleInterestAndRollForward?: boolean }) => boolean;
   deleteAdvanceRepayment: (advanceId: string, repaymentId: string) => boolean;
   settleMultiAdvanceRepayment: (payload: MultiAdvanceSettlementPayload) => boolean;
 
@@ -810,9 +810,11 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             if (existingIdx === -1) {
               merged.push(initPin);
             } else {
-              const existingVillages = merged[existingIdx].villages;
+              const existingVillages = Array.isArray(merged[existingIdx].villages) ? merged[existingIdx].villages : [];
+              merged[existingIdx].villages = existingVillages;
               initPin.villages.forEach((initV) => {
-                if (!existingVillages.some((ev) => ev.en.toLowerCase() === initV.en.toLowerCase())) {
+                const initEn = (initV?.en || '').trim().toLowerCase();
+                if (initEn && !existingVillages.some((ev) => (ev?.en || '').trim().toLowerCase() === initEn)) {
                   existingVillages.push(initV);
                 }
               });
@@ -1666,7 +1668,7 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           const todayStr = formatDateToDDMMYYYY(new Date());
           const startDate = (merged.date || (merged as any).startDate || todayStr).trim();
           const tillDate = (merged.interestTillDate || (merged as any).endDate || todayStr).trim();
-          const amount = Number(merged.amount) || 0;
+          const amount = Number(merged.principal ?? merged.amount) || 0;
 
           const interestCalc = calculateAdvanceInterest({
             principal: amount,
@@ -1675,6 +1677,7 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             interestMode: merged.interestMode,
             compounding: merged.compounding,
             isInterestFree: merged.isInterestFree,
+            lastInterestSettledDate: merged.lastInterestSettledDate,
             repayments: merged.repayments,
             startDate,
             endDate: tillDate
@@ -1714,41 +1717,107 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const addAdvanceRepayment = (
     advanceId: string,
-    repaymentData: Omit<AdvanceRepayment, 'id' | 'createdAt'>
+    repaymentData: Omit<AdvanceRepayment, 'id' | 'createdAt'> & {
+      settleInterestAndRollForward?: boolean;
+    }
   ): boolean => {
     let success = false;
     setFarmerAdvances((prev) => {
       const updatedList = prev.map((item) => {
         if (item.id === advanceId) {
           success = true;
+          const returnDate = (repaymentData.date || formatDateToDDMMYYYY(new Date())).trim();
+          const repaymentAmount = Number(repaymentData.amount) || 0;
+
+          const existingRepayments = Array.isArray(item.repayments) ? item.repayments : [];
           const newRepayment: AdvanceRepayment = {
-            ...repaymentData,
             id: `REP-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+            date: returnDate,
+            amount: repaymentAmount,
+            paymentMode: repaymentData.paymentMode,
+            referenceNumber: repaymentData.referenceNumber,
+            referenceNo: repaymentData.referenceNo,
+            remarks: repaymentData.remarks,
             createdAt: new Date().toISOString()
           };
-          const existingRepayments = Array.isArray(item.repayments) ? item.repayments : [];
-          const repayments = [...existingRepayments, newRepayment];
+          const updatedRepayments = [...existingRepayments, newRepayment];
 
-          const todayStr = formatDateToDDMMYYYY(new Date());
-          const startDate = (item.date || item.startDate || todayStr).trim();
-          const tillDate = (item.interestTillDate || item.endDate || todayStr).trim();
-          const amount = Number(item.amount) || 0;
+          const startDate = (item.startDate || item.date || returnDate).trim();
+          const origPrincipal = Number(item.principal ?? item.amount) || 0;
 
-          const calc = calculateAdvanceInterest({
-            principal: amount,
+          // Calculate accrued interest from startDate up to returnDate
+          const calcAtReturn = calculateAdvanceInterest({
+            principal: origPrincipal,
             monthlyInterestRate: item.monthlyInterestRate,
             annualInterestRate: item.annualInterestRate,
             interestMode: item.interestMode,
             compounding: item.compounding,
             isInterestFree: item.isInterestFree,
-            repayments,
+            startDate,
+            endDate: returnDate
+          });
+
+          const accruedInterestAtReturn = calcAtReturn.interestAmount;
+          const interestPaid = Math.min(accruedInterestAtReturn, repaymentAmount);
+          const principalPaid = Math.max(0, Math.round((repaymentAmount - interestPaid) * 100) / 100);
+          const newRemainingPrincipal = Math.max(0, Math.round((origPrincipal - principalPaid) * 100) / 100);
+
+          // If settleInterestAndRollForward is explicitly requested OR repayment exactly clears accrued interest:
+          const shouldRollForward = repaymentData.settleInterestAndRollForward !== undefined
+            ? repaymentData.settleInterestAndRollForward
+            : (accruedInterestAtReturn > 0 && Math.abs(repaymentAmount - accruedInterestAtReturn) < 1);
+
+          if (shouldRollForward) {
+            const newStartDate = returnDate;
+            const newTillDate = returnDate;
+            const settledRepayments = updatedRepayments.map((r) => ({
+              ...r,
+              isSettled: true,
+              settledRestDate: returnDate
+            }));
+
+            return {
+              ...item,
+              originalStartDate: item.originalStartDate || startDate,
+              originalAmount: item.originalAmount || origPrincipal,
+              date: newStartDate,
+              startDate: newStartDate,
+              amount: newRemainingPrincipal,
+              principal: newRemainingPrincipal,
+              interestTillDate: newTillDate,
+              endDate: newTillDate,
+              lastInterestSettledDate: returnDate,
+              repayments: settledRepayments,
+              totalRepaid: 0,
+              netPrincipalRemaining: newRemainingPrincipal,
+              interestAmount: 0,
+              totalDays: 0,
+              monthsElapsed: 0,
+              daysElapsed: 0,
+              totalPayableWithInterest: newRemainingPrincipal,
+              totalPayable: newRemainingPrincipal,
+              status: newRemainingPrincipal <= 0 ? ('SETTLED' as const) : ('ACTIVE' as const),
+              updatedAt: new Date().toISOString()
+            };
+          }
+
+          const tillDate = (item.interestTillDate || item.endDate || returnDate).trim();
+          const calc = calculateAdvanceInterest({
+            principal: origPrincipal,
+            monthlyInterestRate: item.monthlyInterestRate,
+            annualInterestRate: item.annualInterestRate,
+            interestMode: item.interestMode,
+            compounding: item.compounding,
+            isInterestFree: item.isInterestFree,
+            lastInterestSettledDate: item.lastInterestSettledDate,
+            repayments: updatedRepayments,
             startDate,
             endDate: tillDate
           });
 
           return {
             ...item,
-            repayments,
+            repayments: updatedRepayments,
             totalRepaid: calc.totalRepaid,
             netPrincipalRemaining: calc.netPrincipalRemaining,
             interestAmount: calc.interestAmount,
@@ -1839,6 +1908,8 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           remarks: remarks
             ? `${remarks} (ਵਿਆਜ ਚੁਕਤਾ: ₹${Math.round(alloc.interestPaid)} • ਮੂਲ ਕਟੌਤੀ: ₹${Math.round(alloc.principalPaid)})`
             : `ਮੁਨੀਮੀ ਵਾਪਸੀ: ਵਿਆਜ ₹${Math.round(alloc.interestPaid)} ਚੁਕਤਾ + ਮੂਲ ₹${Math.round(alloc.principalPaid)} ਘੱਟ (ਬਾਕੀ ਮੂਲ: ₹${Math.round(alloc.newRemainingPrincipal)})`,
+          isSettled: resetRestDate ? true : false,
+          settledRestDate: resetRestDate ? returnDate : undefined,
           createdAt: new Date().toISOString()
         };
 
@@ -1849,7 +1920,7 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           if (alloc.newRemainingPrincipal <= 0) {
             return {
               ...item,
-              repayments: updatedRepayments,
+              repayments: updatedRepayments.map((r) => ({ ...r, isSettled: true, settledRestDate: returnDate })),
               totalRepaid: (item.totalRepaid || 0) + alloc.totalRepaymentAmount,
               netPrincipalRemaining: 0,
               interestAmount: 0,
@@ -1860,37 +1931,35 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             };
           }
 
-          const todayStr = formatDateToDDMMYYYY(new Date());
           const newStartDate = returnDate;
           const newPrincipal = alloc.newRemainingPrincipal;
 
-          const calc = calculateAdvanceInterest({
-            principal: newPrincipal,
-            monthlyInterestRate: item.monthlyInterestRate,
-            annualInterestRate: item.annualInterestRate,
-            interestMode: item.interestMode,
-            compounding: item.compounding,
-            isInterestFree: item.isInterestFree,
-            repayments: [],
-            startDate: newStartDate,
-            endDate: todayStr
-          });
+          const settledList = updatedRepayments.map((r) => ({
+            ...r,
+            isSettled: true,
+            settledRestDate: returnDate
+          }));
 
           return {
             ...item,
+            originalStartDate: item.originalStartDate || item.startDate || item.date,
+            originalAmount: item.originalAmount || item.principal || item.amount,
             date: newStartDate,
             startDate: newStartDate,
             amount: newPrincipal,
             principal: newPrincipal,
-            repayments: updatedRepayments,
+            interestTillDate: returnDate,
+            endDate: returnDate,
+            lastInterestSettledDate: returnDate,
+            repayments: settledList,
             totalRepaid: 0,
-            netPrincipalRemaining: calc.netPrincipalRemaining,
-            interestAmount: calc.interestAmount,
-            totalDays: calc.totalDays,
-            monthsElapsed: calc.monthsElapsed,
-            daysElapsed: calc.daysElapsed,
-            totalPayableWithInterest: calc.totalPayableWithInterest,
-            totalPayable: calc.totalPayableWithInterest,
+            netPrincipalRemaining: newPrincipal,
+            interestAmount: 0,
+            totalDays: 0,
+            monthsElapsed: 0,
+            daysElapsed: 0,
+            totalPayableWithInterest: newPrincipal,
+            totalPayable: newPrincipal,
             status: 'ACTIVE' as const,
             updatedAt: new Date().toISOString()
           };
@@ -1898,7 +1967,7 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           const todayStr = formatDateToDDMMYYYY(new Date());
           const startDate = (item.date || item.startDate || todayStr).trim();
           const tillDate = (item.interestTillDate || item.endDate || todayStr).trim();
-          const amount = Number(item.amount) || 0;
+          const amount = Number(item.principal ?? item.amount) || 0;
 
           const calc = calculateAdvanceInterest({
             principal: amount,
@@ -1907,6 +1976,7 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             interestMode: item.interestMode,
             compounding: item.compounding,
             isInterestFree: item.isInterestFree,
+            lastInterestSettledDate: item.lastInterestSettledDate,
             repayments: updatedRepayments,
             startDate,
             endDate: tillDate
@@ -2375,7 +2445,7 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const recalculatedAdvances: FarmerAdvanceRecord[] = rawAdvances.map((adv) => {
       const startDate = adv.date || adv.startDate || todayStr;
       const tillDate = adv.interestTillDate || adv.endDate || effectiveTillDate;
-      const amount = Number(adv.amount) || 0;
+      const amount = Number(adv.principal ?? adv.amount) || 0;
       const monthlyInterestRate = Number(adv.monthlyInterestRate) || 0;
       const calc = calculateAdvanceInterest({
         principal: amount,
@@ -2384,6 +2454,7 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         interestMode: adv.interestMode,
         compounding: adv.compounding,
         isInterestFree: adv.isInterestFree,
+        lastInterestSettledDate: adv.lastInterestSettledDate,
         repayments: adv.repayments,
         startDate,
         endDate: tillDate
@@ -3993,7 +4064,8 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setPinCodes((prev) => {
       const updatedList = prev.map((item) => {
         if (item.pinCode === pinCode) {
-          const exists = item.villages.some((v) => v.en.toLowerCase() === villageEn.trim().toLowerCase());
+          const safeEn = (villageEn || '').trim().toLowerCase();
+          const exists = safeEn && item.villages.some((v) => (v?.en || '').trim().toLowerCase() === safeEn);
           if (!exists) {
             return {
               ...item,
@@ -4495,7 +4567,8 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const iFormId = `IF-${Date.now()}`;
 
     // Ensure agency ledger exists
-    let agencyLedger = pakkaLedgers.find((l) => l.name.toLowerCase() === options.agency.toLowerCase() && l.group === 'SUNDRY_DEBTORS');
+    const agencyLower = (options.agency || '').toLowerCase();
+    let agencyLedger = pakkaLedgers.find((l) => (l.name || '').toLowerCase() === agencyLower && l.group === 'SUNDRY_DEBTORS');
     if (!agencyLedger) {
       agencyLedger = addPakkaLedger({
         name: options.agency,

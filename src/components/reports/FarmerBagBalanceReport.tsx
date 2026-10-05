@@ -320,19 +320,19 @@ export const FarmerBagBalanceReport: React.FC = () => {
 
     return reportData.filter((item) => {
       const matchMain =
-        item.farmerName.toLowerCase().includes(q) ||
-        item.farmerNamePa.toLowerCase().includes(q) ||
-        item.farmerId.toLowerCase().includes(q) ||
+        (item.farmerName || '').toLowerCase().includes(q) ||
+        (item.farmerNamePa || '').toLowerCase().includes(q) ||
+        (item.farmerId || '').toLowerCase().includes(q) ||
         (item.fatherName && item.fatherName.toLowerCase().includes(q)) ||
         (item.village && item.village.toLowerCase().includes(q)) ||
         (item.mobile && item.mobile.includes(q));
 
-      const matchLinked = item.linkedFarmers.some(
+      const matchLinked = Array.isArray(item.linkedFarmers) && item.linkedFarmers.some(
         (lf) =>
-          lf.farmerName.toLowerCase().includes(q) ||
-          lf.farmerNamePa.toLowerCase().includes(q) ||
-          lf.village.toLowerCase().includes(q) ||
-          lf.mobile.includes(q)
+          (lf.farmerName || '').toLowerCase().includes(q) ||
+          (lf.farmerNamePa || '').toLowerCase().includes(q) ||
+          (lf.village || '').toLowerCase().includes(q) ||
+          (lf.mobile && lf.mobile.includes(q))
       );
 
       return matchMain || matchLinked;

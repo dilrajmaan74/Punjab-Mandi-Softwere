@@ -804,14 +804,14 @@ export const SameDateMultiFarmerEntry: React.FC = () => {
                     const q = farmerSearchQuery.toLowerCase().trim();
                     const cleanNums = q.replace(/[^0-9]/g, '');
                     return (
-                      f.farmerName.toLowerCase().includes(q) ||
+                      (f.farmerName || '').toLowerCase().includes(q) ||
                       (f.farmerNamePa && f.farmerNamePa.toLowerCase().includes(q)) ||
                       (f.fatherName && f.fatherName.toLowerCase().includes(q)) ||
                       (f.fatherNamePa && f.fatherNamePa.toLowerCase().includes(q)) ||
-                      f.village.toLowerCase().includes(q) ||
+                      (f.village || '').toLowerCase().includes(q) ||
                       (f.villagePa && f.villagePa.toLowerCase().includes(q)) ||
                       (f.address && f.address.toLowerCase().includes(q)) ||
-                      f.id.toLowerCase().includes(q) ||
+                      (f.id || '').toLowerCase().includes(q) ||
                       (cleanNums && f.mobile && f.mobile.replace(/[^0-9]/g, '').includes(cleanNums))
                     );
                   })

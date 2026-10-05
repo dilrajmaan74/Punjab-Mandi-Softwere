@@ -60,7 +60,7 @@ import {
   CreditCard,
   ArrowRight
 } from 'lucide-react';
-import { formatCurrencyINR, maskAadhaarNumber, calculateAdvanceInterest, formatCurrency } from '../../utils/calculations';
+import { formatCurrencyINR, maskAadhaarNumber, calculateAdvanceInterest, formatCurrency, addMonthsToDateString, formatDateToDDMMYYYY, autoFormatDate } from '../../utils/calculations';
 import { exportFarmerAccountPDF, exportSimpleFarmerAccountPDF, exportThreePageLedgerPDF } from '../../utils/farmerAccountPdfExport';
 import { FarmerProfileViewModal } from './FarmerProfileViewModal';
 import { FarmerEditModal } from './FarmerEditModal';
@@ -419,6 +419,47 @@ export const FarmerAccount: React.FC = () => {
     if (!selectedFarmerId) return null;
     return getMultiYearFarmerAccount(selectedFarmerId);
   }, [selectedFarmerId, getMultiYearFarmerAccount, accountSummary]);
+
+  // In-Ledger Bulk & Individual Interest Calculation Controls
+  const [bulkInterestTillDate, setBulkInterestTillDate] = useState<string>(() => formatDateToDDMMYYYY(new Date()));
+  const [bulkCustomMonths, setBulkCustomMonths] = useState<string>('6');
+
+  const handleUpdateAdvanceTillDate = (advId: string, newTillDate: string) => {
+    if (!newTillDate) return;
+    updateFarmerAdvance(advId, { interestTillDate: newTillDate });
+  };
+
+  const handleAddMonthsToAdvance = (adv: FarmerAdvanceRecord, months: number) => {
+    const baseDate = adv.startDate || adv.date || formatDateToDDMMYYYY(new Date());
+    const newTillDate = addMonthsToDateString(baseDate, months);
+    updateFarmerAdvance(adv.id, { interestTillDate: newTillDate });
+  };
+
+  const handleBulkUpdateAllAdvancesTillDate = (newTillDate: string) => {
+    if (!accountSummary?.advances || accountSummary.advances.length === 0) return;
+    accountSummary.advances.forEach((adv) => {
+      updateFarmerAdvance(adv.id, { interestTillDate: newTillDate });
+    });
+    notifySaveSuccess({
+      titlePa: 'ਸਾਰੇ ਐਡਵਾਂਸਾਂ \'ਤੇ ਵਿਆਜ ਮਿਤੀ ਲਾਗੂ ਹੋ ਗਈ!',
+      titleEn: 'Interest Till Date Updated',
+      messagePa: `ਸਾਰੇ ਐਡਵਾਂਸਾਂ \'ਤੇ ${newTillDate} ਤੱਕ ਦਾ ਵਿਆਜ ਗਿਣ ਕੇ ਲਗਾ ਦਿੱਤਾ ਗਿਆ ਹੈ।`
+    });
+  };
+
+  const handleBulkAddMonthsToAllAdvances = (months: number) => {
+    if (!accountSummary?.advances || accountSummary.advances.length === 0) return;
+    accountSummary.advances.forEach((adv) => {
+      const baseDate = adv.startDate || adv.date || formatDateToDDMMYYYY(new Date());
+      const newTillDate = addMonthsToDateString(baseDate, months);
+      updateFarmerAdvance(adv.id, { interestTillDate: newTillDate });
+    });
+    notifySaveSuccess({
+      titlePa: `${months} ਮਹੀਨੇ ਦਾ ਵਿਆਜ ਲਾਗੂ ਹੋ ਗਿਆ!`,
+      titleEn: `${months} Months Interest Applied`,
+      messagePa: `ਸਾਰੇ ਐਡਵਾਂਸਾਂ \'ਤੇ ਸ਼ੁਰੂਆਤੀ ਮਿਤੀ ਤੋਂ ${months} ਮਹੀਨੇ ਦਾ ਵਿਆਜ ਆਟੋਮੈਟਿਕ ਗਿਣ ਕੇ ਲਗਾ ਦਿੱਤਾ ਗਿਆ ਹੈ।`
+    });
+  };
 
   // Handle Season Settlement & Carrying forward to opening balance
   const handleConfirmSettlement = (settlementData: {
@@ -1335,9 +1376,9 @@ export const FarmerAccount: React.FC = () => {
             </div>
 
             {/* ============================================================== */}
-            {/* 2.2 QUICK ACTION BAR (ਤੇਜ਼ ਐਂਟਰੀ ਸ਼ਾਰਟਕੱਟ - 4 ਰੰਗਦਾਰ ਬਟਨ) */}
+            {/* 2.2 QUICK ACTION BAR (ਤੇਜ਼ ਐਂਟਰੀ ਸ਼ਾਰਟਕੱਟ - 5 ਰੰਗਦਾਰ ਬਟਨ) */}
             {/* ============================================================== */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
               {/* 1. Cash Out (ਨਕਦ ਦਿੱਤਾ) */}
               <button
                 type="button"
@@ -1473,6 +1514,33 @@ export const FarmerAccount: React.FC = () => {
                     🟣 + ਕਿਸ਼ਤ ਵਾਪਸ ਆਈ
                   </strong>
                   <span className="text-[11px] text-purple-100 font-medium">Repayment Received</span>
+                </div>
+              </button>
+
+              {/* 5. Munimi Interest Settlement & 6-Month Rest Date (ਵਿਆਜ ਨਿਬੇੜਾ ਤੇ 6 ਮਹੀਨੇ ਦਾ ਰੈਸਟ) */}
+              <button
+                type="button"
+                onClick={() => {
+                  if (accountSummary && accountSummary.advances.length > 0) {
+                    setIsPaymentModalOpen(true);
+                  } else {
+                    notifyError({
+                      titlePa: 'ਕੋਈ ਪੇਸ਼ਗੀ ਮੌਜੂਦ ਨਹੀਂ',
+                      titleEn: 'No Advances Found',
+                      messagePa: 'ਇਸ ਕਿਸਾਨ ਵੱਲ ਪਹਿਲਾਂ ਹੀ ਕੋਈ ਐਡਵਾਂਸ ਬਕਾਇਆ ਨਹੀਂ ਹੈ।'
+                    });
+                  }
+                }}
+                className="p-3.5 bg-gradient-to-br from-amber-600 via-orange-600 to-amber-700 hover:from-amber-700 hover:to-orange-700 text-white rounded-2xl shadow-md transition-all active:scale-98 flex items-center gap-3 text-left cursor-pointer group col-span-2 sm:col-span-1"
+              >
+                <div className="p-2.5 bg-white/20 rounded-xl group-hover:scale-110 transition-transform">
+                  <Scale className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <strong className="block text-xs sm:text-sm font-black text-white leading-tight">
+                    ⚖️ ਵਿਆਜ ਨਿਬੇੜਾ ਤੇ ਰੈਸਟ
+                  </strong>
+                  <span className="text-[11px] text-amber-100 font-medium">Interest Clear & 6M Rest</span>
                 </div>
               </button>
             </div>
@@ -2237,144 +2305,358 @@ export const FarmerAccount: React.FC = () => {
                         ਕੋਈ ਪੇਸ਼ਗੀ ਦਰਜ ਨਹੀਂ ਹੈ (No advances recorded)
                       </div>
                     ) : (
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-left text-xs border border-slate-200 rounded-xl overflow-hidden">
-                          <thead className="bg-amber-50 text-amber-950 font-bold border-b border-slate-200">
-                            <tr>
-                              <th className="p-2.5">Date & Category / ਮਿਤੀ ਤੇ ਮੱਦ</th>
-                              <th className="p-2.5">Details & Guarantor / ਵੇਰਵਾ ਤੇ ਜ਼ਾਮਨ</th>
-                              <th className="p-2.5">Principal & Repaid / ਮੂਲ ਤੇ ਵਾਪਸੀ</th>
-                              <th className="p-2.5">Rate & Rule / ਵਿਆਜ ਦਰ</th>
-                              <th className="p-2.5">Duration / ਦਿਨ</th>
-                              <th className="p-2.5">Interest / ਵਿਆਜ</th>
-                              <th className="p-2.5 text-right">Net Payable / ਕੁੱਲ ਦੇਣਯੋਗ</th>
-                              <th className="p-2.5 text-center">ਕਾਰਵਾਈ / Actions</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-100 font-mono">
-                            {accountSummary.advances.map((adv) => {
-                              const repayments = Array.isArray(adv.repayments) ? adv.repayments : [];
-                              const totalRepaid = adv.totalRepaid || repayments.reduce((s, r) => s + (Number(r.amount) || 0), 0);
-                              const origPrincipal = Number(adv.principal ?? adv.amount) || 0;
-                              const netPrincipal = adv.netPrincipalRemaining !== undefined ? adv.netPrincipalRemaining : Math.max(0, origPrincipal - totalRepaid);
-                              const interestAmount = Number(adv.interestAmount) || 0;
-                              const totalPayable = adv.totalPayableWithInterest ?? (netPrincipal + interestAmount);
+                      <div className="space-y-3">
+                        {/* MASTER BULK INTEREST SETTLEMENT BAR */}
+                        <div className="bg-gradient-to-r from-amber-50 via-orange-50 to-amber-100 border-2 border-amber-300 rounded-2xl p-3.5 shadow-sm space-y-2.5">
+                          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                            <div className="flex items-center gap-2.5">
+                              <div className="p-2 bg-amber-600 text-white rounded-xl shadow-xs">
+                                <Calculator className="w-4 h-4" />
+                              </div>
+                              <div>
+                                <strong className="text-xs sm:text-sm font-black text-amber-950 block">
+                                  📅 ਵਿਆਜ ਮਿਤੀ ਤੇ ਮਹੀਨੇ ਕੈਲਕੁਲੇਟਰ (Interest Till Date & Month Calculator)
+                                </strong>
+                                <span className="text-[11px] text-amber-800">
+                                  ਜਿਸ ਤਾਰੀਖ਼ ਜਾਂ ਮਹੀਨਿਆਂ ਤੱਕ ਦਾ ਵਿਆਜ ਲਗਾਉਣਾ ਹੈ, ਇੱਥੇ ਭਰੋ — ਦਿਨ, ਮਹੀਨੇ ਤੇ ਵਿਆਜ ਆਪਣੇ-ਆਪ ਗਿਣਿਆ ਜਾਵੇਗਾ।
+                                </span>
+                              </div>
+                            </div>
 
-                              const catBadgeStyle: Record<string, { label: string; cls: string }> = {
-                                CASH: { label: 'ਨਕਦ (Cash)', cls: 'bg-emerald-100 text-emerald-800' },
-                                FERTILIZER: { label: 'ਖਾਦ/ਦਵਾਈ (Fertilizer)', cls: 'bg-indigo-100 text-indigo-800' },
-                                SEED: { label: 'ਬੀਜ (Seed)', cls: 'bg-teal-100 text-teal-800' },
-                                DIESEL: { label: 'ਡੀਜ਼ਲ (Diesel)', cls: 'bg-amber-100 text-amber-800' },
-                                MACHINERY: { label: 'ਮਸ਼ੀਨਰੀ (Machinery)', cls: 'bg-purple-100 text-purple-800' },
-                                PREVIOUS_BALANCE: { label: 'ਪਿਛਲਾ ਬਕਾਇਆ (Prev Bal)', cls: 'bg-rose-100 text-rose-800' },
-                                OTHER: { label: 'ਹੋਰ (Other)', cls: 'bg-slate-100 text-slate-800' }
-                              };
-                              const catInfo = catBadgeStyle[adv.category || 'CASH'] || catBadgeStyle['CASH'];
+                            {/* Quick Master Controls */}
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <div className="flex items-center gap-1.5 bg-white border border-amber-300 rounded-xl px-2 py-1 shadow-xs">
+                                <span className="text-[11px] font-bold text-slate-600">ਮਿਤੀ ਤੱਕ:</span>
+                                <input
+                                  type="text"
+                                  value={bulkInterestTillDate}
+                                  onChange={(e) => setBulkInterestTillDate(autoFormatDate(e.target.value))}
+                                  maxLength={10}
+                                  placeholder="DD/MM/YYYY"
+                                  className="w-24 text-xs font-mono font-bold text-slate-900 border-0 focus:outline-none"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => handleBulkUpdateAllAdvancesTillDate(bulkInterestTillDate)}
+                                  className="px-2.5 py-1 bg-amber-700 hover:bg-amber-800 text-white rounded-lg text-[11px] font-black cursor-pointer shadow-xs transition"
+                                  title="ਸਾਰੇ ਐਡਵਾਂਸਾਂ 'ਤੇ ਇਸ ਮਿਤੀ ਤੱਕ ਵਿਆਜ ਲਗਾਓ"
+                                >
+                                  ਲਾਗੂ ਕਰੋ (Apply)
+                                </button>
+                              </div>
 
-                              return (
-                                <tr key={adv.id} className="hover:bg-amber-50/30">
-                                  {/* Date & Category */}
-                                  <td className="p-2.5 font-sans">
-                                    <div className="font-semibold text-slate-900">{adv.startDate || adv.date}</div>
-                                    <div className="flex items-center gap-1.5 mt-0.5">
-                                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${catInfo.cls}`}>
-                                        {catInfo.label}
-                                      </span>
-                                      {adv.cropSeason && (
-                                        <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-700">
-                                          {adv.cropSeason}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const today = formatDateToDDMMYYYY(new Date());
+                                  setBulkInterestTillDate(today);
+                                  handleBulkUpdateAllAdvancesTillDate(today);
+                                }}
+                                className="px-2.5 py-1.5 bg-white hover:bg-amber-50 border border-amber-300 text-amber-900 rounded-xl text-[11px] font-bold shadow-xs transition cursor-pointer"
+                              >
+                                ਅੱਜ ਤੱਕ (Today)
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Quick Month Addition Shortcuts */}
+                          <div className="flex items-center gap-2 flex-wrap pt-2 border-t border-amber-200/80 text-xs">
+                            <span className="font-bold text-amber-950 text-[11px] flex items-center gap-1">
+                              <Clock className="w-3.5 h-3.5 text-amber-700" />
+                              ਕਿੰਨੇ ਮਹੀਨੇ ਦਾ ਵਿਆਜ ਲਗਾਉਣਾ:
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleBulkAddMonthsToAllAdvances(1)}
+                              className="px-2.5 py-1 bg-white hover:bg-amber-200 border border-amber-300 text-amber-900 rounded-lg text-[11px] font-black shadow-xs transition cursor-pointer"
+                            >
+                              +1 ਮਹੀਨਾ
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleBulkAddMonthsToAllAdvances(2)}
+                              className="px-2.5 py-1 bg-white hover:bg-amber-200 border border-amber-300 text-amber-900 rounded-lg text-[11px] font-black shadow-xs transition cursor-pointer"
+                            >
+                              +2 ਮਹੀਨੇ
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleBulkAddMonthsToAllAdvances(3)}
+                              className="px-2.5 py-1 bg-white hover:bg-amber-200 border border-amber-300 text-amber-900 rounded-lg text-[11px] font-black shadow-xs transition cursor-pointer"
+                            >
+                              +3 ਮਹੀਨੇ
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleBulkAddMonthsToAllAdvances(6)}
+                              className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-[11px] font-black shadow-xs transition cursor-pointer"
+                            >
+                              +6 ਮਹੀਨੇ (ਛਿਮਾਹੀ)
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleBulkAddMonthsToAllAdvances(12)}
+                              className="px-3 py-1 bg-orange-600 hover:bg-orange-700 text-white rounded-lg text-[11px] font-black shadow-xs transition cursor-pointer"
+                            >
+                              +12 ਮਹੀਨੇ (1 ਸਾਲ)
+                            </button>
+
+                            {/* Custom Months Input */}
+                            <div className="flex items-center gap-1 ml-auto">
+                              <span className="text-[11px] font-medium text-amber-900">ਹੋਰ ਮਹੀਨੇ:</span>
+                              <input
+                                type="number"
+                                min="1"
+                                max="60"
+                                value={bulkCustomMonths}
+                                onChange={(e) => setBulkCustomMonths(e.target.value)}
+                                className="w-12 px-1.5 py-0.5 text-xs text-center font-mono font-bold bg-white border border-amber-400 rounded-lg focus:outline-none"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const m = parseInt(bulkCustomMonths, 10);
+                                  if (!isNaN(m) && m > 0) {
+                                    handleBulkAddMonthsToAllAdvances(m);
+                                  }
+                                }}
+                                className="px-2 py-0.5 bg-amber-800 hover:bg-amber-900 text-white rounded-lg text-[10px] font-bold cursor-pointer"
+                              >
+                                ਮਹੀਨੇ ਜੋੜੋ
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left text-xs border border-slate-200 rounded-xl overflow-hidden">
+                            <thead className="bg-amber-50 text-amber-950 font-bold border-b border-slate-200">
+                              <tr>
+                                <th className="p-2.5">Date & Category / ਮਿਤੀ ਤੇ ਮੱਦ</th>
+                                <th className="p-2.5">Details & Guarantor / ਵੇਰਵਾ ਤੇ ਜ਼ਾਮਨ</th>
+                                <th className="p-2.5">Principal & Repaid / ਮੂਲ ਤੇ ਵਾਪਸੀ</th>
+                                <th className="p-2.5">Rate & Rule / ਵਿਆਜ ਦਰ</th>
+                                <th className="p-2.5 bg-amber-100/70 border-x border-amber-300 text-amber-950">
+                                  ਵਿਆਜ ਤਾਰੀਖ਼ ਤੇ ਮਹੀਨੇ ਜੋੜੋ (Till Date & Months)
+                                </th>
+                                <th className="p-2.5">Duration / ਦਿਨ ਤੇ ਮਹੀਨੇ</th>
+                                <th className="p-2.5">Interest / ਵਿਆਜ</th>
+                                <th className="p-2.5 text-right">Net Payable / ਕੁੱਲ ਦੇਣਯੋਗ</th>
+                                <th className="p-2.5 text-center">ਕਾਰਵਾਈ / Actions</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 font-mono">
+                              {accountSummary.advances.map((adv) => {
+                                const repayments = Array.isArray(adv.repayments) ? adv.repayments : [];
+                                const totalRepaid = adv.totalRepaid || repayments.reduce((s, r) => s + (Number(r.amount) || 0), 0);
+                                const origPrincipal = Number(adv.principal ?? adv.amount) || 0;
+                                const netPrincipal = adv.netPrincipalRemaining !== undefined ? adv.netPrincipalRemaining : origPrincipal;
+                                const interestAmount = Number(adv.interestAmount) || 0;
+                                const totalPayable = adv.totalPayableWithInterest ?? (netPrincipal + interestAmount);
+
+                                const catBadgeStyle: Record<string, { label: string; cls: string }> = {
+                                  CASH: { label: 'ਨਕਦ (Cash)', cls: 'bg-emerald-100 text-emerald-800' },
+                                  FERTILIZER: { label: 'ਖਾਦ/ਦਵਾਈ (Fertilizer)', cls: 'bg-indigo-100 text-indigo-800' },
+                                  SEED: { label: 'ਬੀਜ (Seed)', cls: 'bg-teal-100 text-teal-800' },
+                                  DIESEL: { label: 'ਡੀਜ਼ਲ (Diesel)', cls: 'bg-amber-100 text-amber-800' },
+                                  MACHINERY: { label: 'ਮਸ਼ੀਨਰੀ (Machinery)', cls: 'bg-purple-100 text-purple-800' },
+                                  PREVIOUS_BALANCE: { label: 'ਪਿਛਲਾ ਬਕਾਇਆ (Prev Bal)', cls: 'bg-rose-100 text-rose-800' },
+                                  OTHER: { label: 'ਹੋਰ (Other)', cls: 'bg-slate-100 text-slate-800' }
+                                };
+                                const catInfo = catBadgeStyle[adv.category || 'CASH'] || catBadgeStyle['CASH'];
+
+                                return (
+                                  <tr key={adv.id} className="hover:bg-amber-50/30">
+                                    {/* Date & Category */}
+                                    <td className="p-2.5 font-sans">
+                                      <div className="font-semibold text-slate-900">{adv.startDate || adv.date}</div>
+                                      <div className="flex items-center gap-1.5 mt-0.5">
+                                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${catInfo.cls}`}>
+                                          {catInfo.label}
                                         </span>
+                                        {adv.cropSeason && (
+                                          <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-700">
+                                            {adv.cropSeason}
+                                          </span>
+                                        )}
+                                      </div>
+                                    </td>
+
+                                    {/* Details & Guarantor */}
+                                    <td className="p-2.5 font-sans max-w-xs">
+                                      {adv.itemDescription ? (
+                                        <div className="text-slate-800 font-medium truncate" title={adv.itemDescription}>
+                                          {adv.itemDescription}
+                                        </div>
+                                      ) : (
+                                        <span className="text-slate-400 italic text-[11px]">—</span>
                                       )}
-                                    </div>
-                                  </td>
 
-                                  {/* Details & Guarantor */}
-                                  <td className="p-2.5 font-sans max-w-xs">
-                                    {adv.itemDescription ? (
-                                      <div className="text-slate-800 font-medium truncate" title={adv.itemDescription}>
-                                        {adv.itemDescription}
-                                      </div>
-                                    ) : (
-                                      <span className="text-slate-400 italic text-[11px]">—</span>
-                                    )}
-
-                                    {adv.guarantorName && (
-                                      <div className="flex items-center gap-1 text-[11px] text-indigo-700 font-medium mt-0.5">
-                                        <ShieldCheck className="w-3 h-3 shrink-0" />
-                                        <span>ਜ਼ਾਮਨ: {adv.guarantorName}</span>
-                                      </div>
-                                    )}
-
-                                    {adv.voucherPhotoUrl && (
-                                      <button
-                                        type="button"
-                                        onClick={() => setVoucherModalAdvance(adv)}
-                                        className="inline-flex items-center gap-1 text-[10px] text-emerald-700 font-bold mt-0.5 hover:underline"
-                                      >
-                                        <Receipt className="w-3 h-3 text-emerald-600" />
-                                        <span>ਪਰਚੀ ਫੋਟੋ ਮੌਜੂਦ (View Slip)</span>
-                                      </button>
-                                    )}
-                                  </td>
-
-                                  {/* Principal & Repaid */}
-                                  <td className="p-2.5">
-                                    <div className="font-bold text-slate-900">{formatCurrencyINR(origPrincipal)}</div>
-                                    {totalRepaid > 0 && (
-                                      <div className="text-[11px] mt-0.5">
-                                        <span className="text-emerald-700 font-medium">ਵਾਪਸੀ: -{formatCurrencyINR(totalRepaid)}</span>
-                                        <div className="text-slate-500 font-semibold">ਬਾਕੀ: {formatCurrencyINR(netPrincipal)}</div>
-                                      </div>
-                                    )}
-                                  </td>
-
-                                  {/* Rate & Rule */}
-                                  <td className="p-2.5 font-sans">
-                                    {adv.isInterestFree || adv.interestMode === 'INTEREST_FREE' ? (
-                                      <span className="px-1.5 py-0.5 rounded text-[11px] font-bold bg-emerald-100 text-emerald-800">
-                                        0% ਬਿਨਾਂ ਵਿਆਜ
-                                      </span>
-                                    ) : (
-                                      <div>
-                                        <div className="text-amber-800 font-bold">
-                                          {adv.monthlyInterestRate ?? 2.0}%/ਮਹੀਨਾ
+                                      {adv.guarantorName && (
+                                        <div className="flex items-center gap-1 text-[11px] text-indigo-700 font-medium mt-0.5">
+                                          <ShieldCheck className="w-3 h-3 shrink-0" />
+                                          <span>ਜ਼ਾਮਨ: {adv.guarantorName}</span>
                                         </div>
-                                        <div className="text-[10px] text-slate-500">
-                                          {adv.compounding === 'HALF_YEARLY' ? 'ਛਿਮਾਹੀ ਚੱਕਰਵਰਤੀ' : 'ਸਾਧਾਰਨ ਵਿਆਜ'}
+                                      )}
+
+                                      {adv.voucherPhotoUrl && (
+                                        <button
+                                          type="button"
+                                          onClick={() => setVoucherModalAdvance(adv)}
+                                          className="inline-flex items-center gap-1 text-[10px] text-emerald-700 font-bold mt-0.5 hover:underline"
+                                        >
+                                          <Receipt className="w-3 h-3 text-emerald-600" />
+                                          <span>ਪਰਚੀ ਫੋਟੋ ਮੌਜੂਦ (View Slip)</span>
+                                        </button>
+                                      )}
+                                    </td>
+
+                                    {/* Principal & Repaid */}
+                                    <td className="p-2.5">
+                                      <div className="font-bold text-slate-900">{formatCurrencyINR(origPrincipal)}</div>
+                                      {repayments.length > 0 && (
+                                        <div className="text-[11px] mt-0.5 space-y-0.5">
+                                          {repayments.map((r, rIdx) => (
+                                            <div key={rIdx} className="text-emerald-700 font-medium text-[10px]">
+                                              {r.isSettled ? '✓ ਵਿਆਜ ਚੁਕਤਾ' : 'ਵਾਪਸੀ'}: -{formatCurrencyINR(r.amount)} ({r.date})
+                                            </div>
+                                          ))}
+                                          <div className="text-slate-800 font-bold">ਬਾਕੀ ਮੂਲ: {formatCurrencyINR(netPrincipal)}</div>
+                                        </div>
+                                      )}
+                                    </td>
+
+                                    {/* Rate & Rule */}
+                                    <td className="p-2.5 font-sans">
+                                      {adv.isInterestFree || adv.interestMode === 'INTEREST_FREE' ? (
+                                        <span className="px-1.5 py-0.5 rounded text-[11px] font-bold bg-emerald-100 text-emerald-800">
+                                          0% ਬਿਨਾਂ ਵਿਆਜ
+                                        </span>
+                                      ) : (
+                                        <div>
+                                          <div className="text-amber-800 font-bold">
+                                            {adv.monthlyInterestRate ?? 2.0}%/ਮਹੀਨਾ
+                                          </div>
+                                          <div className="text-[10px] text-slate-500">
+                                            {adv.compounding === 'HALF_YEARLY' ? 'ਛਿਮਾਹੀ ਚੱਕਰਵਰਤੀ' : 'ਸਾਧਾਰਨ ਵਿਆਜ'}
+                                          </div>
+                                        </div>
+                                      )}
+                                    </td>
+
+                                    {/* NEW: Interactive Till Date & Add Months in Ledger */}
+                                    <td className="p-2.5 font-sans bg-amber-50/40 border-x border-amber-200">
+                                      <div className="space-y-1.5">
+                                        <div className="flex items-center gap-1">
+                                          <span className="text-[10px] font-bold text-slate-500 whitespace-nowrap">ਤਾਰੀਖ਼ ਤੱਕ:</span>
+                                          <input
+                                            type="text"
+                                            value={adv.interestTillDate || adv.endDate || formatDateToDDMMYYYY(new Date())}
+                                            onChange={(e) => handleUpdateAdvanceTillDate(adv.id, autoFormatDate(e.target.value))}
+                                            maxLength={10}
+                                            placeholder="DD/MM/YYYY"
+                                            className="w-24 px-1.5 py-0.5 bg-white border border-amber-300 rounded font-mono font-bold text-xs text-slate-900 focus:ring-1 focus:ring-amber-500 focus:outline-none"
+                                            title="ਇਸ ਤਾਰੀਖ਼ ਤੱਕ ਦਾ ਵਿਆਜ ਗਿਣਿਆ ਜਾਵੇਗਾ"
+                                          />
+                                        </div>
+
+                                        {/* Quick Add Months Buttons */}
+                                        <div className="flex items-center gap-1 flex-wrap">
+                                          <span className="text-[9px] text-amber-800 font-bold">ਮਹੀਨੇ:</span>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleAddMonthsToAdvance(adv, 1)}
+                                            className="px-1.5 py-0.5 bg-white hover:bg-amber-200 border border-amber-300 text-amber-950 rounded text-[9px] font-bold shadow-2xs transition cursor-pointer"
+                                            title="ਸ਼ੁਰੂਆਤੀ ਮਿਤੀ ਤੋਂ 1 ਮਹੀਨਾ ਜੋੜੋ"
+                                          >
+                                            +1 ਮ.
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleAddMonthsToAdvance(adv, 3)}
+                                            className="px-1.5 py-0.5 bg-white hover:bg-amber-200 border border-amber-300 text-amber-950 rounded text-[9px] font-bold shadow-2xs transition cursor-pointer"
+                                            title="ਸ਼ੁਰੂਆਤੀ ਮਿਤੀ ਤੋਂ 3 ਮਹੀਨੇ ਜੋੜੋ"
+                                          >
+                                            +3 ਮ.
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleAddMonthsToAdvance(adv, 6)}
+                                            className="px-1.5 py-0.5 bg-amber-700 hover:bg-amber-800 text-white rounded text-[9px] font-bold shadow-2xs transition cursor-pointer"
+                                            title="ਸ਼ੁਰੂਆਤੀ ਮਿਤੀ ਤੋਂ 6 ਮਹੀਨੇ ਜੋੜੋ"
+                                          >
+                                            +6 ਮ.
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleAddMonthsToAdvance(adv, 12)}
+                                            className="px-1.5 py-0.5 bg-orange-700 hover:bg-orange-800 text-white rounded text-[9px] font-bold shadow-2xs transition cursor-pointer"
+                                            title="ਸ਼ੁਰੂਆਤੀ ਮਿਤੀ ਤੋਂ 12 ਮਹੀਨੇ ਜੋੜੋ"
+                                          >
+                                            +12 ਮ.
+                                          </button>
+                                        </div>
+
+                                        {/* Custom Months Input for single advance */}
+                                        <div className="flex items-center gap-1 mt-1 pt-1 border-t border-amber-200">
+                                          <span className="text-[9px] text-amber-900 font-bold">ਕਸਟਮ ਮਹੀਨੇ:</span>
+                                          <input
+                                            type="number"
+                                            min="1"
+                                            max="60"
+                                            placeholder="ਮ."
+                                            defaultValue="6"
+                                            id={`custom-m-${adv.id}`}
+                                            className="w-10 px-1 py-0.5 bg-white border border-amber-300 rounded font-mono font-bold text-[10px] text-center text-slate-900 focus:outline-none"
+                                          />
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              const el = document.getElementById(`custom-m-${adv.id}`) as HTMLInputElement;
+                                              const m = parseInt(el?.value || '1', 10);
+                                              if (!isNaN(m) && m > 0) {
+                                                handleAddMonthsToAdvance(adv, m);
+                                              }
+                                            }}
+                                            className="px-1.5 py-0.5 bg-amber-700 hover:bg-amber-800 text-white rounded text-[9px] font-bold shadow-2xs transition cursor-pointer"
+                                            title="ਦਿੱਤੇ ਮਹੀਨੇ ਜੋੜੋ"
+                                          >
+                                            ਲਾਗੂ
+                                          </button>
                                         </div>
                                       </div>
-                                    )}
-                                  </td>
+                                    </td>
 
-                                  {/* Duration */}
-                                  <td className="p-2.5 font-sans text-slate-600">
-                                    <div className="font-bold text-slate-800">{adv.totalDays || 0} ਦਿਨ</div>
-                                    {adv.monthsElapsed !== undefined && (
-                                      <div className="text-[10px] text-slate-400">
-                                        {adv.monthsElapsed} ਮਹੀਨੇ, {adv.daysElapsed || 0} ਦਿਨ
+                                    {/* Duration: Auto Days & Months */}
+                                    <td className="p-2.5 font-sans text-slate-700">
+                                      <div className="font-bold text-slate-900 text-xs flex items-center gap-1">
+                                        <Calendar className="w-3.5 h-3.5 text-amber-600" />
+                                        <span>{adv.monthsElapsed || 0} ਮਹੀਨੇ, {adv.daysElapsed || 0} ਦਿਨ</span>
                                       </div>
-                                    )}
-                                  </td>
-
-                                  {/* Interest */}
-                                  <td className="p-2.5 font-sans">
-                                    <div className="font-bold text-amber-800">
-                                      {formatCurrencyINR(interestAmount)}
-                                    </div>
-                                    {!adv.isInterestFree && interestAmount > 0 && (
-                                      <div className="text-[10px] text-slate-500 font-mono" title="ਵਿਆਜ ਹਿਸਾਬ: ਮੂਲ × ਦਰ% × ਸਮਾਂ">
-                                        ({netPrincipal} × {adv.monthlyInterestRate ?? 2}%)
+                                      <div className="text-[10px] text-slate-500 font-mono mt-0.5">
+                                        (ਕੁੱਲ {adv.totalDays || 0} ਦਿਨ)
                                       </div>
-                                    )}
-                                  </td>
+                                    </td>
 
-                                  {/* Total Net Payable */}
-                                  <td className="p-2.5 font-black text-rose-950 text-right text-sm">
-                                    {formatCurrencyINR(totalPayable)}
-                                  </td>
+                                    {/* Interest */}
+                                    <td className="p-2.5 font-sans">
+                                      <div className="font-bold text-amber-800">
+                                        {formatCurrencyINR(interestAmount)}
+                                      </div>
+                                      {!adv.isInterestFree && interestAmount > 0 && (
+                                        <div className="text-[10px] text-slate-500 font-mono" title="ਵਿਆਜ ਹਿਸਾਬ: ਮੂਲ × ਦਰ% × ਸਮਾਂ">
+                                          ({netPrincipal} × {adv.monthlyInterestRate ?? 2}%)
+                                        </div>
+                                      )}
+                                    </td>
 
-                                  {/* Actions */}
-                                  <td className="p-2.5 text-center font-sans">
+                                    {/* Total Net Payable */}
+                                    <td className="p-2.5 font-black text-rose-950 text-right text-sm">
+                                      {formatCurrencyINR(totalPayable)}
+                                    </td>
+
+                                    {/* Actions */}
+                                    <td className="p-2.5 text-center font-sans">
                                     <div className="flex items-center justify-center gap-1">
                                       {/* Voucher Print Button */}
                                       <button
@@ -2437,8 +2719,9 @@ export const FarmerAccount: React.FC = () => {
                           </tbody>
                         </table>
                       </div>
-                    )}
-                  </div>
+                    </div>
+                  )}
+                </div>
 
                   {/* PAYMENTS SECTION */}
                   <div className="space-y-3">
@@ -2772,7 +3055,8 @@ export const FarmerAccount: React.FC = () => {
                     type="text"
                     required
                     value={advanceForm.date || ''}
-                    onChange={(e) => setAdvanceForm({ ...advanceForm, date: e.target.value })}
+                    onChange={(e) => setAdvanceForm({ ...advanceForm, date: autoFormatDate(e.target.value) })}
+                    maxLength={10}
                     className="w-full px-3 py-2 border border-slate-300 rounded-xl font-medium focus:ring-2 focus:ring-amber-500 focus:outline-none"
                     placeholder="DD/MM/YYYY"
                   />
@@ -2787,7 +3071,8 @@ export const FarmerAccount: React.FC = () => {
                       type="text"
                       required
                       value={advanceForm.interestTillDate || ''}
-                      onChange={(e) => setAdvanceForm({ ...advanceForm, interestTillDate: e.target.value })}
+                      onChange={(e) => setAdvanceForm({ ...advanceForm, interestTillDate: autoFormatDate(e.target.value) })}
+                      maxLength={10}
                       className="w-full px-3 py-2 border border-slate-300 rounded-xl font-medium focus:ring-2 focus:ring-amber-500 focus:outline-none"
                       placeholder="DD/MM/YYYY"
                     />
@@ -2936,7 +3221,8 @@ export const FarmerAccount: React.FC = () => {
                       <input
                         type="text"
                         value={advanceForm.chequeDate || ''}
-                        onChange={(e) => setAdvanceForm({ ...advanceForm, chequeDate: e.target.value })}
+                        onChange={(e) => setAdvanceForm({ ...advanceForm, chequeDate: autoFormatDate(e.target.value) })}
+                        maxLength={10}
                         placeholder="DD/MM/YYYY"
                         className="w-full px-3 py-1.5 bg-white border border-purple-300 rounded-xl text-xs font-mono text-purple-950 focus:ring-2 focus:ring-purple-500 focus:outline-none"
                       />

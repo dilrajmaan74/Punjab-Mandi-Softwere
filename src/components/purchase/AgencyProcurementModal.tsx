@@ -60,7 +60,7 @@ export const AgencyProcurementModal: React.FC<AgencyProcurementModalProps> = ({
   const filteredRecords = useMemo(() => {
     return records.filter((r) => {
       const matchDate = selectedDate === 'ALL' || r.date === selectedDate;
-      const matchAgency = selectedAgency === 'ALL' || r.agency.toLowerCase() === selectedAgency.toLowerCase();
+      const matchAgency = selectedAgency === 'ALL' || (r.agency || '').toLowerCase() === (selectedAgency || '').toLowerCase();
       return matchDate && matchAgency;
     });
   }, [records, selectedDate, selectedAgency]);

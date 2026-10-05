@@ -188,9 +188,9 @@ export const RecycleBin: React.FC = () => {
     if (filterType !== 'ALL' && item.type !== filterType) return false;
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
-      const mTitle = item.titleEn.toLowerCase().includes(q) || item.titlePa.toLowerCase().includes(q);
-      const mSub = item.subtitle?.toLowerCase().includes(q) || false;
-      const mOrig = item.originalId.toLowerCase().includes(q);
+      const mTitle = (item.titleEn || '').toLowerCase().includes(q) || (item.titlePa || '').toLowerCase().includes(q);
+      const mSub = (item.subtitle || '').toLowerCase().includes(q);
+      const mOrig = (item.originalId || '').toLowerCase().includes(q);
       if (!mTitle && !mSub && !mOrig) return false;
     }
     return true;

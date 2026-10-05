@@ -177,10 +177,10 @@ export const MandiReports: React.FC = () => {
       if (searchQuery) {
         const q = searchQuery.toLowerCase();
         const match =
-          b.farmerName.toLowerCase().includes(q) ||
+          (b.farmerName || '').toLowerCase().includes(q) ||
           (b.farmerNamePa && b.farmerNamePa.includes(q)) ||
-          b.entryNumber.toLowerCase().includes(q) ||
-          b.farmerId.toLowerCase().includes(q);
+          (b.entryNumber || '').toLowerCase().includes(q) ||
+          (b.farmerId || '').toLowerCase().includes(q);
         if (!match) return false;
       }
       return true;
@@ -196,8 +196,8 @@ export const MandiReports: React.FC = () => {
       if (searchQuery) {
         const q = searchQuery.toLowerCase();
         const match =
-          p.farmerName.toLowerCase().includes(q) ||
-          p.id.toLowerCase().includes(q) ||
+          (p.farmerName || '').toLowerCase().includes(q) ||
+          (p.id || '').toLowerCase().includes(q) ||
           (p.agency && p.agency.toLowerCase().includes(q));
         if (!match) return false;
       }
@@ -214,7 +214,7 @@ export const MandiReports: React.FC = () => {
       if (searchQuery) {
         const q = searchQuery.toLowerCase();
         const match =
-          l.id.toLowerCase().includes(q) ||
+          (l.id || '').toLowerCase().includes(q) ||
           (l.sellerName && l.sellerName.toLowerCase().includes(q)) ||
           ((l as any).destination && (l as any).destination.toLowerCase().includes(q)) ||
           ((l as any).truckNo && (l as any).truckNo.toLowerCase().includes(q));
@@ -232,7 +232,7 @@ export const MandiReports: React.FC = () => {
       if (searchQuery) {
         const q = searchQuery.toLowerCase();
         const match =
-          b.id.toLowerCase().includes(q) ||
+          (b.id || '').toLowerCase().includes(q) ||
           (b.sourceName && b.sourceName.toLowerCase().includes(q)) ||
           (b.agency && b.agency.toLowerCase().includes(q));
         if (!match) return false;
@@ -407,10 +407,10 @@ export const MandiReports: React.FC = () => {
       if (searchQuery) {
         const q = searchQuery.toLowerCase();
         const match =
-          f.farmerName.toLowerCase().includes(q) ||
-          f.id.toLowerCase().includes(q) ||
+          (f.farmerName || '').toLowerCase().includes(q) ||
+          (f.id || '').toLowerCase().includes(q) ||
           (f.farmerNamePa && f.farmerNamePa.includes(q)) ||
-          f.mobile.includes(q);
+          (f.mobile && f.mobile.includes(q));
         if (!match) return false;
       }
       return true;
@@ -425,9 +425,9 @@ export const MandiReports: React.FC = () => {
       if (searchQuery) {
         const q = searchQuery.toLowerCase();
         const match =
-          a.id.toLowerCase().includes(q) ||
+          (a.id || '').toLowerCase().includes(q) ||
           (a.farmerName && a.farmerName.toLowerCase().includes(q)) ||
-          a.farmerId.toLowerCase().includes(q);
+          (a.farmerId || '').toLowerCase().includes(q);
         if (!match) return false;
       }
       return true;

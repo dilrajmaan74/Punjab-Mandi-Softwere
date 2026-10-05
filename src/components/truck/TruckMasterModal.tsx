@@ -158,10 +158,10 @@ export const TruckMasterModal: React.FC<TruckMasterModalProps> = ({
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase().trim();
     const cleanQ = q.replace(/[^a-z0-9]/gi, '');
-    const cleanTruck = t.truckNo.toLowerCase().replace(/[^a-z0-9]/gi, '');
+    const cleanTruck = (t.truckNo || '').toLowerCase().replace(/[^a-z0-9]/gi, '');
     return (
       cleanTruck.includes(cleanQ) ||
-      t.truckNo.toLowerCase().includes(q) ||
+      (t.truckNo || '').toLowerCase().includes(q) ||
       (t.driverName && t.driverName.toLowerCase().includes(q)) ||
       ((t.driverMobile || t.driverPhone) && (t.driverMobile || t.driverPhone).includes(q)) ||
       (t.truckUnion && t.truckUnion.toLowerCase().includes(q))

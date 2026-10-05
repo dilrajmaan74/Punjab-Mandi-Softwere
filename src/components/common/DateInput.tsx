@@ -4,6 +4,8 @@ import { autoFormatDate, convertYYYYMMDDtoDDMMYYYY, convertDDMMYYYYtoYYYYMMDD } 
 
 interface DateInputProps {
   id?: string;
+  name?: string;
+  title?: string;
   value: string; // Stored as DD/MM/YYYY
   onChange: (value: string) => void;
   label?: string;
@@ -14,10 +16,13 @@ interface DateInputProps {
   disabled?: boolean;
   required?: boolean;
   error?: string;
+  autoFocus?: boolean;
 }
 
 export const DateInput: React.FC<DateInputProps> = ({
   id,
+  name,
+  title,
   value,
   onChange,
   label,
@@ -27,14 +32,34 @@ export const DateInput: React.FC<DateInputProps> = ({
   inputClassName = '',
   disabled = false,
   required = false,
-  error
+  error,
+  autoFocus = false
 }) => {
   const nativePickerRef = useRef<HTMLInputElement>(null);
+  const lastKeyRef = useRef<string>('');
 
-  // Handle typing: typing numbers automatically formats with / / e.g. 01052026 -> 01/05/2026
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    lastKeyRef.current = e.key;
+    if (e.key === 'Backspace') {
+      const input = e.currentTarget;
+      const val = input.value;
+      const cursorPos = input.selectionStart || 0;
+      // If cursor is right after a slash, delete the digit before the slash as well
+      if (cursorPos === 3 || cursorPos === 6) {
+        if (val[cursorPos - 1] === '/') {
+          e.preventDefault();
+          const newVal = val.slice(0, cursorPos - 2) + val.slice(cursorPos);
+          onChange(autoFormatDate(newVal, true));
+        }
+      }
+    }
+  };
+
+  // Handle typing: typing numbers automatically formats with / / e.g. 05102027 -> 05/10/2027
   const handleTextChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const raw = e.target.value;
-    const formatted = autoFormatDate(raw);
+    const isDeleting = lastKeyRef.current === 'Backspace';
+    const formatted = autoFormatDate(raw, isDeleting);
     onChange(formatted);
   };
 
@@ -79,8 +104,12 @@ export const DateInput: React.FC<DateInputProps> = ({
         <input
           type="text"
           id={id}
+          name={name}
+          title={title}
+          autoFocus={autoFocus}
           value={value || ''}
           onChange={handleTextChange}
+          onKeyDown={handleKeyDown}
           placeholder={placeholder}
           maxLength={10}
           disabled={disabled}

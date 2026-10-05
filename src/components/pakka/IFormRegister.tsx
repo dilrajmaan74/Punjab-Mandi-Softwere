@@ -49,9 +49,9 @@ export const IFormRegister: React.FC = () => {
     if (statusFilter === 'GENERATED' && rec.isLocked) return false;
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
-      const matchNo = rec.iFormNo.toLowerCase().includes(q);
-      const matchAgency = rec.agency.toLowerCase().includes(q);
-      const matchDate = rec.date.includes(q);
+      const matchNo = (rec.iFormNo || '').toLowerCase().includes(q);
+      const matchAgency = (rec.agency || '').toLowerCase().includes(q);
+      const matchDate = (rec.date || '').includes(q);
       if (!matchNo && !matchAgency && !matchDate) return false;
     }
     return true;

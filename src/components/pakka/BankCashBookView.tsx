@@ -60,10 +60,10 @@ export const BankCashBookView: React.FC = () => {
   const filteredVouchers = ledgerVouchers.filter((v) => {
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
-      const matchNo = v.voucherNo.toLowerCase().includes(q);
+      const matchNo = (v.voucherNo || '').toLowerCase().includes(q);
       const matchNarr = v.narration?.toLowerCase().includes(q) || (v.narrationPa && v.narrationPa.includes(q));
-      const matchDr = v.debitLedgerName.toLowerCase().includes(q);
-      const matchCr = v.creditLedgerName.toLowerCase().includes(q);
+      const matchDr = (v.debitLedgerName || '').toLowerCase().includes(q);
+      const matchCr = (v.creditLedgerName || '').toLowerCase().includes(q);
       if (!matchNo && !matchNarr && !matchDr && !matchCr) return false;
     }
     return true;
