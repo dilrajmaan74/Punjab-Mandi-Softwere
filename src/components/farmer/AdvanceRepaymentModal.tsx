@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { FarmerAdvanceRecord, AdvanceRepayment, Farmer } from '../../types/mandi';
 import { useMandi } from '../../context/MandiContext';
 import { useNotification } from '../../context/NotificationContext';
-import { formatCurrency, formatDateToDDMMYYYY, calculateAdvanceInterest, autoFormatDate } from '../../utils/calculations';
+import { formatCurrency, formatDateToDDMMYYYY, calculateAdvanceInterest, autoFormatDate, compareDatesChronological } from '../../utils/calculations';
 import {
   X,
   Plus,
@@ -48,7 +48,12 @@ export const AdvanceRepaymentModal: React.FC<AdvanceRepaymentModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const repayments: AdvanceRepayment[] = Array.isArray(advance.repayments) ? advance.repayments : [];
-  const totalRepaid = advance.totalRepaid || repayments.reduce((s, r) => s + (Number(r.amount) || 0), 0);
+  const activeRepayments = repayments.filter((r) => {
+    if (r.isSettled) return false;
+    if (advance.lastInterestSettledDate && r.date && compareDatesChronological(r.date, advance.lastInterestSettledDate) <= 0) return false;
+    return true;
+  });
+  const totalRepaid = activeRepayments.reduce((s, r) => s + (Number(r.amount) || 0), 0);
   const originalPrincipal = Number(advance.principal ?? advance.amount) || 0;
 
   // Accrued interest from advance start date up to the entered return date
@@ -60,6 +65,9 @@ export const AdvanceRepaymentModal: React.FC<AdvanceRepaymentModalProps> = ({
       interestMode: advance.interestMode,
       compounding: advance.compounding,
       isInterestFree: advance.isInterestFree,
+      lastInterestSettledDate: advance.lastInterestSettledDate,
+      originalStartDate: advance.originalStartDate,
+      isRolledForward: Boolean(advance.lastInterestSettledDate || advance.originalStartDate),
       startDate: advance.startDate || advance.date,
       endDate: date.trim() || todayStr
     });

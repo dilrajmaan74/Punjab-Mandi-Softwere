@@ -1180,22 +1180,6 @@ export const BagsEntry: React.FC = () => {
                     </span>
                   </div>
                 </div>
-
-                {/* Crop Balance conversion details */}
-                <div className="pt-2 border-t border-slate-200 grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-slate-600">
-                  <div className="flex items-center justify-between bg-white p-2 rounded border border-slate-200 font-mono">
-                    <span className="text-slate-500 font-sans">{isEn ? 'Deduction Bags (₹925/bag):' : 'ਕਟੌਤੀ ਬੋਰੀਆਂ (₹925/ਬੋਰੀ):'}</span>
-                    <strong className="text-rose-700 font-black">
-                      ₹{totalLabourDeduction.toFixed(2)} ÷ 925 = {labourSummary.labourDeductionBags} {isEn ? 'Bags' : 'ਬੋਰੀਆਂ'} (Round UP)
-                    </strong>
-                  </div>
-                  <div className="flex items-center justify-between bg-white p-2 rounded border border-slate-200 font-mono">
-                    <span className="text-slate-500 font-sans">{isEn ? 'Remaining Crop Balance:' : 'ਬਾਕੀ ਬਚੀ ਫਸਲ (Balance):'}</span>
-                    <strong className="text-emerald-700 font-black">
-                      {bagsCount} - {labourSummary.labourDeductionBags} = {labourSummary.remainingBalanceBags} {isEn ? 'Bags' : 'ਬੋਰੀਆਂ'}
-                    </strong>
-                  </div>
-                </div>
               </div>
             </div>
           </div>
@@ -1349,21 +1333,6 @@ export const BagsEntry: React.FC = () => {
                   </div>
                   <div className="text-[10px] text-emerald-400/90 mt-0.5 font-mono">
                     {formatCurrency(calculatedGrossAmount)} - {formatCurrency(totalLabourDeduction)} = {formatCurrency(netPayableAmount)}
-                  </div>
-                </div>
-
-                {/* Crop Balance Impact (₹925/bag conversion) */}
-                <div className="bg-slate-800/90 border border-slate-700 rounded-lg p-2.5 space-y-1 text-xs font-mono">
-                  <div className="text-[10px] text-slate-400 font-sans uppercase font-bold tracking-wider">
-                    {isEn ? 'Crop Balance Deduction (₹925/Bag):' : 'ਫਸਲ ਬੈਲੇਂਸ ਕਟੌਤੀ (₹925/ਬੋਰੀ):'}
-                  </div>
-                  <div className="flex justify-between items-center text-slate-300 text-[11px]">
-                    <span className="font-sans text-slate-400">{isEn ? 'Labour Deduct Bags:' : 'ਕਟੌਤੀ ਬੋਰੀਆਂ:'}</span>
-                    <strong className="text-rose-400">-{labourSummary.labourDeductionBags} {isEn ? 'Bags' : 'ਬੋਰੀਆਂ'}</strong>
-                  </div>
-                  <div className="flex justify-between items-center text-slate-300 text-[11px] pt-1 border-t border-slate-700">
-                    <span className="font-sans text-emerald-400 font-bold">{isEn ? 'Remaining Balance Bags:' : 'ਬਾਕੀ ਬਚੀ ਫਸਲ:'}</span>
-                    <strong className="text-emerald-300 text-sm">{labourSummary.remainingBalanceBags} {isEn ? 'Bags' : 'ਬੋਰੀਆਂ'}</strong>
                   </div>
                 </div>
               </div>

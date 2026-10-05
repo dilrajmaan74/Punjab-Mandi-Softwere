@@ -423,7 +423,7 @@ function renderDailyPurchaseBWHeader(
   const firmAddress = cleanPdfText(settings.firmAddress) || 'Dana Mandi Kang Khurd, Teh. Shahkot, Distt. Jalandhar, Punjab - 144629';
   const licenceNo = cleanPdfText(settings.firmLicence) || 'JAL/LKH/133';
   const mobile = cleanPdfText(settings.firmMobile) || '98147-74651';
-  const pan = cleanPdfText(settings.firmPan) || 'AAACJ1234F';
+  const pan = cleanPdfText(settings.firmPan);
   const marketCommittee = cleanPdfText(settings.marketCommitteeEn) || 'Market Committee Lohian Khas';
 
   let curY = 5;
@@ -442,7 +442,8 @@ function renderDailyPurchaseBWHeader(
   // 3. Licence No, Mobile, PAN, Market Committee - Solid Black, Centered
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7.5);
-  const creds = `Licence No: ${licenceNo}   |   Mobile: +91 ${mobile}   |   PAN: ${pan}   |   ${marketCommittee}`;
+  const panPart = pan ? `   |   PAN: ${pan}` : '';
+  const creds = `Licence No: ${licenceNo}   |   Mobile: +91 ${mobile}${panPart}   |   ${marketCommittee}`;
   doc.text(creds, centerX, curY + 12, { align: 'center' });
 
   // Thin Black Divider Line
@@ -515,10 +516,6 @@ function renderDailyPurchaseBWHeader(
  * Columns: Sr No | Date | Farmer Name | Father Name | Village | Mobile | New Juths | Old Juths | Total Bags | Weight (Qtl/Kg) | Agency
  * Fits up to 12 farmer rows per page with readable font
  * Page Total row directly after farmer list on each page
- * Under-table clean summary:
- * - Last Total Purchase (strictly before selected date)
- * - Today Purchase (strictly matching selected date)
- * - Total Purchase (Last Total Purchase + Today Purchase)
  */
 export async function exportDailyPurchaseRegisterPDF(
   records: DailyPurchaseRecord[],
@@ -798,176 +795,7 @@ export async function exportDailyPurchaseRegisterPDF(
     doc.setLineWidth(0.25);
     doc.rect(margin, tableStartY, contentWidth, y - tableStartY, 'S');
 
-    // 5. On the LAST page, show the DAILY PURCHASE SUMMARY directly below the page total
-    if (isLastPage) {
-      // Source pool: allDailyPurchaseRecords if passed, otherwise records
-      const sourcePool = (allDailyPurchaseRecords && allDailyPurchaseRecords.length > 0)
-        ? allDailyPurchaseRecords
-        : records;
-
-      // Filter pool by agency if agency is specified
-      const agencyPool = (filterAgency && filterAgency !== 'All Agencies')
-        ? sourcePool.filter(r => cleanText(r.agency).toLowerCase() === cleanText(filterAgency).toLowerCase())
-        : sourcePool;
-
-      // Determine target selected date timestamp
-      let targetTime = 0;
-      if (filterDate && filterDate !== 'All Dates') {
-        targetTime = normalizeDateToComparable(filterDate);
-      }
-
-      // If no specific date filter provided or targetTime is 0, pick the latest date in records
-      if (targetTime === 0 && records.length > 0) {
-        const times = records.map(r => normalizeDateToComparable(r.date)).filter(t => t > 0);
-        if (times.length > 0) {
-          targetTime = Math.max(...times);
-        }
-      }
-
-      // 1. Last Total Purchase records (strictly before target date)
-      const lastTotalRecords = targetTime > 0
-        ? agencyPool.filter(r => {
-            const t = normalizeDateToComparable(r.date);
-            return t > 0 && t < targetTime;
-          })
-        : [];
-
-      // 2. Today Purchase records (strictly matching target date)
-      let todayRecords = targetTime > 0
-        ? agencyPool.filter(r => {
-            const t = normalizeDateToComparable(r.date);
-            return t === targetTime;
-          })
-        : records;
-
-      // If todayRecords empty but records exist, fallback to records
-      if (todayRecords.length === 0 && records.length > 0) {
-        todayRecords = records;
-      }
-
-      // Calculations for Last Total Purchase
-      const lastBags = lastTotalRecords.reduce((s, r) => s + (Number(r.bags) || 0), 0);
-      const lastWeightKg = lastTotalRecords.reduce(
-        (s, r) => s + (Number(r.totalWeightKg) || (Number(r.bags) * (settings.fixedBagWeightKg || 37.5))),
-        0
-      );
-      const lastNetAmount = lastTotalRecords.reduce(
-        (s, r) => s + (r.netAmount !== undefined ? Number(r.netAmount) : (Number(r.totalAmount) || 0)),
-        0
-      );
-
-      // Calculations for Today Purchase
-      const todayBags = todayRecords.reduce((s, r) => s + (Number(r.bags) || 0), 0);
-      const todayWeightKg = todayRecords.reduce(
-        (s, r) => s + (Number(r.totalWeightKg) || (Number(r.bags) * (settings.fixedBagWeightKg || 37.5))),
-        0
-      );
-      const todayNetAmount = todayRecords.reduce(
-        (s, r) => s + (r.netAmount !== undefined ? Number(r.netAmount) : (Number(r.totalAmount) || 0)),
-        0
-      );
-
-      // Calculations for Total Purchase (Last Total Purchase + Today Purchase)
-      const totalPurchaseBags = lastBags + todayBags;
-      const totalPurchaseWeightKg = lastWeightKg + todayWeightKg;
-      const totalPurchaseNetAmount = lastNetAmount + todayNetAmount;
-
-      // Summary box dimensions (compact for B&W printing)
-      const sHeaderHeight = 5.2;
-      const sRowGap = 5.0;
-      const summaryBoxHeight = sHeaderHeight + 3 * sRowGap + 0.6; // ~20.8 mm
-
-      // Check if summary box fits on current page
-      if (y + summaryBoxHeight + 6 > pageHeight - 5) {
-        drawPageFooter(pageNum, totalPages + 1);
-        doc.addPage();
-        const contY = renderContinuationHeader(doc, settings, selectedAgency, filterDate, totalPages + 1, totalPages + 1);
-        y = contY;
-        drawPageFooter(totalPages + 1, totalPages + 1);
-      } else {
-        y += 3.5; // compact clean vertical space
-      }
-
-      // Summary Container Box - White background with thin black border
-      doc.setFillColor(255, 255, 255);
-      doc.rect(margin, y, contentWidth, summaryBoxHeight, 'F');
-      doc.setDrawColor(0, 0, 0);
-      doc.setLineWidth(0.25);
-      doc.rect(margin, y, contentWidth, summaryBoxHeight, 'S');
-
-      // Header of Summary Box - Solid dark header with white text
-      doc.setFillColor(35, 35, 35);
-      doc.rect(margin, y, contentWidth, sHeaderHeight, 'F');
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(8);
-      doc.setTextColor(255, 255, 255);
-
-      const sCol1 = margin + 6;             // Category Name
-      const sCol2 = margin + 85;            // Total Bags
-      const sCol3 = margin + 160;           // Weight (Qtl / Kg) - ONLY Qtl/Kg
-      const sCol4 = pageWidth - margin - 6; // Net Amount
-
-      doc.text('DAILY PURCHASE SUMMARY', sCol1, y + 3.7);
-      doc.text('TOTAL BAGS', sCol2, y + 3.7);
-      doc.text('WEIGHT (QTL / KG)', sCol3, y + 3.7);
-      doc.text('NET AMOUNT', sCol4, y + 3.7, { align: 'right' });
-
-      // ONLY 3 Summary Rows:
-      // 1. Last Total Purchase
-      // 2. Today Purchase
-      // 3. Total Purchase
-      const summaryRows = [
-        {
-          title: 'Last Total Purchase',
-          bags: `${lastBags.toLocaleString('en-IN')} Bags`,
-          weightQtlKg: formatWeightQtlKg(lastWeightKg),
-          amount: `Rs. ${lastNetAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-          isBold: false
-        },
-        {
-          title: 'Today Purchase',
-          bags: `${todayBags.toLocaleString('en-IN')} Bags`,
-          weightQtlKg: formatWeightQtlKg(todayWeightKg),
-          amount: `Rs. ${todayNetAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-          isBold: true
-        },
-        {
-          title: 'Total Purchase',
-          bags: `${totalPurchaseBags.toLocaleString('en-IN')} Bags`,
-          weightQtlKg: formatWeightQtlKg(totalPurchaseWeightKg),
-          amount: `Rs. ${totalPurchaseNetAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-          isBold: true
-        }
-      ];
-
-      let sumY = y + sHeaderHeight + 3.6;
-
-      summaryRows.forEach((sr, rIdx) => {
-        if (rIdx === 2) {
-          // Subtle grey background for Total Purchase row
-          doc.setFillColor(238, 238, 238);
-          doc.rect(margin + 0.2, sumY - 3.6, contentWidth - 0.4, sRowGap, 'F');
-          // Thin black line separating Total Purchase
-          doc.setDrawColor(0, 0, 0);
-          doc.setLineWidth(0.2);
-          doc.line(margin + 0.2, sumY - 3.6, margin + contentWidth - 0.2, sumY - 3.6);
-        }
-
-        doc.setFont('helvetica', sr.isBold ? 'bold' : 'normal');
-        doc.setFontSize(8);
-        // Solid black text for highest contrast on monochrome/B&W printer
-        doc.setTextColor(0, 0, 0);
-
-        doc.text(sr.title, sCol1, sumY);
-        doc.text(sr.bags, sCol2, sumY);
-        doc.text(sr.weightQtlKg, sCol3, sumY);
-        doc.text(sr.amount, sCol4, sumY, { align: 'right' });
-
-        sumY += sRowGap;
-      });
-    }
-
-    // 6. Draw page footer
+    // Draw page footer
     drawPageFooter(pageNum, totalPages);
   }
 

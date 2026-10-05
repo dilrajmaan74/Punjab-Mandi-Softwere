@@ -62,6 +62,7 @@ export const SettingsManager: React.FC = () => {
     mandiNamePa: settings.mandiNamePa || '',
     marketCommitteeEn: settings.marketCommitteeEn || '',
     marketCommitteePa: settings.marketCommitteePa || '',
+    firmPan: settings.firmPan || '',
     fixedRatePerQtl: settings.fixedRatePerQtl || 2461,
     defaultPakkiLabourRate: settings.defaultPakkiLabourRate ?? 7,
     defaultPakkaDoubleLabourRate: settings.defaultPakkaDoubleLabourRate ?? 14,
@@ -478,6 +479,19 @@ export const SettingsManager: React.FC = () => {
                   value={mandiForm.mandiNamePa || ''}
                   onChange={(e) => setMandiForm({ ...mandiForm, mandiNamePa: e.target.value })}
                   className="w-full bg-slate-50 border border-slate-300 rounded p-1.5 text-xs font-bold"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-slate-600 mb-0.5">
+                  ਫਰਮ PAN ਕਾਰਡ ਨੰਬਰ (Firm PAN Card No.)
+                </label>
+                <input
+                  type="text"
+                  maxLength={10}
+                  placeholder="e.g. ABCDE1234F"
+                  value={mandiForm.firmPan || ''}
+                  onChange={(e) => setMandiForm({ ...mandiForm, firmPan: e.target.value.toUpperCase() })}
+                  className="w-full bg-slate-50 border border-slate-300 rounded p-1.5 text-xs font-mono font-bold uppercase focus:bg-white"
                 />
               </div>
               <div>

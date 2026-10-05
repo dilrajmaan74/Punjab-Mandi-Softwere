@@ -40,6 +40,11 @@ export const DateInput: React.FC<DateInputProps> = ({
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     lastKeyRef.current = e.key;
+    if (e.key === '/') {
+      // User pressed slash: ignore because slashes are auto-formatted / fixed!
+      e.preventDefault();
+      return;
+    }
     if (e.key === 'Backspace') {
       const input = e.currentTarget;
       const val = input.value;
@@ -52,6 +57,14 @@ export const DateInput: React.FC<DateInputProps> = ({
           onChange(autoFormatDate(newVal, true));
         }
       }
+    }
+  };
+
+  const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    e.preventDefault();
+    const pasted = e.clipboardData.getData('text');
+    if (pasted) {
+      onChange(autoFormatDate(pasted));
     }
   };
 
@@ -110,6 +123,7 @@ export const DateInput: React.FC<DateInputProps> = ({
           value={value || ''}
           onChange={handleTextChange}
           onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
           placeholder={placeholder}
           maxLength={10}
           disabled={disabled}

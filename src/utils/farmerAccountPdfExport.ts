@@ -267,11 +267,11 @@ export async function exportSimpleFarmerAccountPDF(
   const bagWeight = settings.fixedBagWeightKg || settings.bagWeightStandard || 37.5;
   const arrivalDisplay = account.mandiArrivalDisplay || `${((totalBagsBrought * bagWeight) / 100).toFixed(2)} Qtl`;
 
-  // Table of 7 Key Metrics (Dual Language)
+  // Table of Key Metrics (Dual Language)
   doc.setFont('NotoSansGurmukhi', 'bold');
   doc.setFontSize(10.5);
   doc.setTextColor(15, 23, 42);
-  doc.text('ACCOUNT SUMMARY / ਖਾਤਾ ਸਾਰ (7 KEY METRICS)', margin, y);
+  doc.text('ACCOUNT SUMMARY / ਖਾਤਾ ਸਾਰ (KEY METRICS)', margin, y);
   y += 4.5;
 
   const tableRows = [
@@ -309,27 +309,19 @@ export async function exportSimpleFarmerAccountPDF(
     },
     {
       sr: '5',
-      titleEn: 'Balance Before Labour',
-      titlePa: 'ਮਜ਼ਦੂਰੀ ਤੋਂ ਪਹਿਲਾਂ ਬਕਾਇਆ',
+      titleEn: 'Remaining Balance Bags',
+      titlePa: 'ਬਾਕੀ ਬਚੀਆਂ ਬੋਰੀਆਂ',
       details: `${totalBagsBrought} - ${totalPurchaseBags} = ${balanceBeforeLabour} Bags / ਬੋਰੀਆਂ`,
       value: `${balanceBeforeLabour} Bags`,
-      highlight: false
+      highlight: true
     },
     {
       sr: '6',
       titleEn: 'Labour Expense',
       titlePa: 'ਮਜ਼ਦੂਰੀ ਖਰਚ',
-      details: `Rs. ${labourExp.toLocaleString('en-IN')} ÷ Rs. ${bagRate}/ਬੋਰੀ = ${labourBags} Bags / ਬੋਰੀਆਂ`,
-      value: `${labourBags} Bags`,
+      details: `Rs. ${labourExp.toLocaleString('en-IN')}`,
+      value: `Rs. ${labourExp.toLocaleString('en-IN')}`,
       highlight: false
-    },
-    {
-      sr: '7',
-      titleEn: 'Final Balance',
-      titlePa: 'ਆਖਰੀ ਬਕਾਇਆ',
-      details: `${balanceBeforeLabour} - ${labourBags} = ${finalBags} Bags / ਬੋਰੀਆਂ`,
-      value: `${finalBags} Bags`,
-      highlight: true
     }
   ];
 
@@ -429,8 +421,8 @@ export async function exportSimpleFarmerAccountPDF(
 
   // Bilingual Formula Card (Step-by-Step with automatic text wrapping & dynamic height)
   const step1 = `1. Total Purchase / ਕੁੱਲ ਖਰੀਦ = ਆਪਣੀ ਖਰੀਦ (${ownPurchaseBags}) + ਲਿੰਕ ਕਿਸਾਨਾਂ ਦੀ ਖਰੀਦ (${linkedPurchaseBags}) = ${totalPurchaseBags} Bags / ਬੋਰੀਆਂ`;
-  const step2 = `2. Balance Before Labour / ਮਜ਼ਦੂਰੀ ਤੋਂ ਪਹਿਲਾਂ ਬਕਾਇਆ = ਮੰਡੀ ਵਿੱਚ ਲਿਆਂਦੀਆਂ ਕੁੱਲ ਬੋਰੀਆਂ (${totalBagsBrought}) - ਕੁੱਲ ਖਰੀਦ (${totalPurchaseBags}) = ${balanceBeforeLabour} Bags / ਬੋਰੀਆਂ`;
-  const step3 = `3. Labour Bags / ਮਜ਼ਦੂਰੀ ਦੀਆਂ ਬੋਰੀਆਂ = ਮਜ਼ਦੂਰੀ ਖਰਚ Rs. ${labourExp.toLocaleString('en-IN')} ÷ Rs. ${bagRate}/ਬੋਰੀ = ${labourBags} Bags / ਬੋਰੀਆਂ (Rounded up)`;
+  const step2 = `2. Remaining Balance Bags / ਬਾਕੀ ਬਚੀਆਂ ਬੋਰੀਆਂ = ਮੰਡੀ ਵਿੱਚ ਲਿਆਂਦੀਆਂ ਕੁੱਲ ਬੋਰੀਆਂ (${totalBagsBrought}) - ਕੁੱਲ ਖਰੀਦ (${totalPurchaseBags}) = ${balanceBeforeLabour} Bags / ਬੋਰੀਆਂ`;
+  const step3 = `3. Labour Expense / ਮਜ਼ਦੂਰੀ ਖਰਚ = Rs. ${labourExp.toLocaleString('en-IN')} (ਤੁਲਾਈ, ਭਰਾਈ ਅਤੇ ਮੰਡੀ ਮਜ਼ਦੂਰੀ ਖਰਚ)`;
 
   const step1Lines = doc.splitTextToSize(step1, contentWidth - 8);
   const step2Lines = doc.splitTextToSize(step2, contentWidth - 8);

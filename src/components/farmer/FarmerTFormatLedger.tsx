@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import { FarmerAccountSummary, Farmer, MandiSettings, FarmerAdvanceRecord } from '../../types/mandi';
 import { useMandi } from '../../context/MandiContext';
-import { formatCurrency, formatCurrencyINR, compareDatesChronological, addMonthsToDateString, formatDateToDDMMYYYY } from '../../utils/calculations';
+import { formatCurrency, formatCurrencyINR, compareDatesChronological, addMonthsToDateString, formatDateToDDMMYYYY, autoFormatDate } from '../../utils/calculations';
 import { openWhatsApp } from '../../utils/whatsappNotification';
 
 interface FarmerTFormatLedgerProps {
@@ -275,6 +275,8 @@ export const FarmerTFormatLedger: React.FC<FarmerTFormatLedgerProps> = ({
         // If this repayment was settled to roll into the starting principal,
         // it is already accounted for in the principal balance and must not reduce it again!
         if (rep.isSettled) return;
+        if (adv.lastInterestSettledDate && rep.date && compareDatesChronological(rep.date, adv.lastInterestSettledDate) <= 0) return;
+        if ((adv.originalStartDate || adv.lastInterestSettledDate) && rep.date && compareDatesChronological(rep.date, adv.startDate || adv.date) <= 0) return;
 
         creditList.push({
           id: `rep-${adv.id}-${rep.id}`,

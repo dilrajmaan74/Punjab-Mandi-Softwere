@@ -239,7 +239,7 @@ export const FarmerAccountStatementA4: React.FC<FarmerAccountStatementA4Props> =
   const firmAddress = settings.firmAddress || 'Dana Mandi Kang Khurd, Teh. Shahkot, Distt. Jalandhar, Punjab - 144629';
   const firmLicence = settings.firmLicence || 'JAL/LKH/133';
   const firmMobile = settings.firmMobile || '98147-74651';
-  const firmPan = settings.firmPan || 'AAACJ1234F';
+  const firmPan = settings.firmPan || '';
   const firmGstin = settings.firmGstin || '';
 
   return (

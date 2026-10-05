@@ -47,7 +47,7 @@ export function renderStandardPdfHeader(options: StandardPdfHeaderOptions): numb
   const firmAddress = cleanPdfText(settings.firmAddress) || 'Dana Mandi Kang Khurd, Teh. Shahkot, Distt. Jalandhar, Punjab - 144629';
   const licenceNo = cleanPdfText(settings.firmLicence) || 'JAL/LKH/133';
   const mobile = cleanPdfText(settings.firmMobile) || '98147-74651';
-  const pan = cleanPdfText(settings.firmPan) || 'AAACJ1234F';
+  const pan = cleanPdfText(settings.firmPan);
   const marketCommittee = cleanPdfText(settings.marketCommitteeEn) || 'Market Committee Lohian Khas';
 
   let curY = startY;
@@ -79,7 +79,8 @@ export function renderStandardPdfHeader(options: StandardPdfHeaderOptions): numb
   doc.setFont(fontName, 'bold');
   doc.setFontSize(compact ? (isLandscape ? 7.2 : 6.8) : (isLandscape ? 8.5 : 8));
   doc.setTextColor(254, 240, 138); // Yellow-200 for high readability
-  const creds = `Licence No: ${licenceNo}   •   Mobile: +91 ${mobile}   •   PAN No: ${pan}`;
+  const panCred = pan ? `   •   PAN No: ${pan}` : '';
+  const creds = `Licence No: ${licenceNo}   •   Mobile: +91 ${mobile}${panCred}`;
   doc.text(creds, centerX, curY + (compact ? 13.0 : 20.5), { align: 'center' });
 
   // 4. Market Committee & Mandi Board Tag (Neatly centered at bottom of header banner)

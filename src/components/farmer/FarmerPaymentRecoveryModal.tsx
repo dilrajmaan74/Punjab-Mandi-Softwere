@@ -115,6 +115,9 @@ export const FarmerPaymentRecoveryModal: React.FC<FarmerPaymentRecoveryModalProp
         interestMode: adv.interestMode,
         compounding: adv.compounding,
         isInterestFree: adv.isInterestFree,
+        lastInterestSettledDate: adv.lastInterestSettledDate,
+        originalStartDate: adv.originalStartDate,
+        isRolledForward: Boolean(adv.lastInterestSettledDate || adv.originalStartDate),
         repayments: Array.isArray(adv.repayments) ? adv.repayments : [],
         startDate: start,
         endDate: returnDate || todayStr
@@ -311,7 +314,8 @@ export const FarmerPaymentRecoveryModal: React.FC<FarmerPaymentRecoveryModalProp
           paymentMode,
           referenceNumber: referenceNo.trim() || undefined,
           referenceNo: referenceNo.trim() || undefined,
-          remarks: remarks.trim() || undefined
+          remarks: remarks.trim() || undefined,
+          settleInterestAndRollForward: true
         });
 
         if (success) {

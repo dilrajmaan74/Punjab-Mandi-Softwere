@@ -75,7 +75,6 @@ import { BardanaClearanceCard } from './BardanaClearanceCard';
 import { FarmerTFormatLedger } from './FarmerTFormatLedger';
 import { SeasonSettlementModal } from './SeasonSettlementModal';
 import { FarmerThreePageAccount } from './FarmerThreePageAccount';
-import { FarmerBagLabourReconciliationCard } from './FarmerBagLabourReconciliationCard';
 import {
   savePaymentTransfer,
   saveSameFarmerAdjustment,
@@ -313,7 +312,7 @@ export const FarmerAccount: React.FC = () => {
   const [isExportingPDF, setIsExportingPDF] = useState(false);
   const [isBulkWhatsAppOpen, setIsBulkWhatsAppOpen] = useState(false);
   const [isMiniSlipOpen, setIsMiniSlipOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<'threepage' | 'statement' | 'tformat' | 'records' | 'baglabour'>('threepage');
+  const [activeTab, setActiveTab] = useState<'threepage' | 'statement' | 'tformat' | 'records'>('threepage');
   const [selectedSeasonFilter, setSelectedSeasonFilter] = useState<'ALL' | 'WHEAT' | 'PADDY'>('ALL');
   const [isSettlementModalOpen, setIsSettlementModalOpen] = useState(false);
 
@@ -1692,19 +1691,6 @@ export const FarmerAccount: React.FC = () => {
                   <Layers className="w-4 h-4" />
                   <span>Detailed Data Records / ਵਿਸਥਾਰਤ ਰਿਕਾਰਡ ਤੇ ਐਂਟਰੀਆਂ</span>
                 </button>
-
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('baglabour')}
-                  className={`px-4 py-2.5 rounded-xl text-xs font-black flex items-center gap-2 transition-all cursor-pointer ${
-                    activeTab === 'baglabour'
-                      ? 'bg-rose-700 text-white shadow-md ring-2 ring-rose-500 scale-[1.02]'
-                      : 'bg-rose-50 hover:bg-rose-100 text-rose-950 border border-rose-200'
-                  }`}
-                >
-                  <Scale className="w-4 h-4 text-amber-300" />
-                  <span>📊 ਬੋਰੀ ਤੇ ਲੇਬਰ ਕਟੌਤੀ ਚਾਰਟ (Bag & Labour Reconciliation)</span>
-                </button>
               </div>
 
               {activeTab === 'statement' && (
@@ -1782,15 +1768,6 @@ export const FarmerAccount: React.FC = () => {
                   onOpenMiniSlip={() => setIsMiniSlipOpen(true)}
                 />
               </div>
-            ) : activeTab === 'baglabour' ? (
-              <FarmerBagLabourReconciliationCard
-                farmer={currentFarmer}
-                allFarmers={farmers}
-                bagsEntries={bagsEntries}
-                dailyPurchases={dailyPurchaseRecords}
-                settings={settings}
-                onNavigateToFullRegister={() => setActiveSection('farmer-bag-balance-labour')}
-              />
             ) : (
               <div className="space-y-6">
                 {/* 1. NEW: 4-STEP SIMPLE SUMMARY CARD + AUDIO ASSISTANT (Highest prominence for easy farmer understanding) */}
@@ -1820,7 +1797,7 @@ export const FarmerAccount: React.FC = () => {
                     </span>
                   </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
                 {/* 1. Total Bags Brought to Mandi */}
                 <div className="p-4 bg-white rounded-2xl border-2 border-indigo-200 shadow-xs flex flex-col justify-between">
                   <div className="text-slate-600 font-bold text-xs leading-tight">
@@ -1887,38 +1864,22 @@ export const FarmerAccount: React.FC = () => {
                     <div className="text-xl lg:text-2xl font-black text-rose-900 font-mono">
                       ₹{labourExpense.toLocaleString('en-IN')}
                     </div>
-                    <div className="text-[11px] text-slate-500 font-semibold mt-0.5">@ ₹{bagRate}/Bag</div>
+                    <div className="text-[11px] text-slate-500 font-semibold mt-0.5">ਮੰਡੀ ਮਜ਼ਦੂਰੀ ਖਰਚ</div>
                   </div>
                 </div>
 
-                {/* 6. Labour Bags */}
-                <div className="p-4 bg-white rounded-2xl border-2 border-rose-300 shadow-xs flex flex-col justify-between">
-                  <div className="text-slate-600 font-bold text-xs leading-tight">
-                    Labour Bags<br />
-                    <span className="text-rose-800 font-black">ਮਜ਼ਦੂਰੀ ਦੀਆਂ ਬੋਰੀਆਂ</span>
-                  </div>
-                  <div className="mt-3">
-                    <div className="text-2xl lg:text-3xl font-black text-rose-950 font-mono">
-                      {labourBags}
-                    </div>
-                    <div className="text-[11px] text-slate-500 font-semibold mt-0.5">ਮਜ਼ਦੂਰੀ ਦੀਆਂ ਬੋਰੀਆਂ</div>
-                  </div>
-                </div>
-
-                {/* 7. Final Balance */}
-                <div className={`p-4 rounded-2xl border-2 shadow-md flex flex-col justify-between ${
-                  finalBalanceBags >= 0 ? 'bg-emerald-50 border-emerald-500 text-emerald-950' : 'bg-rose-50 border-rose-500 text-rose-950'
-                }`}>
+                {/* 6. Remaining Balance Bags */}
+                <div className="p-4 bg-emerald-50 rounded-2xl border-2 border-emerald-500 shadow-md flex flex-col justify-between text-emerald-950">
                   <div className="font-bold text-xs leading-tight">
-                    Final Balance<br />
-                    <span className="font-black text-sm">ਆਖਰੀ ਬਕਾਇਆ</span>
+                    Remaining Bags<br />
+                    <span className="font-black text-sm">ਬਾਕੀ ਬੋਰੀਆਂ (Balance)</span>
                   </div>
                   <div className="mt-3">
                     <div className="text-2xl lg:text-3xl font-black font-mono">
-                      {finalBalanceBags}
+                      {balanceBeforeLabour}
                     </div>
                     <div className="text-[11px] font-bold mt-0.5">
-                      {finalBalanceBags >= 0 ? 'ਆਖਰੀ ਬਕਾਇਆ (Remaining Bags)' : 'ਵਾਧੂ ਕਟੌਤੀ (Over Bags)'}
+                      {totalBagsBrought} - {totalPurchaseBags} = {balanceBeforeLabour} Bags
                     </div>
                   </div>
                 </div>
@@ -2112,16 +2073,16 @@ export const FarmerAccount: React.FC = () => {
                         Labour Expense / ਮਜ਼ਦੂਰੀ ਖਰਚ
                       </h4>
                       <p className="text-xs text-slate-500">
-                        ਮਜ਼ਦੂਰੀ ਖਰਚ ਅਤੇ ਮਜ਼ਦੂਰੀ ਦੀਆਂ ਬੋਰੀਆਂ ਕਟੌਤੀ (Labour Expense & Labour Bags)
+                        ਤੁਲਾਈ, ਭਰਾਈ ਅਤੇ ਮੰਡੀ ਮਜ਼ਦੂਰੀ ਖਰਚ (Labour Expense Breakdown)
                       </p>
                     </div>
                   </div>
                   <span className="px-3 py-1 bg-rose-100 text-rose-900 font-black rounded-lg text-xs">
-                    ਮਜ਼ਦੂਰੀ ਦੀਆਂ ਬੋਰੀਆਂ: {labourBags} Bags
+                    ਮਜ਼ਦੂਰੀ ਖਰਚ: ₹{labourExpense.toLocaleString('en-IN')}
                   </span>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {/* Expense Box */}
                   <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
                     <div className="text-xs text-slate-500 font-bold uppercase">
@@ -2135,29 +2096,16 @@ export const FarmerAccount: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Rate Box */}
-                  <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
-                    <div className="text-xs text-slate-500 font-bold uppercase">
-                      Bag Rate / ਪ੍ਰਤੀ ਬੋਰੀ ਰੇਟ
-                    </div>
-                    <div className="text-2xl font-black text-slate-900 font-mono mt-1">
-                      ₹{bagRate}
-                    </div>
-                    <div className="text-[11px] text-slate-500 mt-1">
-                      1 Bag = 37.5 Kg @ ₹2,461/Qtl
-                    </div>
-                  </div>
-
-                  {/* Formula / Result Box */}
+                  {/* Financial Impact Box */}
                   <div className="p-4 bg-rose-50/70 rounded-xl border border-rose-200">
                     <div className="text-xs text-rose-800 font-bold uppercase">
-                      Labour Bags / ਮਜ਼ਦੂਰੀ ਦੀਆਂ ਬੋਰੀਆਂ
+                      Financial Impact / ਵਿੱਤੀ ਅਸਰ
                     </div>
                     <div className="text-2xl font-black text-rose-950 font-mono mt-1">
-                      {labourBags} Bags (ਬੋਰੀਆਂ)
+                      -₹{labourExpense.toLocaleString('en-IN')}
                     </div>
                     <div className="text-[11px] text-rose-800 font-medium mt-1">
-                      ₹{labourExpense.toLocaleString('en-IN')} ÷ ₹{bagRate} = {labourBags} ਬੋਰੀਆਂ (ਅਗਲੀ ਪੂਰੀ ਬੋਰੀ 'ਤੇ ਰਾਊਂਡ)
+                      ਕੁੱਲ ਰਕਮ (Gross Amount) ਵਿੱਚੋਂ ਕਟੌਤੀ
                     </div>
                   </div>
                 </div>
@@ -2173,14 +2121,14 @@ export const FarmerAccount: React.FC = () => {
                         Calculation Summary / ਹਿਸਾਬ ਸਾਰ
                       </h4>
                       <p className="text-xs text-emerald-200">
-                        ਕਦਮ-ਦਰ-ਕਦਮ ਹਿਸਾਬ ਅਤੇ ਆਖਰੀ ਬਕਾਇਆ ਬੋਰੀਆਂ (Step-by-Step Calculation)
+                        ਕਦਮ-ਦਰ-ਕਦਮ ਹਿਸਾਬ ਅਤੇ ਬਾਕੀ ਬੋਰੀਆਂ (Step-by-Step Calculation)
                       </p>
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className="text-xs text-emerald-200">Final Balance / ਆਖਰੀ ਬਕਾਇਆ</div>
+                    <div className="text-xs text-emerald-200">Remaining Bags / ਬਾਕੀ ਬੋਰੀਆਂ</div>
                     <div className="text-xl font-black text-amber-300 font-mono">
-                      {finalBalanceBags} Bags
+                      {balanceBeforeLabour} Bags
                     </div>
                   </div>
                 </div>
@@ -2206,38 +2154,18 @@ export const FarmerAccount: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Step 3 */}
-                  <div className="flex items-center justify-between p-3 bg-amber-50 rounded-xl border border-amber-200 text-sm">
-                    <div className="font-bold text-amber-950">
-                      3. Balance Before Labour / ਮਜ਼ਦੂਰੀ ਤੋਂ ਪਹਿਲਾਂ ਬਕਾਇਆ:
-                    </div>
-                    <div className="font-black text-amber-950 font-mono text-base">
-                      {balanceBeforeLabour} Bags
-                    </div>
-                  </div>
-
-                  {/* Step 4 */}
-                  <div className="flex items-center justify-between p-3 bg-white rounded-xl border border-slate-200 text-sm">
-                    <div className="font-semibold text-slate-800">
-                      4. Less: Labour Bags / ਮਜ਼ਦੂਰੀ ਦੀਆਂ ਬੋਰੀਆਂ (₹{labourExpense} ÷ ₹{bagRate}):
-                    </div>
-                    <div className="font-black text-rose-700 font-mono text-base">
-                      - {labourBags} Bags
-                    </div>
-                  </div>
-
-                  {/* Step 5: Final Balance Highlight */}
+                  {/* Step 3: Remaining Balance Bags Highlight */}
                   <div className="p-4 bg-emerald-100/70 border-2 border-emerald-500 rounded-xl flex items-center justify-between">
                     <div>
                       <div className="text-base font-black text-emerald-950">
-                        Final Balance / ਆਖਰੀ ਬਕਾਇਆ
+                        3. Remaining Bags / ਬਾਕੀ ਬਚੀਆਂ ਬੋਰੀਆਂ
                       </div>
                       <div className="text-xs text-emerald-800 font-medium">
-                        ਕਿਸਾਨ ਦੀਆਂ ਮੰਡੀ ਵਿੱਚ ਬਾਕੀ ਬਚੀਆਂ ਬੋਰੀਆਂ
+                        ਕਿਸਾਨ ਦੀਆਂ ਮੰਡੀ ਵਿੱਚ ਬਾਕੀ ਬਚੀਆਂ ਬੋਰੀਆਂ (Stock Balance)
                       </div>
                     </div>
                     <div className="text-3xl font-black text-emerald-950 font-mono">
-                      {finalBalanceBags} Bags (ਬੋਰੀਆਂ)
+                      {balanceBeforeLabour} Bags (ਬੋਰੀਆਂ)
                     </div>
                   </div>
 

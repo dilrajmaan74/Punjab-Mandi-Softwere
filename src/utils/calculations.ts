@@ -140,13 +140,28 @@ export function calculatePayableAmount(grandTotalKg: number, ratePerQtl = FIXED_
 
 /**
  * Auto-format Date string as user types.
- * Converts "28082026" -> "28/08/2026"
- * Handles backspace and raw digits cleanly.
+ * Converts "28082026" or "05102027" -> "05/10/2027"
+ * Also gracefully handles "1/05/2026" -> "01/05/2026"
+ * Fixed slashes behavior: user only needs to type numbers!
  */
 export function autoFormatDate(input: string, isDeleting: boolean = false): string {
   if (!input) return '';
+  const trimmed = input.trim();
+  if (!trimmed) return '';
+
+  // If already formatted with slashes or dashes like 1/5/2026 or 1/05/2026
+  if (trimmed.includes('/') || trimmed.includes('-')) {
+    const parts = trimmed.split(/[/ -]/);
+    if (parts.length === 3 && parts[2].length === 4) {
+      const d = parts[0].padStart(2, '0').slice(-2);
+      const m = parts[1].padStart(2, '0').slice(-2);
+      const y = parts[2].slice(0, 4);
+      return `${d}/${m}/${y}`;
+    }
+  }
+
   // Strip non-digits
-  const digits = input.replace(/\D/g, '').slice(0, 8);
+  const digits = trimmed.replace(/\D/g, '').slice(0, 8);
   if (!digits) return '';
 
   if (digits.length < 2) {
@@ -820,6 +835,26 @@ export function parseDateString(dateStr: string): Date {
     if (!isNaN(parsed)) return new Date(parsed);
   }
 
+  // Pure 8-digit string e.g. "05102027" or "31102026"
+  if (/^\d{8}$/.test(trimmed)) {
+    const d = parseInt(trimmed.slice(0, 2), 10);
+    const m = parseInt(trimmed.slice(2, 4), 10) - 1;
+    const y = parseInt(trimmed.slice(4, 8), 10);
+    if (!isNaN(y) && !isNaN(m) && !isNaN(d)) {
+      return new Date(y, m, d);
+    }
+  }
+
+  // Pure 7-digit string e.g. "1052026" (1/05/2026)
+  if (/^\d{7}$/.test(trimmed)) {
+    const d = parseInt(trimmed.slice(0, 1), 10);
+    const m = parseInt(trimmed.slice(1, 3), 10) - 1;
+    const y = parseInt(trimmed.slice(3, 7), 10);
+    if (!isNaN(y) && !isNaN(m) && !isNaN(d)) {
+      return new Date(y, m, d);
+    }
+  }
+
   // Format: DD/MM/YYYY or YYYY-MM-DD or DD-MM-YYYY
   if (trimmed.includes('/') || trimmed.includes('-')) {
     const parts = trimmed.split(/[/ -]/);
@@ -833,7 +868,7 @@ export function parseDateString(dateStr: string): Date {
           return new Date(y, m, d);
         }
       } else {
-        // DD/MM/YYYY
+        // DD/MM/YYYY (or D/M/YYYY)
         const d = parseInt(parts[0], 10);
         const m = parseInt(parts[1], 10) - 1;
         const y = parseInt(parts[2], 10);
@@ -939,7 +974,10 @@ export function calculateAdvanceInterest(
         compounding?: 'SIMPLE' | 'HALF_YEARLY' | 'HALF_YEARLY_COMPOUND' | 'YEARLY';
         isInterestFree?: boolean;
         lastInterestSettledDate?: string;
-        repayments?: { amount: number; date?: string; isSettled?: boolean }[];
+        originalStartDate?: string;
+        originalAmount?: number;
+        isRolledForward?: boolean;
+        repayments?: { amount: number; date?: string; isSettled?: boolean; settledRestDate?: string }[];
         startDateStr?: string;
         startDate?: string;
         endDateStr?: string;
@@ -1073,11 +1111,23 @@ export function calculateAdvanceInterest(
   // Calculate Repayments: Repayment pays Accrued Interest first!
   // If an advance was rolled forward or interest was settled up to a rest date,
   // repayments that were already settled (isSettled: true) or occurred on/before lastInterestSettledDate
-  // must not be deducted again from the new period's principal.
+  // or on/before the rolled startDate must not be deducted again from the new period's principal.
+  const isRolled = Boolean(
+    lastInterestSettledDate ||
+    (typeof principalOrOptions === 'object' &&
+      principalOrOptions !== null &&
+      ((principalOrOptions as any).originalStartDate || (principalOrOptions as any).isRolledForward))
+  );
+
   const activeRepayments = repayments.filter((r) => {
     if ((r as any).isSettled) return false;
     if (lastInterestSettledDate && (r as any).date) {
       if (compareDatesChronological((r as any).date, lastInterestSettledDate) <= 0) {
+        return false;
+      }
+    }
+    if (isRolled && (r as any).date) {
+      if (compareDatesChronological((r as any).date, startDate) <= 0) {
         return false;
       }
     }

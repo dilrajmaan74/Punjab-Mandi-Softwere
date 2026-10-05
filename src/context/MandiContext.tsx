@@ -1292,7 +1292,7 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         firmAddress: activeFirm.address,
         firmMobile: activeFirm.mobile,
         firmLicence: activeFirm.licenceNo,
-        firmPan: activeFirm.pan || prev.firmPan || 'AAACJ1234F',
+        firmPan: activeFirm.pan !== undefined ? activeFirm.pan : (prev.firmPan || ''),
         firmGstin: activeFirm.gstin || prev.firmGstin,
         mandiNameEn: activeFirm.address.split(',')[0]?.trim() || prev.mandiNameEn,
         mandiNamePa: activeFirm.addressPa?.split(',')[0]?.trim() || prev.mandiNamePa,
@@ -1678,6 +1678,8 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             compounding: merged.compounding,
             isInterestFree: merged.isInterestFree,
             lastInterestSettledDate: merged.lastInterestSettledDate,
+            originalStartDate: merged.originalStartDate,
+            isRolledForward: Boolean(merged.lastInterestSettledDate || merged.originalStartDate),
             repayments: merged.repayments,
             startDate,
             endDate: tillDate
@@ -1762,10 +1764,10 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           const principalPaid = Math.max(0, Math.round((repaymentAmount - interestPaid) * 100) / 100);
           const newRemainingPrincipal = Math.max(0, Math.round((origPrincipal - principalPaid) * 100) / 100);
 
-          // If settleInterestAndRollForward is explicitly requested OR repayment exactly clears accrued interest:
+          // If settleInterestAndRollForward is explicitly requested OR repayment covers or clears accrued interest:
           const shouldRollForward = repaymentData.settleInterestAndRollForward !== undefined
             ? repaymentData.settleInterestAndRollForward
-            : (accruedInterestAtReturn > 0 && Math.abs(repaymentAmount - accruedInterestAtReturn) < 1);
+            : (repaymentAmount >= accruedInterestAtReturn || (accruedInterestAtReturn > 0 && Math.abs(repaymentAmount - accruedInterestAtReturn) < 1));
 
           if (shouldRollForward) {
             const newStartDate = returnDate;
@@ -1810,6 +1812,8 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             compounding: item.compounding,
             isInterestFree: item.isInterestFree,
             lastInterestSettledDate: item.lastInterestSettledDate,
+            originalStartDate: item.originalStartDate,
+            isRolledForward: Boolean(item.lastInterestSettledDate || item.originalStartDate),
             repayments: updatedRepayments,
             startDate,
             endDate: tillDate
@@ -1858,6 +1862,9 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             interestMode: item.interestMode,
             compounding: item.compounding,
             isInterestFree: item.isInterestFree,
+            lastInterestSettledDate: item.lastInterestSettledDate,
+            originalStartDate: item.originalStartDate,
+            isRolledForward: Boolean(item.lastInterestSettledDate || item.originalStartDate),
             repayments,
             startDate,
             endDate: tillDate
@@ -1977,6 +1984,8 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             compounding: item.compounding,
             isInterestFree: item.isInterestFree,
             lastInterestSettledDate: item.lastInterestSettledDate,
+            originalStartDate: item.originalStartDate,
+            isRolledForward: Boolean(item.lastInterestSettledDate || item.originalStartDate),
             repayments: updatedRepayments,
             startDate,
             endDate: tillDate
@@ -2444,7 +2453,14 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     const recalculatedAdvances: FarmerAdvanceRecord[] = rawAdvances.map((adv) => {
       const startDate = adv.date || adv.startDate || todayStr;
-      const tillDate = adv.interestTillDate || adv.endDate || effectiveTillDate;
+      let tillDate = adv.interestTillDate || adv.endDate || effectiveTillDate;
+      const maxRepaymentDate = (adv.repayments || []).reduce((max, r) => {
+        if (!r.date) return max;
+        return compareDatesChronological(r.date, max) > 0 ? r.date : max;
+      }, '');
+      if (maxRepaymentDate && compareDatesChronological(maxRepaymentDate, tillDate) > 0) {
+        tillDate = maxRepaymentDate;
+      }
       const amount = Number(adv.principal ?? adv.amount) || 0;
       const monthlyInterestRate = Number(adv.monthlyInterestRate) || 0;
       const calc = calculateAdvanceInterest({
@@ -2455,6 +2471,8 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         compounding: adv.compounding,
         isInterestFree: adv.isInterestFree,
         lastInterestSettledDate: adv.lastInterestSettledDate,
+        originalStartDate: adv.originalStartDate,
+        isRolledForward: Boolean(adv.lastInterestSettledDate || adv.originalStartDate),
         repayments: adv.repayments,
         startDate,
         endDate: tillDate
@@ -4430,6 +4448,11 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       supabaseSaveSettings(merged).catch(console.error);
       return merged;
     });
+
+    // Automatically sync firmPan to active firm if provided
+    if (newSettings.firmPan !== undefined && activeFirmId) {
+      updateFirm(activeFirmId, { pan: newSettings.firmPan.trim() });
+    }
   };
 
   /**
