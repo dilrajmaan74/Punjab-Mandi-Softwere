@@ -1,4 +1,4 @@
-import { LabourAndDeductions, CustomDeductionLine, MandiSettings, BagConditionBreakdown } from '../types/mandi';
+import { LabourAndDeductions, CustomDeductionLine, MandiSettings, BagConditionBreakdown, BagsEntryRecord } from '../types/mandi';
 
 /**
  * Punjab Mandi Calculation Utilities
@@ -597,6 +597,99 @@ export function computeUniversalLabour(params: UniversalLabourInput): UniversalL
 
     labourDeductions,
     conditionBreakdown
+  };
+}
+
+export interface BagsEntryLabourBreakdownResult {
+  totalBags: number;
+  pakkiBags: number;
+  pakkiRate: number;
+  pakkiAmount: number;
+  doubleBags: number;
+  doubleRate: number;
+  doubleAmount: number;
+  sukkiBags: number;
+  sukkiRate: number;
+  sukkiAmount: number;
+  cleanBags: number;
+  totalLabour: number;
+  grossAmount: number;
+  netAmount: number;
+}
+
+/**
+ * Extract comprehensive labour & bag condition breakdown from any BagsEntryRecord
+ * Handles both conditionBreakdown and legacy labourDeductions objects consistently.
+ */
+export function getBagsEntryLabourBreakdown(
+  entry: Partial<BagsEntryRecord>,
+  defaultPakkiRate = 7,
+  defaultDoubleRate = 14,
+  defaultSukkiRate = 5
+): BagsEntryLabourBreakdownResult {
+  const bCount = Number(entry.bags || ((Number(entry.newBags || 0)) + (Number(entry.oldBags || 0))) || 0);
+  const cb = entry.conditionBreakdown;
+  const ld = entry.labourDeductions;
+
+  let pakkiBags = bCount;
+  let doubleBags = 0;
+  let sukkiBags = 0;
+  let pakkiRate = defaultPakkiRate;
+  let doubleRate = defaultDoubleRate;
+  let sukkiRate = defaultSukkiRate;
+  let pakkiAmount = 0;
+  let doubleAmount = 0;
+  let sukkiAmount = 0;
+  let totalLabour = 0;
+
+  if (cb) {
+    pakkiBags = cb.pakkiBags !== undefined ? Number(cb.pakkiBags) : bCount;
+    doubleBags = cb.doubleBags !== undefined ? Number(cb.doubleBags) : 0;
+    sukkiBags = cb.sukkiBags !== undefined ? Number(cb.sukkiBags) : 0;
+    pakkiRate = cb.pakkiRate ?? defaultPakkiRate;
+    doubleRate = cb.doubleRate ?? defaultDoubleRate;
+    sukkiRate = cb.sukkiRate ?? defaultSukkiRate;
+    pakkiAmount = cb.pakkiAmount !== undefined ? Number(cb.pakkiAmount) : (pakkiBags * pakkiRate);
+    doubleAmount = cb.doubleAmount !== undefined ? Number(cb.doubleAmount) : (doubleBags * doubleRate);
+    sukkiAmount = cb.sukkiAmount !== undefined ? Number(cb.sukkiAmount) : (sukkiBags * sukkiRate);
+    totalLabour = pakkiAmount + doubleAmount + sukkiAmount;
+  } else if (ld) {
+    pakkiBags = ld.pakkiBagsCount !== undefined ? Number(ld.pakkiBagsCount) : (ld.pakkiLabourEnabled ? bCount : 0);
+    doubleBags = ld.doubleBagsCount !== undefined ? Number(ld.doubleBagsCount) : 0;
+    sukkiBags = ld.sukkiBagsCount !== undefined ? Number(ld.sukkiBagsCount) : 0;
+    pakkiRate = ld.pakkiLabourRate ?? defaultPakkiRate;
+    doubleRate = ld.pakkaDoubleLabourRate ?? defaultDoubleRate;
+    sukkiRate = ld.sukhiLabourRate ?? defaultSukkiRate;
+    pakkiAmount = Number(ld.pakkiLabourAmount !== undefined ? ld.pakkiLabourAmount : (pakkiBags * pakkiRate));
+    doubleAmount = Number(ld.pakkaDoubleLabourAmount !== undefined ? ld.pakkaDoubleLabourAmount : (doubleBags * doubleRate));
+    sukkiAmount = Number(ld.sukhiLabourAmount !== undefined ? ld.sukhiLabourAmount : (sukkiBags * sukkiRate));
+    totalLabour = Number(ld.totalLabourDeduction !== undefined ? ld.totalLabourDeduction : (pakkiAmount + doubleAmount + sukkiAmount));
+  } else {
+    pakkiBags = bCount;
+    pakkiAmount = pakkiBags * pakkiRate;
+    totalLabour = pakkiAmount;
+  }
+
+  // Clean / normal bags without double pakha or sukh
+  const cleanBags = Math.max(0, bCount - Math.max(doubleBags, sukkiBags));
+  const grossAmount = Number(entry.totalAmount || 0);
+  const netAmount = Number(entry.netAmount !== undefined ? entry.netAmount : Math.max(0, grossAmount - totalLabour));
+
+  return {
+    totalBags: bCount,
+    pakkiBags,
+    pakkiRate,
+    pakkiAmount,
+    doubleBags,
+    doubleRate,
+    doubleAmount,
+    sukkiBags,
+    sukkiRate,
+    sukkiAmount,
+    cleanBags,
+    totalLabour,
+    grossAmount,
+    netAmount
   };
 }
 
@@ -1279,12 +1372,59 @@ export function isRecordInFiscalYear(
   if (recordFiscalYear) {
     const { startYear: rStart } = parseFiscalYear(recordFiscalYear);
     const { startYear: tStart } = parseFiscalYear(targetFiscalYear);
-    if (rStart === tStart) return true;
+    return rStart === tStart;
   }
   if (recordDate) {
     return isDateInFiscalYear(recordDate, targetFiscalYear);
   }
   return true;
+}
+
+/**
+ * Safely transfers any historical date string to fall within FY 2026-27 (01/04/2026 to 31/03/2027)
+ */
+export function transferDateTo2026_27(dateStr?: string): string {
+  if (!dateStr || typeof dateStr !== 'string') return '15/10/2026';
+  const trimmed = dateStr.trim();
+  if (!trimmed) return '15/10/2026';
+
+  // If already in 2026-27, keep as-is
+  if (isDateInFiscalYear(trimmed, '2026-27')) {
+    return trimmed;
+  }
+
+  // Handle DD/MM/YYYY or DD-MM-YYYY
+  if (/^\d{1,2}[/-]\d{1,2}[/-]\d{2,4}$/.test(trimmed)) {
+    const separator = trimmed.includes('/') ? '/' : '-';
+    const parts = trimmed.split(separator);
+    const dd = parts[0].padStart(2, '0');
+    const mm = parseInt(parts[1], 10);
+    const mmStr = String(isNaN(mm) || mm < 1 ? 10 : mm).padStart(2, '0');
+    // Indian FY: April(4) to December(12) is 2026, Jan(1) to Mar(3) is 2027
+    const targetYear = mm >= 4 ? 2026 : 2027;
+    return `${dd}/${mmStr}/${targetYear}`;
+  }
+
+  // Handle YYYY-MM-DD
+  if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(trimmed)) {
+    const parts = trimmed.split('-');
+    const mm = parseInt(parts[1], 10);
+    const dd = parts[2].padStart(2, '0');
+    const mmStr = String(isNaN(mm) || mm < 1 ? 10 : mm).padStart(2, '0');
+    const targetYear = mm >= 4 ? 2026 : 2027;
+    return `${targetYear}-${mmStr}-${dd}`;
+  }
+
+  // Fallback using Date parser
+  const parsed = parseDateString(trimmed);
+  if (!isNaN(parsed.getTime())) {
+    const mm = parsed.getMonth() + 1;
+    const dd = String(parsed.getDate()).padStart(2, '0');
+    const targetYear = mm >= 4 ? 2026 : 2027;
+    return `${dd}/${String(mm).padStart(2, '0')}/${targetYear}`;
+  }
+
+  return '15/10/2026';
 }
 
 

@@ -10,7 +10,8 @@ import {
   formatCurrency,
   formatCurrencyINR,
   formatKgToQulKg,
-  compareDatesChronological
+  compareDatesChronological,
+  getBagsEntryLabourBreakdown
 } from '../../utils/calculations';
 import { openWhatsApp } from '../../utils/whatsappNotification';
 import {
@@ -499,12 +500,15 @@ export const FarmerThreePageAccount: React.FC<FarmerThreePageAccountProps> = ({
                   </div>
                 ) : (
                   <table className="w-full text-xs text-left">
-                    <thead className="bg-slate-100 text-slate-700 font-black uppercase text-[11px] border-b border-slate-200">
+                    <thead className="bg-slate-100 text-slate-700 font-black uppercase text-[10px] border-b border-slate-200">
                       <tr>
                         <th className="py-2.5 px-2">ਮਿਤੀ (Date)</th>
-                        <th className="py-2.5 px-2 text-center">ਬੋਰੀਆਂ (Bags)</th>
-                        <th className="py-2.5 px-2 text-right">ਕੁੱਲ ਵਜ਼ਨ (Weight)</th>
-                        <th className="py-2.5 px-2 text-right">ਰੇਟ (Rate)</th>
+                        <th className="py-2.5 px-2 text-center">ਬੋਰੀਆਂ</th>
+                        <th className="py-2.5 px-2 text-center">ਪੱਕੀ ਲੇਬਰ</th>
+                        <th className="py-2.5 px-2 text-center">ਡਬਲ ਪੱਖਾ</th>
+                        <th className="py-2.5 px-2 text-center">ਸੁੱਕ ਲੱਗੀ</th>
+                        <th className="py-2.5 px-2 text-right">ਕੁੱਲ ਵਜ਼ਨ</th>
+                        <th className="py-2.5 px-2 text-right">ਰੇਟ</th>
                         <th className="py-2.5 px-2 text-right">ਰਕਮ (₹)</th>
                       </tr>
                     </thead>
@@ -512,9 +516,15 @@ export const FarmerThreePageAccount: React.FC<FarmerThreePageAccountProps> = ({
                       {arrivalEntries.map((entry, idx) => {
                         const bagsCount = entry.bags || (entry.newBags + entry.oldBags) || 0;
                         const weightDisplay = entry.grandTotalDisplay || entry.totalBagsWeightDisplay || `${(entry.grandTotalKg || 0) / 100} Qtl`;
+                        const brk = getBagsEntryLabourBreakdown(
+                          entry,
+                          settings.defaultPakkiLabourRate ?? 7,
+                          settings.defaultPakkaDoubleLabourRate ?? 14,
+                          settings.defaultSukhiLabourRate ?? 5
+                        );
                         return (
                           <tr key={entry.id || idx} className="hover:bg-emerald-50/40 transition">
-                            <td className="py-2.5 px-2 font-mono font-bold text-slate-800">
+                            <td className="py-2.5 px-2 font-mono font-bold text-slate-800 whitespace-nowrap">
                               {entry.date}
                             </td>
                             <td className="py-2.5 px-2 text-center">
@@ -522,10 +532,40 @@ export const FarmerThreePageAccount: React.FC<FarmerThreePageAccountProps> = ({
                                 {bagsCount}
                               </span>
                               {(entry.newBags > 0 || entry.oldBags > 0) && (
-                                <div className="text-[10px] text-slate-400 mt-0.5">
-                                  {entry.newBags > 0 ? `ਨਵਾਂ: ${entry.newBags} ` : ''}
-                                  {entry.oldBags > 0 ? `ਪੁਰਾਣਾ: ${entry.oldBags}` : ''}
+                                <div className="text-[9px] text-slate-400 mt-0.5">
+                                  {entry.newBags > 0 ? `ਨ:${entry.newBags} ` : ''}
+                                  {entry.oldBags > 0 ? `ਪੁ:${entry.oldBags}` : ''}
                                 </div>
+                              )}
+                            </td>
+                            {/* Pakki Bags */}
+                            <td className="py-2.5 px-2 text-center">
+                              {brk.pakkiBags > 0 ? (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-900 border border-indigo-200">
+                                  {brk.pakkiBags} ਬੋ.
+                                </span>
+                              ) : (
+                                <span className="text-slate-400 text-xs">—</span>
+                              )}
+                            </td>
+                            {/* Double Pakha Bags */}
+                            <td className="py-2.5 px-2 text-center">
+                              {brk.doubleBags > 0 ? (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-950 border border-amber-300">
+                                  💨 {brk.doubleBags} ਬੋ.
+                                </span>
+                              ) : (
+                                <span className="text-slate-400 text-[10px]">ਬਿਨਾਂ ਪੱਖਾ</span>
+                              )}
+                            </td>
+                            {/* Sukh Bags */}
+                            <td className="py-2.5 px-2 text-center">
+                              {brk.sukkiBags > 0 ? (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-teal-50 text-teal-950 border border-teal-300">
+                                  ☀️ {brk.sukkiBags} ਬੋ.
+                                </span>
+                              ) : (
+                                <span className="text-slate-400 text-xs">—</span>
                               )}
                             </td>
                             <td className="py-2.5 px-2 text-right font-medium text-slate-700">

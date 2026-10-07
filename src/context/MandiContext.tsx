@@ -65,7 +65,8 @@ import {
   isDateInFiscalYear,
   validateDateInFiscalYear,
   isRecordInFiscalYear,
-  compareDatesChronological
+  compareDatesChronological,
+  transferDateTo2026_27
 } from '../utils/calculations';
 import { isSupabaseConfigured } from '../lib/supabase';
 import {
@@ -243,6 +244,12 @@ interface MandiContextType {
     carriedFarmersCount: number;
     totalDr: number;
     totalCr: number;
+  };
+  transferAllDataTo2026_27: () => {
+    success: boolean;
+    count: number;
+    messagePa: string;
+    messageEn: string;
   };
   getFarmerOpeningBalanceForYear: (farmerId: string, fiscalYear?: string) => FarmerYearOpeningBalance | null;
   setFarmerOpeningBalanceForYear: (farmerId: string, balance: FarmerYearOpeningBalance, fiscalYear?: string) => void;
@@ -602,6 +609,47 @@ export const saveFirmData = <T,>(baseKey: string, firmId: string, data: T) => {
   }
 };
 
+// Helper to transform any record list to FY 2026-27 (100% transfer)
+export function transferRecordArrayTo2026_27<T extends Record<string, any>>(records: T[], dateField: string = 'date'): T[] {
+  if (!Array.isArray(records)) return [];
+  return records.map((item) => {
+    const copy: any = { ...item, fiscalYear: '2026-27' };
+    if (dateField && copy[dateField]) {
+      copy[dateField] = transferDateTo2026_27(copy[dateField]);
+    }
+    if (Array.isArray(copy.repayments)) {
+      copy.repayments = copy.repayments.map((r: any) => ({
+        ...r,
+        date: transferDateTo2026_27(r.date)
+      }));
+    }
+    return copy;
+  });
+}
+
+// Helper to transform farmer records and opening balances to FY 2026-27
+export function transferFarmersTo2026_27(farmersList: Farmer[]): Farmer[] {
+  if (!Array.isArray(farmersList)) return [];
+  return farmersList.filter((f) => f && f.id).map((f) => {
+    const updatedYOB = { ...(f.yearOpeningBalances || {}) };
+    if (updatedYOB['2025-26']) {
+      updatedYOB['2026-27'] = {
+        ...updatedYOB['2025-26'],
+        date: transferDateTo2026_27(updatedYOB['2025-26'].date),
+        notes: updatedYOB['2025-26'].notes
+          ? `${updatedYOB['2025-26'].notes} (2026-27 ਵਿੱਚ ਤਬਦੀਲ)`
+          : '2026-27 ਓਪਨਿੰਗ ਬੈਲੈਂਸ'
+      };
+      delete updatedYOB['2025-26'];
+    }
+    return {
+      ...f,
+      yearOpeningBalances: updatedYOB,
+      openingBalanceDate: f.openingBalanceDate ? transferDateTo2026_27(f.openingBalanceDate) : f.openingBalanceDate
+    };
+  });
+}
+
 export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // 1. Multi-Firm Management: initialize active firm first
   const [firms, setFirms] = useState<MandiFirm[]>(() => {
@@ -647,7 +695,7 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   // 2. Farmers list - strictly isolated per active firm
   const [farmers, setFarmers] = useState<Farmer[]>(() => {
     const list = loadFirmData<Farmer[]>(LOCAL_STORAGE_KEYS.FARMERS, activeFirmId, []);
-    return Array.isArray(list) ? list.filter((f) => f && f.id) : [];
+    return transferFarmersTo2026_27(Array.isArray(list) ? list : []);
   });
 
   // 3. Bags entries - strictly isolated per active firm
@@ -697,16 +745,17 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       return entry;
     });
 
+    const transferred = transferRecordArrayTo2026_27(repaired, 'date');
     if (needsSave) {
-      saveFirmData(LOCAL_STORAGE_KEYS.BAGS_ENTRIES, activeFirmId, repaired);
+      saveFirmData(LOCAL_STORAGE_KEYS.BAGS_ENTRIES, activeFirmId, transferred);
     }
-    return repaired;
+    return transferred;
   });
 
   // 4. Bardana Received Records - strictly isolated per active firm
   const [bardanaRecords, setBardanaRecords] = useState<BardanaReceivedRecord[]>(() => {
     const list = loadFirmData<BardanaReceivedRecord[]>(LOCAL_STORAGE_KEYS.BARDANA, activeFirmId, []);
-    return Array.isArray(list) ? list : [];
+    return transferRecordArrayTo2026_27(Array.isArray(list) ? list : [], 'date');
   });
 
   // 5. Daily Purchase Records - strictly isolated per active firm
@@ -721,7 +770,7 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       if (!isNaN(num) && num > max) max = num;
     });
     if (purchaseIdCounterRef) purchaseIdCounterRef.current = max;
-    return list.map((r) => {
+    const sanitized = list.map((r) => {
       if (!r.id || seen.has(r.id)) {
         max++;
         const newId = `PUR-${String(max).padStart(5, '0')}`;
@@ -731,24 +780,25 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       seen.add(r.id);
       return r;
     });
+    return transferRecordArrayTo2026_27(sanitized, 'date');
   });
 
   // 6. Farmer Payment Records - strictly isolated per active firm
   const [farmerPayments, setFarmerPayments] = useState<FarmerPaymentRecord[]>(() => {
     const list = loadFirmData<FarmerPaymentRecord[]>(LOCAL_STORAGE_KEYS.FARMER_PAYMENTS, activeFirmId, []);
-    return Array.isArray(list) ? list : [];
+    return transferRecordArrayTo2026_27(Array.isArray(list) ? list : [], 'date');
   });
 
   // 7. Farmer Advance Records - strictly isolated per active firm
   const [farmerAdvances, setFarmerAdvances] = useState<FarmerAdvanceRecord[]>(() => {
     const list = loadFirmData<FarmerAdvanceRecord[]>(LOCAL_STORAGE_KEYS.ADVANCES, activeFirmId, []);
-    return Array.isArray(list) ? list : [];
+    return transferRecordArrayTo2026_27(Array.isArray(list) ? list : [], 'date');
   });
 
   // 8. Boli Records - strictly isolated per active firm
   const [boliRecords, setBoliRecords] = useState<BoliRecord[]>(() => {
     const list = loadFirmData<BoliRecord[]>(LOCAL_STORAGE_KEYS.BOLI_RECORDS, activeFirmId, []);
-    return Array.isArray(list) ? list : [];
+    return transferRecordArrayTo2026_27(Array.isArray(list) ? list : [], 'date');
   });
 
   // 9. Labour Mates - isolated per firm
@@ -760,19 +810,19 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   // 10. Labour Work Entries - strictly isolated per active firm
   const [labourWorkEntries, setLabourWorkEntries] = useState<LabourWorkEntry[]>(() => {
     const list = loadFirmData<LabourWorkEntry[]>(LOCAL_STORAGE_KEYS.LABOUR_WORK_ENTRIES, activeFirmId, []);
-    return Array.isArray(list) ? list : [];
+    return transferRecordArrayTo2026_27(Array.isArray(list) ? list : [], 'date');
   });
 
   // 11. Labour Advance / Kharcha Payments - strictly isolated per active firm
   const [labourAdvancePayments, setLabourAdvancePayments] = useState<LabourAdvancePayment[]>(() => {
     const list = loadFirmData<LabourAdvancePayment[]>(LOCAL_STORAGE_KEYS.LABOUR_ADVANCE_PAYMENTS, activeFirmId, []);
-    return Array.isArray(list) ? list : [];
+    return transferRecordArrayTo2026_27(Array.isArray(list) ? list : [], 'date');
   });
 
   // 12. Lefting (Sheller Dispatch) Records - strictly isolated per active firm
   const [leftingRecords, setLeftingRecords] = useState<LeftingRecord[]>(() => {
     const list = loadFirmData<LeftingRecord[]>(LOCAL_STORAGE_KEYS.LEFTING, activeFirmId, []);
-    return Array.isArray(list) ? list : [];
+    return transferRecordArrayTo2026_27(Array.isArray(list) ? list : [], 'dispatchDate');
   });
 
   // 13. Recycle Bin Items - strictly isolated per active firm
@@ -876,11 +926,9 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const [activeFiscalYear, setActiveFiscalYear] = useState<string>(() => {
     try {
-      const stored = localStorage.getItem(LOCAL_STORAGE_KEYS.ACTIVE_FISCAL_YEAR);
-      return stored || DEFAULT_ACTIVE_YEAR;
-    } catch {
-      return DEFAULT_ACTIVE_YEAR;
-    }
+      localStorage.setItem(LOCAL_STORAGE_KEYS.ACTIVE_FISCAL_YEAR, DEFAULT_ACTIVE_YEAR);
+    } catch {}
+    return DEFAULT_ACTIVE_YEAR;
   });
 
   const [lockedYears, setLockedYears] = useState<string[]>(() => {
@@ -949,7 +997,8 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [pakkaVouchers, setPakkaVouchers] = useState<VoucherEntry[]>(() => {
     try {
       const stored = localStorage.getItem(LOCAL_STORAGE_KEYS.PAKKA_VOUCHERS);
-      return stored ? JSON.parse(stored) : [];
+      const list = stored ? JSON.parse(stored) : [];
+      return transferRecordArrayTo2026_27(Array.isArray(list) ? list : [], 'date');
     } catch {
       return [];
     }
@@ -959,7 +1008,8 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [iFormRecords, setIFormRecords] = useState<IFormRecord[]>(() => {
     try {
       const stored = localStorage.getItem(LOCAL_STORAGE_KEYS.IFORM_RECORDS);
-      return stored ? JSON.parse(stored) : [];
+      const list = stored ? JSON.parse(stored) : [];
+      return transferRecordArrayTo2026_27(Array.isArray(list) ? list : [], 'date');
     } catch {
       return [];
     }
@@ -969,7 +1019,8 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [jFormRecords, setJFormRecords] = useState<JFormRecord[]>(() => {
     try {
       const stored = localStorage.getItem(LOCAL_STORAGE_KEYS.JFORM_RECORDS);
-      return stored ? JSON.parse(stored) : [];
+      const list = stored ? JSON.parse(stored) : [];
+      return transferRecordArrayTo2026_27(Array.isArray(list) ? list : [], 'date');
     } catch {
       return [];
     }
@@ -979,7 +1030,8 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [tdsRecords, setTdsRecords] = useState<TDSRecord[]>(() => {
     try {
       const stored = localStorage.getItem(LOCAL_STORAGE_KEYS.TDS_RECORDS);
-      return stored ? JSON.parse(stored) : [];
+      const list = stored ? JSON.parse(stored) : [];
+      return transferRecordArrayTo2026_27(Array.isArray(list) ? list : [], 'date');
     } catch {
       return [];
     }
@@ -1140,6 +1192,56 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   useEffect(() => {
     if (isSupabaseConfigured()) {
       syncWithSupabase();
+    }
+  }, []);
+
+  // 100% Data Transfer to FY 2026-27 across all firms & keys on software load
+  useEffect(() => {
+    try {
+      localStorage.setItem(LOCAL_STORAGE_KEYS.ACTIVE_FISCAL_YEAR, DEFAULT_ACTIVE_YEAR);
+      const allKeys = Object.keys(localStorage);
+      allKeys.forEach((key) => {
+        if (
+          key.includes('bags_entries') ||
+          key.includes('daily_purchases') ||
+          key.includes('farmer_payments') ||
+          key.includes('advances') ||
+          key.includes('bardana') ||
+          key.includes('boli_records') ||
+          key.includes('lefting') ||
+          key.includes('labour_work') ||
+          key.includes('labour_advance') ||
+          key.includes('pakka_vouchers') ||
+          key.includes('iform') ||
+          key.includes('jform') ||
+          key.includes('tds')
+        ) {
+          try {
+            const raw = localStorage.getItem(key);
+            if (raw) {
+              const parsed = JSON.parse(raw);
+              if (Array.isArray(parsed) && parsed.length > 0) {
+                const dateKey = key.includes('lefting') ? 'dispatchDate' : 'date';
+                const migrated = transferRecordArrayTo2026_27(parsed, dateKey);
+                localStorage.setItem(key, JSON.stringify(migrated));
+              }
+            }
+          } catch {}
+        } else if (key.includes('farmers')) {
+          try {
+            const raw = localStorage.getItem(key);
+            if (raw) {
+              const parsed = JSON.parse(raw);
+              if (Array.isArray(parsed) && parsed.length > 0) {
+                const migrated = transferFarmersTo2026_27(parsed);
+                localStorage.setItem(key, JSON.stringify(migrated));
+              }
+            }
+          } catch {}
+        }
+      });
+    } catch (e) {
+      console.warn('Initial FY 2026-27 storage transfer check error:', e);
     }
   }, []);
 
@@ -4185,19 +4287,19 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setActiveFirmIdState(newFirmId);
     localStorage.setItem(LOCAL_STORAGE_KEYS.ACTIVE_FIRM_ID, newFirmId);
 
-    // 5. Update state arrays to target firm
-    setFarmers(Array.isArray(newFarmers) ? newFarmers.filter((f) => f && f.id) : []);
-    setBagsEntries(Array.isArray(newBags) ? newBags : []);
-    setBardanaRecords(Array.isArray(newBardana) ? newBardana : []);
-    setDailyPurchaseRecords(Array.isArray(newPurchases) ? newPurchases : []);
-    setFarmerPayments(Array.isArray(newPayments) ? newPayments : []);
-    setFarmerAdvances(Array.isArray(newAdvances) ? newAdvances : []);
-    setBoliRecords(Array.isArray(newBolis) ? newBolis : []);
-    setLeftingRecords(Array.isArray(newLefting) ? newLefting : []);
+    // 5. Update state arrays to target firm (100% transferred to FY 2026-27)
+    setFarmers(transferFarmersTo2026_27(Array.isArray(newFarmers) ? newFarmers : []));
+    setBagsEntries(transferRecordArrayTo2026_27(Array.isArray(newBags) ? newBags : [], 'date'));
+    setBardanaRecords(transferRecordArrayTo2026_27(Array.isArray(newBardana) ? newBardana : [], 'date'));
+    setDailyPurchaseRecords(transferRecordArrayTo2026_27(Array.isArray(newPurchases) ? newPurchases : [], 'date'));
+    setFarmerPayments(transferRecordArrayTo2026_27(Array.isArray(newPayments) ? newPayments : [], 'date'));
+    setFarmerAdvances(transferRecordArrayTo2026_27(Array.isArray(newAdvances) ? newAdvances : [], 'date'));
+    setBoliRecords(transferRecordArrayTo2026_27(Array.isArray(newBolis) ? newBolis : [], 'date'));
+    setLeftingRecords(transferRecordArrayTo2026_27(Array.isArray(newLefting) ? newLefting : [], 'dispatchDate'));
     setRecycleBinItems(Array.isArray(newBin) ? newBin : []);
     setLabourMates(Array.isArray(newMates) && newMates.length > 0 ? newMates : DEFAULT_LABOUR_MATES);
-    setLabourWorkEntries(Array.isArray(newWork) ? newWork : []);
-    setLabourAdvancePayments(Array.isArray(newLabourAdvances) ? newLabourAdvances : []);
+    setLabourWorkEntries(transferRecordArrayTo2026_27(Array.isArray(newWork) ? newWork : [], 'date'));
+    setLabourAdvancePayments(transferRecordArrayTo2026_27(Array.isArray(newLabourAdvances) ? newLabourAdvances : [], 'date'));
     setTrucks(Array.isArray(newTrucks) ? newTrucks : []);
 
     // 6. Update settings header
@@ -4362,6 +4464,127 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       carriedFarmersCount,
       totalDr: Math.round(totalDr * 100) / 100,
       totalCr: Math.round(totalCr * 100) / 100
+    };
+  };
+
+  /**
+   * 100% Transfer of ALL Data to FY 2026-27
+   * Automatically cleans 2025-26 and migrates every record to 2026-27
+   */
+  const transferAllDataTo2026_27 = () => {
+    let transferredCount = 0;
+
+    // 1. Farmers & Opening Balances
+    setFarmers((prev) => {
+      const updated = transferFarmersTo2026_27(prev);
+      saveFirmData(LOCAL_STORAGE_KEYS.FARMERS, activeFirmId, updated);
+      return updated;
+    });
+
+    // 2. Bags Entries
+    setBagsEntries((prev) => {
+      const updated = transferRecordArrayTo2026_27(prev, 'date');
+      transferredCount += updated.length;
+      saveFirmData(LOCAL_STORAGE_KEYS.BAGS_ENTRIES, activeFirmId, updated);
+      return updated;
+    });
+
+    // 3. Daily Purchase Records
+    setDailyPurchaseRecords((prev) => {
+      const updated = transferRecordArrayTo2026_27(prev, 'date');
+      transferredCount += updated.length;
+      saveFirmData(LOCAL_STORAGE_KEYS.DAILY_PURCHASES, activeFirmId, updated);
+      return updated;
+    });
+
+    // 4. Farmer Payments
+    setFarmerPayments((prev) => {
+      const updated = transferRecordArrayTo2026_27(prev, 'date');
+      transferredCount += updated.length;
+      saveFirmData(LOCAL_STORAGE_KEYS.FARMER_PAYMENTS, activeFirmId, updated);
+      return updated;
+    });
+
+    // 5. Farmer Advances
+    setFarmerAdvances((prev) => {
+      const updated = transferRecordArrayTo2026_27(prev, 'date');
+      transferredCount += updated.length;
+      saveFirmData(LOCAL_STORAGE_KEYS.ADVANCES, activeFirmId, updated);
+      return updated;
+    });
+
+    // 6. Bardana Records
+    setBardanaRecords((prev) => {
+      const updated = transferRecordArrayTo2026_27(prev, 'date');
+      transferredCount += updated.length;
+      saveFirmData(LOCAL_STORAGE_KEYS.BARDANA, activeFirmId, updated);
+      return updated;
+    });
+
+    // 7. Boli Records
+    setBoliRecords((prev) => {
+      const updated = transferRecordArrayTo2026_27(prev, 'date');
+      transferredCount += updated.length;
+      saveFirmData(LOCAL_STORAGE_KEYS.BOLI_RECORDS, activeFirmId, updated);
+      return updated;
+    });
+
+    // 8. Lefting Records
+    setLeftingRecords((prev) => {
+      const updated = transferRecordArrayTo2026_27(prev, 'dispatchDate');
+      transferredCount += updated.length;
+      saveFirmData(LOCAL_STORAGE_KEYS.LEFTING, activeFirmId, updated);
+      return updated;
+    });
+
+    // 9. Labour Work Entries & Advances
+    setLabourWorkEntries((prev) => {
+      const updated = transferRecordArrayTo2026_27(prev, 'date');
+      transferredCount += updated.length;
+      saveFirmData(LOCAL_STORAGE_KEYS.LABOUR_WORK_ENTRIES, activeFirmId, updated);
+      return updated;
+    });
+
+    setLabourAdvancePayments((prev) => {
+      const updated = transferRecordArrayTo2026_27(prev, 'date');
+      transferredCount += updated.length;
+      saveFirmData(LOCAL_STORAGE_KEYS.LABOUR_ADVANCE_PAYMENTS, activeFirmId, updated);
+      return updated;
+    });
+
+    // 10. Pakka, I-Form, J-Form, TDS
+    setPakkaVouchers((prev) => {
+      const updated = transferRecordArrayTo2026_27(prev, 'date');
+      try { localStorage.setItem(LOCAL_STORAGE_KEYS.PAKKA_VOUCHERS, JSON.stringify(updated)); } catch {}
+      return updated;
+    });
+    setIFormRecords((prev) => {
+      const updated = transferRecordArrayTo2026_27(prev, 'date');
+      try { localStorage.setItem(LOCAL_STORAGE_KEYS.IFORM_RECORDS, JSON.stringify(updated)); } catch {}
+      return updated;
+    });
+    setJFormRecords((prev) => {
+      const updated = transferRecordArrayTo2026_27(prev, 'date');
+      try { localStorage.setItem(LOCAL_STORAGE_KEYS.JFORM_RECORDS, JSON.stringify(updated)); } catch {}
+      return updated;
+    });
+    setTdsRecords((prev) => {
+      const updated = transferRecordArrayTo2026_27(prev, 'date');
+      try { localStorage.setItem(LOCAL_STORAGE_KEYS.TDS_RECORDS, JSON.stringify(updated)); } catch {}
+      return updated;
+    });
+
+    // 11. Ensure active fiscal year is '2026-27'
+    setActiveFiscalYear(DEFAULT_ACTIVE_YEAR);
+    try {
+      localStorage.setItem(LOCAL_STORAGE_KEYS.ACTIVE_FISCAL_YEAR, DEFAULT_ACTIVE_YEAR);
+    } catch {}
+
+    return {
+      success: true,
+      count: transferredCount,
+      messagePa: 'ਸਾਰਾ ਡਾਟਾ ਸਫਲਤਾਪੂਰਵਕ 2026-27 ਵਿੱਚ ਤਬਦੀਲ (TRF) ਹੋ ਗਿਆ ਹੈ। 2025-26 ਵਿੱਚ ਹੁਣ ਕੋਈ ਡਾਟਾ ਨਹੀਂ ਦਿਖੇਗਾ।',
+      messageEn: 'All data successfully transferred to FY 2026-27. No data will show in FY 2025-26.'
     };
   };
 
@@ -4865,6 +5088,7 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         isYearLocked,
         toggleYearLock,
         carryForwardBalancesToNextYear,
+        transferAllDataTo2026_27,
         getFarmerOpeningBalanceForYear,
         setFarmerOpeningBalanceForYear,
         validateDateInFiscalYear: validateDateInFiscalYearLocal,

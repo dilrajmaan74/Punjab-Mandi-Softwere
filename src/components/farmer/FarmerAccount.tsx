@@ -60,7 +60,7 @@ import {
   CreditCard,
   ArrowRight
 } from 'lucide-react';
-import { formatCurrencyINR, maskAadhaarNumber, calculateAdvanceInterest, formatCurrency, addMonthsToDateString, formatDateToDDMMYYYY, autoFormatDate } from '../../utils/calculations';
+import { formatCurrencyINR, maskAadhaarNumber, calculateAdvanceInterest, formatCurrency, addMonthsToDateString, formatDateToDDMMYYYY, autoFormatDate, getBagsEntryLabourBreakdown, formatKgToQulKg } from '../../utils/calculations';
 import { exportFarmerAccountPDF, exportSimpleFarmerAccountPDF, exportThreePageLedgerPDF } from '../../utils/farmerAccountPdfExport';
 import { FarmerProfileViewModal } from './FarmerProfileViewModal';
 import { FarmerEditModal } from './FarmerEditModal';
@@ -80,7 +80,7 @@ import {
   saveSameFarmerAdjustment,
   saveBagTransfer
 } from '../../utils/farmerAdjustmentsStorage';
-import { openWhatsApp, generateAdvanceWhatsAppMessage } from '../../utils/whatsappNotification';
+import { openWhatsApp, generateAdvanceWhatsAppMessage, generateBagsWeighmentWhatsAppMessage } from '../../utils/whatsappNotification';
 import { AiWhatsAppVoiceModal } from '../common/AiWhatsAppVoiceModal';
 
 export interface FarmerYearlyProfitLossModalProps {
@@ -271,6 +271,7 @@ export const FarmerAccount: React.FC = () => {
     deleteAdvanceRepayment,
     activeCrop,
     activeFirm,
+    firms,
     settings,
     language,
     fiscalYears,
@@ -533,6 +534,68 @@ export const FarmerAccount: React.FC = () => {
   const totalLinkedPurchaseAmount = accountSummary
     ? accountSummary.linkedPurchasesList.reduce((sum, p) => sum + (p.totalAmount || 0), 0)
     : 0;
+
+  // --------------------------------------------------------------------------
+  // MANDI ARRIVAL & LABOUR BREAKDOWN FOR SELECTED FARMER
+  // --------------------------------------------------------------------------
+  const farmerArrivalTotals = useMemo(() => {
+    const entries = accountSummary?.mandiArrivalEntries || [];
+    let totalBags = 0;
+    let totalNewBags = 0;
+    let totalOldBags = 0;
+    let totalPakkiBags = 0;
+    let totalPakkiAmount = 0;
+    let totalDoubleBags = 0;
+    let totalDoubleAmount = 0;
+    let totalSukkiBags = 0;
+    let totalSukkiAmount = 0;
+    let totalCleanBags = 0;
+    let totalWeightKg = 0;
+    let totalGrossAmount = 0;
+    let totalLabourDeduction = 0;
+    let totalNetAmount = 0;
+
+    entries.forEach((entry) => {
+      const brk = getBagsEntryLabourBreakdown(
+        entry,
+        settings.defaultPakkiLabourRate ?? 7,
+        settings.defaultPakkaDoubleLabourRate ?? 14,
+        settings.defaultSukhiLabourRate ?? 5
+      );
+      totalBags += brk.totalBags;
+      totalNewBags += Number(entry.newBags || 0);
+      totalOldBags += Number(entry.oldBags || 0);
+      totalWeightKg += Number(entry.grandTotalKg || entry.totalBagsWeightKg || 0);
+      totalGrossAmount += Number(entry.totalAmount || 0);
+      totalPakkiBags += brk.pakkiBags;
+      totalPakkiAmount += brk.pakkiAmount;
+      totalDoubleBags += brk.doubleBags;
+      totalDoubleAmount += brk.doubleAmount;
+      totalSukkiBags += brk.sukkiBags;
+      totalSukkiAmount += brk.sukkiAmount;
+      totalCleanBags += brk.cleanBags;
+      totalLabourDeduction += brk.totalLabour;
+      totalNetAmount += brk.netAmount;
+    });
+
+    return {
+      entries,
+      totalBags,
+      totalNewBags,
+      totalOldBags,
+      totalPakkiBags,
+      totalPakkiAmount,
+      totalDoubleBags,
+      totalDoubleAmount,
+      totalSukkiBags,
+      totalSukkiAmount,
+      totalCleanBags,
+      totalWeightKg,
+      totalGrossAmount,
+      totalLabourDeduction,
+      totalNetAmount
+    };
+  }, [accountSummary?.mandiArrivalEntries, settings.defaultPakkiLabourRate, settings.defaultPakkaDoubleLabourRate, settings.defaultSukhiLabourRate]);
 
   // Copy Farmer ID
   const handleCopyFarmerId = () => {
@@ -1887,9 +1950,322 @@ export const FarmerAccount: React.FC = () => {
             </div>
 
             {/* ============================================================== */}
-            {/* 4. PURCHASE DETAILS: 4 SIMPLE SECTIONS */}
+            {/* 4. PURCHASE & ARRIVALS DETAILS: 5 SIMPLE SECTIONS */}
             {/* ============================================================== */}
             <div className="space-y-6">
+              {/* SECTION 0: MANDI BAG ARRIVALS & LABOUR BREAKDOWN / ਮੰਡੀ ਆਮਦ ਬੋਰੀਆਂ: ਪੱਕੀ ਲੇਬਰ, ਡਬਲ ਪੱਖਾ ਅਤੇ ਸੁੱਕ ਕਟੌਤੀ ਵੇਰਵਾ */}
+              <div className="bg-white rounded-2xl border-2 border-indigo-200 shadow-sm overflow-hidden">
+                <div className="p-4 bg-linear-to-r from-slate-900 via-slate-800 to-indigo-950 text-white flex flex-col md:flex-row md:items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5">
+                    <span className="p-2 rounded-xl bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                      <Package className="w-5 h-5 text-indigo-300" />
+                    </span>
+                    <div>
+                      <h4 className="font-black text-base text-white flex items-center gap-2">
+                        <span>ਮੰਡੀ ਆਮਦ ਬੋਰੀਆਂ, ਪੱਕੀ ਲੇਬਰ, ਡਬਲ ਪੱਖਾ ਅਤੇ ਸੁੱਕ ਕਟੌਤੀ ਵੇਰਵਾ</span>
+                        <span className="text-xs font-normal text-indigo-300 hidden sm:inline">
+                          (Bag Arrivals, Pakki Labour, Double Pakha & Sukh)
+                        </span>
+                      </h4>
+                      <p className="text-xs text-slate-300 mt-0.5">
+                        ਕਿਸਾਨ ਵੱਲੋਂ ਲਿਆਂਦੀਆਂ ਬੋਰੀਆਂ ਦੀਆਂ ਮਿਤੀ-ਵਾਰ ਪਰਚੀਆਂ, ਪੱਕੀ ਲੇਬਰ, ਡਬਲ ਪੱਖਾ ਅਤੇ ਸੁੱਕ ਕਾਟ ਦਾ ਵਿਸਥਾਰਤ ਹਿਸਾਬ
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="px-3 py-1 bg-indigo-500/20 text-indigo-200 border border-indigo-400/30 rounded-lg text-xs font-black font-mono">
+                      ਕੁੱਲ ਆਮਦ: {farmerArrivalTotals.totalBags} ਬੋਰੀਆਂ
+                    </span>
+                    <span className="px-3 py-1 bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 rounded-lg text-xs font-black font-mono">
+                      {farmerArrivalTotals.totalWeightKg > 0 ? formatKgToQulKg(farmerArrivalTotals.totalWeightKg).displayPa : '0 Qul'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* KPI Summary Strip for this Farmer */}
+                <div className="p-4 bg-slate-50 border-b border-slate-200">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 text-xs">
+                    {/* 1. Total Arrival Bags */}
+                    <div className="p-2.5 bg-white rounded-xl border border-slate-200 shadow-2xs">
+                      <span className="text-[10px] font-bold text-slate-500 uppercase block">ਕੁੱਲ ਬੋਰੀਆਂ</span>
+                      <div className="text-base font-black text-slate-900 font-mono mt-0.5">
+                        {farmerArrivalTotals.totalBags}
+                      </div>
+                      <span className="text-[10px] text-slate-400 block mt-0.5">
+                        ਨਵਾਂ: {farmerArrivalTotals.totalNewBags} • ਪੁਰਾਣਾ: {farmerArrivalTotals.totalOldBags}
+                      </span>
+                    </div>
+
+                    {/* 2. Pakki Labour */}
+                    <div className="p-2.5 bg-indigo-50/60 rounded-xl border border-indigo-200 shadow-2xs">
+                      <span className="text-[10px] font-bold text-indigo-900 uppercase block">ਪੱਕੀ ਲੇਬਰ</span>
+                      <div className="text-base font-black text-indigo-950 font-mono mt-0.5">
+                        {farmerArrivalTotals.totalPakkiBags} <span className="text-[10px] font-normal text-indigo-800">ਬੋਰੀਆਂ</span>
+                      </div>
+                      <span className="text-[10px] text-indigo-800 font-bold block mt-0.5 font-mono">
+                        ₹{Math.round(farmerArrivalTotals.totalPakkiAmount).toLocaleString('en-IN')}
+                      </span>
+                    </div>
+
+                    {/* 3. Double Pakha */}
+                    <div className="p-2.5 bg-amber-50/60 rounded-xl border border-amber-200 shadow-2xs">
+                      <span className="text-[10px] font-bold text-amber-900 uppercase block">ਡਬਲ ਪੱਖਾ</span>
+                      <div className="text-base font-black text-amber-950 font-mono mt-0.5">
+                        {farmerArrivalTotals.totalDoubleBags} <span className="text-[10px] font-normal text-amber-800">ਬੋਰੀਆਂ</span>
+                      </div>
+                      <span className="text-[10px] text-amber-800 font-bold block mt-0.5 font-mono">
+                        ₹{Math.round(farmerArrivalTotals.totalDoubleAmount).toLocaleString('en-IN')}
+                      </span>
+                    </div>
+
+                    {/* 4. Sukh / Kat */}
+                    <div className="p-2.5 bg-teal-50/60 rounded-xl border border-teal-200 shadow-2xs">
+                      <span className="text-[10px] font-bold text-teal-900 uppercase block">ਸੁੱਕ ਲੱਗੀ</span>
+                      <div className="text-base font-black text-teal-950 font-mono mt-0.5">
+                        {farmerArrivalTotals.totalSukkiBags} <span className="text-[10px] font-normal text-teal-800">ਬੋਰੀਆਂ</span>
+                      </div>
+                      <span className="text-[10px] text-teal-800 font-bold block mt-0.5 font-mono">
+                        ₹{Math.round(farmerArrivalTotals.totalSukkiAmount).toLocaleString('en-IN')}
+                      </span>
+                    </div>
+
+                    {/* 5. Clean Bags */}
+                    <div className="p-2.5 bg-emerald-50/60 rounded-xl border border-emerald-200 shadow-2xs">
+                      <span className="text-[10px] font-bold text-emerald-900 uppercase block">ਸਾਫ਼ ਬੋਰੀਆਂ</span>
+                      <div className="text-base font-black text-emerald-950 font-mono mt-0.5">
+                        {farmerArrivalTotals.totalCleanBags} <span className="text-[10px] font-normal text-emerald-800">ਬੋਰੀਆਂ</span>
+                      </div>
+                      <span className="text-[10px] text-emerald-700 block mt-0.5">ਬਿਨਾਂ ਪੱਖਾ / ਸਾਫ਼</span>
+                    </div>
+
+                    {/* 6. Total Labour Deducted */}
+                    <div className="p-2.5 bg-rose-50/60 rounded-xl border border-rose-200 shadow-2xs">
+                      <span className="text-[10px] font-bold text-rose-900 uppercase block">ਕੁੱਲ ਮਜ਼ਦੂਰੀ ਕਟੌਤੀ</span>
+                      <div className="text-base font-black text-rose-950 font-mono mt-0.5">
+                        -₹{Math.round(farmerArrivalTotals.totalLabourDeduction).toLocaleString('en-IN')}
+                      </div>
+                      <span className="text-[10px] text-rose-700 block mt-0.5">ਮਜ਼ਦੂਰੀ ਖਰਚ</span>
+                    </div>
+
+                    {/* 7. Net Proceeds */}
+                    <div className="p-2.5 bg-emerald-100/70 rounded-xl border-2 border-emerald-400 shadow-2xs">
+                      <span className="text-[10px] font-bold text-emerald-950 uppercase block">ਕੁੱਲ ਸ਼ੁੱਧ ਰਕਮ</span>
+                      <div className="text-base font-black text-emerald-950 font-mono mt-0.5">
+                        ₹{Math.round(farmerArrivalTotals.totalNetAmount).toLocaleString('en-IN')}
+                      </div>
+                      <span className="text-[10px] text-emerald-800 block mt-0.5">ਗ੍ਰਾਸ: ₹{Math.round(farmerArrivalTotals.totalGrossAmount).toLocaleString('en-IN')}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {farmerArrivalTotals.entries.length === 0 ? (
+                  <div className="p-8 text-center text-slate-400 text-xs">
+                    ਇਸ ਕਿਸਾਨ ਲਈ ਮੰਡੀ ਆਮਦ ਦੀ ਕੋਈ ਬੋਰੀ ਐਂਟਰੀ ਦਰਜ ਨਹੀਂ ਹੈ / No mandi arrival entries recorded for this farmer
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 text-[11px]">
+                          <th className="p-2.5">ਪਰਚੀ ਨੰ:</th>
+                          <th className="p-2.5">ਮਿਤੀ (Date)</th>
+                          <th className="p-2.5">ਕਿਸਾਨ ਦਾ ਨਾਮ</th>
+                          <th className="p-2.5 text-center">ਕੁੱਲ ਬੋਰੀਆਂ</th>
+                          <th className="p-2.5 text-center">ਪੱਕੀ ਲੇਬਰ</th>
+                          <th className="p-2.5 text-center">ਡਬਲ ਪੱਖਾ</th>
+                          <th className="p-2.5 text-center">ਸੁੱਕ ਲੱਗੀ</th>
+                          <th className="p-2.5 text-center">ਸਾਫ਼ ਬੋਰੀਆਂ</th>
+                          <th className="p-2.5 text-right">ਕੁੱਲ ਵਜ਼ਨ</th>
+                          <th className="p-2.5 text-right">ਕੁੱਲ ਲੇਬਰ</th>
+                          <th className="p-2.5 text-right">ਸ਼ੁੱਧ ਰਕਮ</th>
+                          <th className="p-2.5 text-center">ਕਾਰਵਾਈ</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 font-medium">
+                        {farmerArrivalTotals.entries.map((entry, idx) => {
+                          const brk = getBagsEntryLabourBreakdown(
+                            entry,
+                            settings.defaultPakkiLabourRate ?? 7,
+                            settings.defaultPakkaDoubleLabourRate ?? 14,
+                            settings.defaultSukhiLabourRate ?? 5
+                          );
+                          const farmerName = entry.farmerName || entry.farmerNamePa || currentFarmer?.farmerName;
+
+                          return (
+                            <tr key={entry.id || idx} className="hover:bg-slate-50/80 transition-colors">
+                              <td className="p-2.5 font-mono font-bold text-slate-900">
+                                <span className="bg-amber-100 text-amber-950 px-1.5 py-0.5 rounded text-[11px] font-black border border-amber-200">
+                                  #{entry.parchiNo || entry.entryNumber}
+                                </span>
+                              </td>
+                              <td className="p-2.5 font-mono text-slate-700 whitespace-nowrap">
+                                {entry.date}
+                              </td>
+                              <td className="p-2.5 font-bold text-slate-900">
+                                {farmerName}
+                                {entry.farmerFatherName && (
+                                  <span className="text-[10px] text-slate-400 font-normal block">
+                                    S/o {entry.farmerFatherName}
+                                  </span>
+                                )}
+                              </td>
+                              <td className="p-2.5 text-center font-bold">
+                                <span className="text-slate-900 font-mono font-black text-xs">{brk.totalBags}</span>
+                                {(entry.newBags !== undefined || entry.oldBags !== undefined) && (
+                                  <div className="text-[9px] text-slate-400">
+                                    (N:{entry.newBags || 0} O:{entry.oldBags || 0})
+                                  </div>
+                                )}
+                              </td>
+
+                              {/* Pakki Labour */}
+                              <td className="p-2.5 text-center">
+                                {brk.pakkiBags > 0 ? (
+                                  <div className="inline-flex flex-col items-center">
+                                    <span className="px-2 py-0.5 rounded text-[11px] font-black bg-indigo-50 text-indigo-900 border border-indigo-200">
+                                      {brk.pakkiBags} ਬੋ.
+                                    </span>
+                                    <span className="text-[10px] text-slate-500 font-mono">
+                                      @₹{brk.pakkiRate} = ₹{Math.round(brk.pakkiAmount)}
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <span className="text-slate-400 text-xs">—</span>
+                                )}
+                              </td>
+
+                              {/* Double Pakha */}
+                              <td className="p-2.5 text-center">
+                                {brk.doubleBags > 0 ? (
+                                  <div className="inline-flex flex-col items-center">
+                                    <span className="px-2 py-0.5 rounded text-[11px] font-black bg-amber-50 text-amber-950 border border-amber-300">
+                                      💨 {brk.doubleBags} ਬੋ.
+                                    </span>
+                                    <span className="text-[10px] text-amber-800 font-bold font-mono">
+                                      @₹{brk.doubleRate} = ₹{Math.round(brk.doubleAmount)}
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <span className="text-slate-400 text-[10px] font-medium bg-slate-50 px-1.5 py-0.5 rounded border border-slate-200">
+                                    ਬਿਨਾਂ ਪੱਖਾ
+                                  </span>
+                                )}
+                              </td>
+
+                              {/* Sukh / Kat */}
+                              <td className="p-2.5 text-center">
+                                {brk.sukkiBags > 0 ? (
+                                  <div className="inline-flex flex-col items-center">
+                                    <span className="px-2 py-0.5 rounded text-[11px] font-black bg-teal-50 text-teal-950 border border-teal-300">
+                                      ☀️ {brk.sukkiBags} ਬੋ.
+                                    </span>
+                                    <span className="text-[10px] text-teal-800 font-bold font-mono">
+                                      @₹{brk.sukkiRate} = ₹{Math.round(brk.sukkiAmount)}
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <span className="text-slate-400 text-xs">—</span>
+                                )}
+                              </td>
+
+                              {/* Clean Bags */}
+                              <td className="p-2.5 text-center">
+                                <span className="px-1.5 py-0.5 rounded text-[11px] font-black bg-emerald-50 text-emerald-900 border border-emerald-200 font-mono">
+                                  {brk.cleanBags} ਬੋ.
+                                </span>
+                              </td>
+
+                              {/* Weight */}
+                              <td className="p-2.5 text-right font-mono font-bold text-slate-800">
+                                {entry.grandTotalDisplay || entry.totalBagsWeightDisplay}
+                              </td>
+
+                              {/* Labour Deduction */}
+                              <td className="p-2.5 text-right font-mono font-bold text-rose-700">
+                                {brk.totalLabour > 0 ? `-${formatCurrency(brk.totalLabour)}` : '₹0'}
+                              </td>
+
+                              {/* Net Amount */}
+                              <td className="p-2.5 text-right font-mono font-black text-slate-950">
+                                {formatCurrency(brk.netAmount)}
+                              </td>
+
+                              {/* Action Buttons */}
+                              <td className="p-2.5 text-center">
+                                <div className="flex items-center justify-center gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const receiptFirm = (entry.firmId ? firms.find((f) => f.id === entry.firmId) : null) || activeFirm;
+                                      const msg = generateBagsWeighmentWhatsAppMessage({
+                                        receipt: entry,
+                                        firm: receiptFirm,
+                                        settings,
+                                        language: 'pa'
+                                      });
+                                      openWhatsApp(entry.farmerMobile || currentFarmer?.mobile, msg);
+                                    }}
+                                    className="p-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded transition shadow-2xs cursor-pointer"
+                                    title="WhatsApp Slip"
+                                  >
+                                    <Send className="w-3 h-3 text-white" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setActiveReceipt(entry)}
+                                    className="p-1 bg-slate-800 hover:bg-slate-700 text-white rounded transition cursor-pointer"
+                                    title="Print Slip"
+                                  >
+                                    <Printer className="w-3 h-3 text-emerald-300" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+
+                      {/* Summary Footer */}
+                      <tfoot className="bg-slate-100 font-black text-slate-900 border-t-2 border-slate-300 text-xs">
+                        <tr>
+                          <td colSpan={3} className="p-2.5 text-right uppercase font-bold text-[11px] text-slate-700">
+                            ਕੁੱਲ ਆਮਦ ਜੋੜ (Total Arrivals):
+                          </td>
+                          <td className="p-2.5 text-center font-mono font-black text-indigo-950 text-sm">
+                            {farmerArrivalTotals.totalBags}
+                          </td>
+                          <td className="p-2.5 text-center font-mono font-black text-indigo-900">
+                            {farmerArrivalTotals.totalPakkiBags} ਬੋ.<br />
+                            <span className="text-[10px] text-slate-600 font-normal">₹{Math.round(farmerArrivalTotals.totalPakkiAmount).toLocaleString('en-IN')}</span>
+                          </td>
+                          <td className="p-2.5 text-center font-mono font-black text-amber-900">
+                            {farmerArrivalTotals.totalDoubleBags} ਬੋ.<br />
+                            <span className="text-[10px] text-slate-600 font-normal">₹{Math.round(farmerArrivalTotals.totalDoubleAmount).toLocaleString('en-IN')}</span>
+                          </td>
+                          <td className="p-2.5 text-center font-mono font-black text-teal-900">
+                            {farmerArrivalTotals.totalSukkiBags} ਬੋ.<br />
+                            <span className="text-[10px] text-slate-600 font-normal">₹{Math.round(farmerArrivalTotals.totalSukkiAmount).toLocaleString('en-IN')}</span>
+                          </td>
+                          <td className="p-2.5 text-center font-mono font-black text-emerald-900">
+                            {farmerArrivalTotals.totalCleanBags} ਬੋ.
+                          </td>
+                          <td className="p-2.5 text-right font-mono font-black text-slate-800">
+                            {farmerArrivalTotals.totalWeightKg > 0 ? formatKgToQulKg(farmerArrivalTotals.totalWeightKg).displayPa : '0 Qul'}
+                          </td>
+                          <td className="p-2.5 text-right font-mono font-black text-rose-800">
+                            -{formatCurrency(farmerArrivalTotals.totalLabourDeduction)}
+                          </td>
+                          <td className="p-2.5 text-right font-mono font-black text-emerald-950 text-sm">
+                            {formatCurrency(farmerArrivalTotals.totalNetAmount)}
+                          </td>
+                          <td></td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                )}
+              </div>
+
               {/* SECTION 1: PURCHASE DETAILS: OWN FARMER PURCHASE / ਖਰੀਦ ਵੇਰਵਾ: ਆਪਣੀ ਖਰੀਦ */}
               <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                 <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">

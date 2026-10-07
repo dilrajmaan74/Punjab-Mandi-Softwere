@@ -35,7 +35,9 @@ import {
   calculateAutomaticLabour,
   calculateMoistureCut,
   isRecordInFiscalYear,
-  compareDatesChronological
+  compareDatesChronological,
+  formatKgToQulKg,
+  getBagsEntryLabourBreakdown
 } from '../../utils/calculations';
 import { BagsEntryRecord, BardanaType, LabourAndDeductions, CropFilterType } from '../../types/mandi';
 import { SearchableSelect, SearchableSelectOption } from '../common/SearchableSelect';
@@ -288,12 +290,33 @@ export const BagsEntry: React.FC = () => {
   const hasActiveDeductions = totalLabourDeduction > 0;
 
   const [savedCropFilter, setSavedCropFilter] = useState<CropFilterType>('ALL');
+  const [savedConditionFilter, setSavedConditionFilter] = useState<'ALL' | 'PAKKI' | 'DOUBLE' | 'SUKKI' | 'CLEAN'>('ALL');
+  const [savedDateFilter, setSavedDateFilter] = useState<string>('');
 
-  // Filtered saved entries for quick search, crop filter, active fiscal year, and editing
+  // Filtered saved entries for quick search, crop filter, condition filter, date filter, active fiscal year, and editing
   const filteredSavedEntries = useMemo(() => {
     let list = bagsEntries.filter((b) => isRecordInFiscalYear(b.date, b.fiscalYear, activeFiscalYear));
     if (savedCropFilter !== 'ALL') {
       list = list.filter((b) => (b.cropType || 'PADDY') === savedCropFilter);
+    }
+    if (savedDateFilter.trim()) {
+      const df = savedDateFilter.trim();
+      list = list.filter((b) => b.date === df || b.date.includes(df));
+    }
+    if (savedConditionFilter !== 'ALL') {
+      list = list.filter((b) => {
+        const brk = getBagsEntryLabourBreakdown(
+          b,
+          settings.defaultPakkiLabourRate ?? 7,
+          settings.defaultPakkaDoubleLabourRate ?? 14,
+          settings.defaultSukhiLabourRate ?? 5
+        );
+        if (savedConditionFilter === 'PAKKI') return brk.pakkiBags > 0;
+        if (savedConditionFilter === 'DOUBLE') return brk.doubleBags > 0;
+        if (savedConditionFilter === 'SUKKI') return brk.sukkiBags > 0;
+        if (savedConditionFilter === 'CLEAN') return brk.cleanBags > 0 && brk.doubleBags === 0 && brk.sukkiBags === 0;
+        return true;
+      });
     }
     let result = list;
     if (savedSearchQuery.trim()) {
@@ -317,7 +340,66 @@ export const BagsEntry: React.FC = () => {
       if (d !== 0) return d;
       return a.entryNumber.localeCompare(b.entryNumber);
     });
-  }, [bagsEntries, savedSearchQuery, savedCropFilter]);
+  }, [bagsEntries, savedSearchQuery, savedCropFilter, savedConditionFilter, savedDateFilter, activeFiscalYear, settings.defaultPakkiLabourRate, settings.defaultPakkaDoubleLabourRate, settings.defaultSukhiLabourRate]);
+
+  // Aggregate totals for filtered saved entries (Pakki, Double Pakha, Sukki breakdown)
+  const savedEntriesTotals = useMemo(() => {
+    let totalBags = 0;
+    let totalNewBags = 0;
+    let totalOldBags = 0;
+    let totalPakkiBags = 0;
+    let totalPakkiAmount = 0;
+    let totalDoubleBags = 0;
+    let totalDoubleAmount = 0;
+    let totalSukkiBags = 0;
+    let totalSukkiAmount = 0;
+    let totalCleanBags = 0;
+    let totalWeightKg = 0;
+    let totalGrossAmount = 0;
+    let totalLabourDeduction = 0;
+    let totalNetAmount = 0;
+
+    filteredSavedEntries.forEach((entry) => {
+      const brk = getBagsEntryLabourBreakdown(
+        entry,
+        settings.defaultPakkiLabourRate ?? 7,
+        settings.defaultPakkaDoubleLabourRate ?? 14,
+        settings.defaultSukhiLabourRate ?? 5
+      );
+      totalBags += brk.totalBags;
+      totalNewBags += Number(entry.newBags || 0);
+      totalOldBags += Number(entry.oldBags || 0);
+      totalWeightKg += Number(entry.grandTotalKg || entry.totalBagsWeightKg || 0);
+      totalGrossAmount += Number(entry.totalAmount || 0);
+
+      totalPakkiBags += brk.pakkiBags;
+      totalPakkiAmount += brk.pakkiAmount;
+      totalDoubleBags += brk.doubleBags;
+      totalDoubleAmount += brk.doubleAmount;
+      totalSukkiBags += brk.sukkiBags;
+      totalSukkiAmount += brk.sukkiAmount;
+      totalCleanBags += brk.cleanBags;
+      totalLabourDeduction += brk.totalLabour;
+      totalNetAmount += brk.netAmount;
+    });
+
+    return {
+      totalBags,
+      totalNewBags,
+      totalOldBags,
+      totalPakkiBags,
+      totalPakkiAmount,
+      totalDoubleBags,
+      totalDoubleAmount,
+      totalSukkiBags,
+      totalSukkiAmount,
+      totalCleanBags,
+      totalWeightKg,
+      totalGrossAmount,
+      totalLabourDeduction,
+      totalNetAmount
+    };
+  }, [filteredSavedEntries, settings.defaultPakkiLabourRate, settings.defaultPakkaDoubleLabourRate, settings.defaultSukhiLabourRate]);
 
   const handleDeleteBagsEntry = (entry: BagsEntryRecord) => {
     confirmDelete({
@@ -1388,7 +1470,7 @@ export const BagsEntry: React.FC = () => {
             <div className="inline-flex items-center bg-slate-100 p-1 rounded-lg border border-slate-200 text-xs">
               {(
                 [
-                  { id: 'ALL', labelPa: 'ਸਭ ਫਸਲਾਂ (All)', labelEn: 'All Crops' },
+                  { id: 'ALL', labelPa: 'ਸਭ ਫਸਲਾਂ', labelEn: 'All Crops' },
                   { id: 'WHEAT', labelPa: '🌾 ਕਣਕ', labelEn: '🌾 Wheat' },
                   { id: 'MAIZE', labelPa: '🌽 ਮੱਕੀ', labelEn: '🌽 Maize' },
                   { id: 'PADDY', labelPa: '🍚 ਝੋਨਾ', labelEn: '🍚 Paddy' },
@@ -1409,7 +1491,55 @@ export const BagsEntry: React.FC = () => {
               ))}
             </div>
 
-            <div className="w-full sm:w-64 relative">
+            {/* Bag Condition Filter (Pakki, Double, Sukki, Clean) */}
+            <div className="inline-flex items-center bg-slate-100 p-1 rounded-lg border border-slate-200 text-xs">
+              {(
+                [
+                  { id: 'ALL', labelPa: 'ਸਭ ਬੋਰੀਆਂ', labelEn: 'All Bags' },
+                  { id: 'PAKKI', labelPa: '🌾 ਪੱਕੀ ਲੇਬਰ', labelEn: 'Pakki Labour' },
+                  { id: 'DOUBLE', labelPa: '💨 ਡਬਲ ਪੱਖਾ', labelEn: 'Double Pakha' },
+                  { id: 'SUKKI', labelPa: '☀️ ਸੁੱਕ ਲੱਗੀ', labelEn: 'Sukh / Kat' },
+                  { id: 'CLEAN', labelPa: '✨ ਸਾਫ਼ ਬੋਰੀਆਂ', labelEn: 'Clean Bags' },
+                ] as { id: 'ALL' | 'PAKKI' | 'DOUBLE' | 'SUKKI' | 'CLEAN'; labelPa: string; labelEn: string }[]
+              ).map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setSavedConditionFilter(tab.id)}
+                  className={`px-2 py-1 rounded-md font-bold transition select-none cursor-pointer ${
+                    savedConditionFilter === tab.id
+                      ? 'bg-white text-emerald-900 shadow-xs ring-1 ring-slate-300'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                  }`}
+                >
+                  {isEn ? tab.labelEn : tab.labelPa}
+                </button>
+              ))}
+            </div>
+
+            {/* Date Specific Filter */}
+            <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-xs">
+              <Calendar className="w-3.5 h-3.5 text-slate-400" />
+              <input
+                type="text"
+                placeholder={isEn ? "Filter Date (DD/MM/YYYY)" : "ਮਿਤੀ ਅਨੁਸਾਰ ਫਿਲਟਰ ਕਰੋ..."}
+                value={savedDateFilter}
+                onChange={(e) => setSavedDateFilter(e.target.value)}
+                className="w-32 bg-transparent text-xs text-slate-900 focus:outline-none font-mono"
+              />
+              {savedDateFilter && (
+                <button
+                  type="button"
+                  onClick={() => setSavedDateFilter('')}
+                  className="text-slate-400 hover:text-rose-600 text-xs font-bold px-1"
+                  title={isEn ? "Clear date" : "ਮਿਤੀ ਹਟਾਓ"}
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            <div className="w-full sm:w-56 relative">
               <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
@@ -1422,27 +1552,149 @@ export const BagsEntry: React.FC = () => {
           </div>
         </div>
 
+        {/* TOP SUMMARY KPI BANNER (ਸਭ ਦਾ ਕੁੱਲ ਜੋੜ - Total Summary of Filtered Entries) */}
+        <div className="p-4 bg-linear-to-r from-slate-900 via-slate-800 to-indigo-950 text-white rounded-xl shadow-sm border border-slate-700">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 mb-3 border-b border-slate-700/80">
+            <div className="flex items-center gap-2">
+              <span className="p-1.5 rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                <Scale className="w-4 h-4" />
+              </span>
+              <div>
+                <h4 className="font-black text-sm text-white">
+                  {isEn ? 'Total Summary of Bags & Labour Breakdown' : 'ਕੁੱਲ ਬੋਰੀਆਂ ਅਤੇ ਲੇਬਰ ਕਟੌਤੀ ਦਾ ਸਾਰ (ਸਭ ਦਾ ਕੁੱਲ ਜੋੜ)'}
+                </h4>
+                <p className="text-[11px] text-slate-300">
+                  {isEn ? 'Live totals for currently selected date/crop/condition filter' : 'ਚੁਣੀ ਗਈ ਮਿਤੀ, ਫਸਲ ਅਤੇ ਕਟੌਤੀ ਅਨੁਸਾਰ ਕੁੱਲ ਹਿਸਾਬ'}
+                </p>
+              </div>
+            </div>
+            <div className="text-right flex items-center gap-2">
+              <span className="text-[11px] bg-slate-800 text-slate-200 px-2.5 py-1 rounded-md border border-slate-700 font-bold">
+                {filteredSavedEntries.length} {isEn ? 'Slips' : 'ਪਰਚੀਆਂ'}
+              </span>
+              <span className="text-[11px] bg-emerald-500/20 text-emerald-300 px-2.5 py-1 rounded-md border border-emerald-500/30 font-bold font-mono">
+                {savedEntriesTotals.totalWeightKg > 0 ? formatKgToQulKg(savedEntriesTotals.totalWeightKg).displayPa : '0 Qul'}
+              </span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2.5">
+            {/* 1. Total Bags */}
+            <div className="bg-slate-800/90 p-2.5 rounded-lg border border-slate-700">
+              <span className="text-[10px] font-bold text-slate-400 block uppercase">
+                {isEn ? 'Total Bags' : 'ਕੁੱਲ ਬੋਰੀਆਂ'}
+              </span>
+              <div className="text-lg lg:text-xl font-black text-white font-mono mt-0.5">
+                {savedEntriesTotals.totalBags}
+              </div>
+              <span className="text-[10px] text-slate-400 block mt-0.5">
+                ਨਵਾਂ: {savedEntriesTotals.totalNewBags} • ਪੁਰਾਣਾ: {savedEntriesTotals.totalOldBags}
+              </span>
+            </div>
+
+            {/* 2. Pakki Labour Bags */}
+            <div className="bg-slate-800/90 p-2.5 rounded-lg border border-indigo-500/30">
+              <span className="text-[10px] font-bold text-indigo-300 block uppercase">
+                {isEn ? 'Pakki Labour' : 'ਪੱਕੀ ਲੇਬਰ ਬੋਰੀਆਂ'}
+              </span>
+              <div className="text-lg lg:text-xl font-black text-indigo-300 font-mono mt-0.5">
+                {savedEntriesTotals.totalPakkiBags} <span className="text-xs font-normal text-indigo-200">ਬੋਰੀਆਂ</span>
+              </div>
+              <span className="text-[10px] text-indigo-200 block mt-0.5 font-bold font-mono">
+                {formatCurrency(savedEntriesTotals.totalPakkiAmount)}
+              </span>
+            </div>
+
+            {/* 3. Double Pakha Bags */}
+            <div className="bg-slate-800/90 p-2.5 rounded-lg border border-amber-500/30">
+              <span className="text-[10px] font-bold text-amber-300 block uppercase">
+                {isEn ? 'Double Pakha' : 'ਡਬਲ ਪੱਖਾ ਬੋਰੀਆਂ'}
+              </span>
+              <div className="text-lg lg:text-xl font-black text-amber-300 font-mono mt-0.5">
+                {savedEntriesTotals.totalDoubleBags} <span className="text-xs font-normal text-amber-200">ਬੋਰੀਆਂ</span>
+              </div>
+              <span className="text-[10px] text-amber-200 block mt-0.5 font-bold font-mono">
+                {formatCurrency(savedEntriesTotals.totalDoubleAmount)}
+              </span>
+            </div>
+
+            {/* 4. Sukh / Kat Bags */}
+            <div className="bg-slate-800/90 p-2.5 rounded-lg border border-teal-500/30">
+              <span className="text-[10px] font-bold text-teal-300 block uppercase">
+                {isEn ? 'Sukh / Kat Bags' : 'ਸੁੱਕ ਲੱਗੀ ਬੋਰੀਆਂ'}
+              </span>
+              <div className="text-lg lg:text-xl font-black text-teal-300 font-mono mt-0.5">
+                {savedEntriesTotals.totalSukkiBags} <span className="text-xs font-normal text-teal-200">ਬੋਰੀਆਂ</span>
+              </div>
+              <span className="text-[10px] text-teal-200 block mt-0.5 font-bold font-mono">
+                {formatCurrency(savedEntriesTotals.totalSukkiAmount)}
+              </span>
+            </div>
+
+            {/* 5. Clean Bags (No double or sukh) */}
+            <div className="bg-slate-800/90 p-2.5 rounded-lg border border-emerald-500/30">
+              <span className="text-[10px] font-bold text-emerald-300 block uppercase">
+                {isEn ? 'Clean / Normal' : 'ਸਾਫ਼ ਬੋਰੀਆਂ'}
+              </span>
+              <div className="text-lg lg:text-xl font-black text-emerald-300 font-mono mt-0.5">
+                {savedEntriesTotals.totalCleanBags} <span className="text-xs font-normal text-emerald-200">ਬੋਰੀਆਂ</span>
+              </div>
+              <span className="text-[10px] text-emerald-300 block mt-0.5">
+                ਬਿਨਾਂ ਪੱਖਾ / ਸਾਫ਼
+              </span>
+            </div>
+
+            {/* 6. Total Labour Deduction */}
+            <div className="bg-slate-800/90 p-2.5 rounded-lg border border-rose-500/30">
+              <span className="text-[10px] font-bold text-rose-300 block uppercase">
+                {isEn ? 'Total Labour' : 'ਕੁੱਲ ਮਜ਼ਦੂਰੀ'}
+              </span>
+              <div className="text-lg lg:text-xl font-black text-rose-400 font-mono mt-0.5">
+                -{formatCurrency(savedEntriesTotals.totalLabourDeduction)}
+              </div>
+              <span className="text-[10px] text-rose-300 block mt-0.5">
+                ਪੱਕੀ + ਡਬਲ + ਸੁੱਕ
+              </span>
+            </div>
+
+            {/* 7. Total Net Amount */}
+            <div className="bg-emerald-950/90 p-2.5 rounded-lg border-2 border-emerald-500/50 shadow-inner">
+              <span className="text-[10px] font-bold text-emerald-300 block uppercase">
+                {isEn ? 'Net Amount' : 'ਕੁੱਲ ਸ਼ੁੱਧ ਰਕਮ'}
+              </span>
+              <div className="text-lg lg:text-xl font-black text-emerald-300 font-mono mt-0.5">
+                {formatCurrency(savedEntriesTotals.totalNetAmount)}
+              </div>
+              <span className="text-[10px] text-emerald-200 block mt-0.5 font-medium">
+                ਗ੍ਰਾਸ: {formatCurrency(savedEntriesTotals.totalGrossAmount)}
+              </span>
+            </div>
+          </div>
+        </div>
+
         {/* Table */}
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50/80 text-slate-700 font-bold text-[11px]">
-                <th className="py-2.5 px-3">ਪਰਚੀ / ਰਸੀਦ ਨੰ:</th>
-                <th className="py-2.5 px-3">ਮਿਤੀ</th>
-                <th className="py-2.5 px-3">ਕਿਸਾਨ ਵੇਰਵੇ</th>
-                <th className="py-2.5 px-3 text-center">ਬੋਰੀਆਂ</th>
-                <th className="py-2.5 px-3 text-right">ਵਜ਼ਨ (Qul Kg)</th>
-                <th className="py-2.5 px-3 text-right">ਟੋਟਾ (Kg)</th>
-                <th className="py-2.5 px-3 text-right font-black">ਕੁੱਲ ਵਜ਼ਨ</th>
-                <th className="py-2.5 px-3 text-center">ਬਾਰਦਾਨਾ</th>
-                <th className="py-2.5 px-3 text-right">ਰਕਮ</th>
+                <th className="py-2.5 px-3">ਪਰਚੀ / ਰਸੀਦ</th>
+                <th className="py-2.5 px-3">ਮਿਤੀ (Date)</th>
+                <th className="py-2.5 px-3">ਕਿਸਾਨ ਵੇਰਵੇ (Farmer)</th>
+                <th className="py-2.5 px-3 text-center">ਕੁੱਲ ਬੋਰੀਆਂ</th>
+                <th className="py-2.5 px-3 text-center">ਪੱਕੀ ਲੇਬਰ</th>
+                <th className="py-2.5 px-3 text-center">ਡਬਲ ਪੱਖਾ</th>
+                <th className="py-2.5 px-3 text-center">ਸੁੱਕ / ਕਾਟ</th>
+                <th className="py-2.5 px-3 text-center">ਸਾਫ਼ ਬੋਰੀਆਂ</th>
+                <th className="py-2.5 px-3 text-right">ਕੁੱਲ ਵਜ਼ਨ</th>
+                <th className="py-2.5 px-3 text-right">ਕੁੱਲ ਲੇਬਰ</th>
+                <th className="py-2.5 px-3 text-right">ਸ਼ੁੱਧ ਰਕਮ</th>
                 <th className="py-2.5 px-3 text-right">ਐਕਸ਼ਨ</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-medium">
               {filteredSavedEntries.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="py-8 text-center text-slate-400 text-xs">
+                  <td colSpan={12} className="py-8 text-center text-slate-400 text-xs">
                     {isEn ? 'No saved bags entries found' : 'ਕੋਈ ਦਰਜ ਕੀਤੀਆਂ ਬੋਰੀਆਂ ਨਹੀਂ ਮਿਲੀਆਂ'}
                   </td>
                 </tr>
@@ -1454,6 +1706,13 @@ export const BagsEntry: React.FC = () => {
                   const fatherNameEn = entry.farmerFatherName || matchedFarmer?.fatherName || '';
                   const villageEn = entry.farmerVillage || matchedFarmer?.village || '';
 
+                  const brk = getBagsEntryLabourBreakdown(
+                    entry,
+                    settings.defaultPakkiLabourRate ?? 7,
+                    settings.defaultPakkaDoubleLabourRate ?? 14,
+                    settings.defaultSukhiLabourRate ?? 5
+                  );
+
                   return (
                     <tr key={`${entry.id}-${idx}`} className="hover:bg-slate-50/80 transition-colors">
                       <td className="py-2 px-3 font-mono font-bold text-slate-900">
@@ -1464,11 +1723,11 @@ export const BagsEntry: React.FC = () => {
                         </div>
                         <span className="text-[10px] text-slate-400 font-normal">{entry.entryNumber}</span>
                       </td>
-                      <td className="py-2 px-3 font-mono text-slate-700 text-[11px]">
+                      <td className="py-2 px-3 font-mono text-slate-700 text-[11px] whitespace-nowrap">
                         {entry.date}
                       </td>
                       <td className="py-2 px-3">
-                        <div className="space-y-0.5 min-w-[160px]">
+                        <div className="space-y-0.5 min-w-[150px]">
                           {/* 1. Farmer Name: English Farmer Name FIRST and prominently */}
                           <div className="font-bold text-slate-900 text-xs sm:text-[13px] leading-tight">
                             <span>{farmerNameEn}</span>
@@ -1479,106 +1738,191 @@ export const BagsEntry: React.FC = () => {
                             )}
                           </div>
 
-                          {/* 2. Farmer ID: Directly below the English Farmer Name */}
+                          {/* 2. Farmer ID */}
                           <div className="text-[11px] text-slate-600 font-mono">
-                            Farmer ID: <span className="font-semibold text-slate-800">{farmerId}</span>
+                            ID: <span className="font-semibold text-slate-800">{farmerId}</span>
                           </div>
 
-                          {/* 3. Father Name: In ENGLISH */}
+                          {/* 3. Father & Village */}
                           <div className="text-[11px] text-slate-600">
-                            Father: <span className="font-medium text-slate-800">{fatherNameEn || '—'}</span>
-                          </div>
-
-                          {/* 4. Village: In ENGLISH */}
-                          <div className="text-[11px] text-slate-600">
-                            Village: <span className="font-medium text-slate-800">{villageEn || '—'}</span>
+                            {fatherNameEn ? `S/o ${fatherNameEn} • ` : ''}{villageEn || '—'}
                             {entry.farmerMobile && (
-                              <span className="text-[10px] text-slate-400 ml-1.5">• Mob: {entry.farmerMobile}</span>
+                              <span className="text-[10px] text-slate-400 ml-1">• {entry.farmerMobile}</span>
                             )}
                           </div>
                         </div>
                       </td>
-                    <td className="py-2 px-3 text-center font-bold">
-                      {entry.bags}
-                      {(entry.newBags !== undefined || entry.oldBags !== undefined) && (
-                        <div className="text-[9px] text-slate-400">
-                          (N:{entry.newBags || 0} O:{entry.oldBags || 0})
+                      <td className="py-2 px-3 text-center font-bold">
+                        <span className="text-slate-900 font-mono font-black text-xs">{brk.totalBags}</span>
+                        {(entry.newBags !== undefined || entry.oldBags !== undefined) && (
+                          <div className="text-[9px] text-slate-400">
+                            (N:{entry.newBags || 0} O:{entry.oldBags || 0})
+                          </div>
+                        )}
+                      </td>
+
+                      {/* 1. Pakki Labour Bags */}
+                      <td className="py-2 px-3 text-center">
+                        {brk.pakkiBags > 0 ? (
+                          <div className="inline-flex flex-col items-center">
+                            <span className="px-2 py-0.5 rounded text-[11px] font-black bg-indigo-50 text-indigo-900 border border-indigo-200">
+                              {brk.pakkiBags} ਬੋ.
+                            </span>
+                            <span className="text-[10px] text-slate-500 font-mono">
+                              @₹{brk.pakkiRate} = ₹{Math.round(brk.pakkiAmount)}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-slate-400 text-xs">—</span>
+                        )}
+                      </td>
+
+                      {/* 2. Double Pakha Bags */}
+                      <td className="py-2 px-3 text-center">
+                        {brk.doubleBags > 0 ? (
+                          <div className="inline-flex flex-col items-center">
+                            <span className="px-2 py-0.5 rounded text-[11px] font-black bg-amber-50 text-amber-950 border border-amber-300">
+                              💨 {brk.doubleBags} ਬੋ.
+                            </span>
+                            <span className="text-[10px] text-amber-800 font-bold font-mono">
+                              @₹{brk.doubleRate} = ₹{Math.round(brk.doubleAmount)}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-slate-400 text-[10px] font-medium bg-slate-50 px-1.5 py-0.5 rounded border border-slate-200">
+                            ਬਿਨਾਂ ਪੱਖਾ
+                          </span>
+                        )}
+                      </td>
+
+                      {/* 3. Sukh / Kat Bags */}
+                      <td className="py-2 px-3 text-center">
+                        {brk.sukkiBags > 0 ? (
+                          <div className="inline-flex flex-col items-center">
+                            <span className="px-2 py-0.5 rounded text-[11px] font-black bg-teal-50 text-teal-950 border border-teal-300">
+                              ☀️ {brk.sukkiBags} ਬੋ.
+                            </span>
+                            <span className="text-[10px] text-teal-800 font-bold font-mono">
+                              @₹{brk.sukkiRate} = ₹{Math.round(brk.sukkiAmount)}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-slate-400 text-xs">—</span>
+                        )}
+                      </td>
+
+                      {/* 4. Clean Bags */}
+                      <td className="py-2 px-3 text-center">
+                        <span className="px-1.5 py-0.5 rounded text-[11px] font-black bg-emerald-50 text-emerald-900 border border-emerald-200 font-mono">
+                          {brk.cleanBags} ਬੋ.
+                        </span>
+                      </td>
+
+                      {/* Total Weight */}
+                      <td className="py-2 px-3 text-right font-mono text-slate-800 font-bold">
+                        {entry.grandTotalDisplay || entry.totalBagsWeightDisplay}
+                      </td>
+
+                      {/* Total Labour Deduction */}
+                      <td className="py-2 px-3 text-right font-mono font-bold text-rose-700">
+                        {brk.totalLabour > 0 ? `-${formatCurrency(brk.totalLabour)}` : '₹0'}
+                      </td>
+
+                      {/* Net Payable Amount */}
+                      <td className="py-2 px-3 text-right font-mono font-black text-slate-950">
+                        {formatCurrency(brk.netAmount)}
+                      </td>
+
+                      {/* Actions */}
+                      <td className="py-2 px-3 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const receiptFirm = (entry.firmId ? firms.find((f) => f.id === entry.firmId) : null) || activeFirm;
+                              const msg = generateBagsWeighmentWhatsAppMessage({
+                                receipt: entry,
+                                firm: receiptFirm,
+                                settings,
+                                language
+                              });
+                              openWhatsApp(entry.farmerMobile, msg);
+                            }}
+                            className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold p-1 rounded-md transition shadow-2xs cursor-pointer"
+                            title="ਵ੍ਹਟਸਐਪ ਤੇ ਭੇਜੋ (Send WhatsApp)"
+                          >
+                            <Send className="w-3.5 h-3.5 text-white" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setActiveBagsEntryToEdit(entry)}
+                            className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold p-1 rounded-md transition shadow-2xs cursor-pointer"
+                            title="ਸੋਧੋ (Edit Bags Entry)"
+                          >
+                            <Edit className="w-3.5 h-3.5 text-white" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setActiveReceipt(entry)}
+                            className="bg-slate-900 hover:bg-slate-800 text-white font-bold p-1 rounded-md transition cursor-pointer"
+                            title="ਪ੍ਰਿੰਟ ਰਸੀਦ (Print Slip)"
+                          >
+                            <Printer className="w-3.5 h-3.5 text-emerald-400" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteBagsEntry(entry)}
+                            className="bg-white hover:bg-rose-50 text-rose-600 border border-slate-200 hover:border-rose-300 font-bold p-1 rounded-md transition cursor-pointer"
+                            title="ਰਸੀਦ ਹਟਾਓ (Delete Slip)"
+                          >
+                            <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                          </button>
                         </div>
-                      )}
-                    </td>
-                    <td className="py-2 px-3 text-right font-mono text-slate-700">
-                      {entry.totalBagsWeightDisplay}
-                    </td>
-                    <td className="py-2 px-3 text-right font-mono text-amber-800 font-bold">
-                      {entry.totaKg > 0 ? `${entry.totaKg} Kg` : '—'}
-                    </td>
-                    <td className="py-2 px-3 text-right font-mono font-black text-emerald-950">
-                      {entry.grandTotalDisplay}
-                    </td>
-                    <td className="py-2 px-3 text-center">
-                      <span
-                        className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${
-                          entry.bardana === 'OLD'
-                            ? 'bg-amber-50 text-amber-800 border-amber-200'
-                            : 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                        }`}
-                      >
-                        {entry.bardana === 'OLD' ? 'ਪੁਰਾਣਾ' : entry.bardana === 'BOTH' ? 'ਦੋਵੇਂ' : 'ਨਵਾਂ'}
-                      </span>
-                    </td>
-                    <td className="py-2 px-3 text-right font-mono font-black text-slate-950">
-                      {formatCurrency(entry.totalAmount)}
-                    </td>
-                    <td className="py-2 px-3 text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const receiptFirm = (entry.firmId ? firms.find((f) => f.id === entry.firmId) : null) || activeFirm;
-                            const msg = generateBagsWeighmentWhatsAppMessage({
-                              receipt: entry,
-                              firm: receiptFirm,
-                              settings,
-                              language
-                            });
-                            openWhatsApp(entry.farmerMobile, msg);
-                          }}
-                          className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold p-1 rounded-md transition shadow-2xs cursor-pointer"
-                          title="ਵ੍ਹਟਸਐਪ ਤੇ ਭੇਜੋ (Send WhatsApp)"
-                        >
-                          <Send className="w-3.5 h-3.5 text-white" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setActiveBagsEntryToEdit(entry)}
-                          className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold p-1 rounded-md transition shadow-2xs cursor-pointer"
-                          title="ਸੋਧੋ (Edit Bags Entry)"
-                        >
-                          <Edit className="w-3.5 h-3.5 text-white" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setActiveReceipt(entry)}
-                          className="bg-slate-900 hover:bg-slate-800 text-white font-bold p-1 rounded-md transition cursor-pointer"
-                          title="ਪ੍ਰਿੰਟ ਰਸੀਦ (Print Slip)"
-                        >
-                          <Printer className="w-3.5 h-3.5 text-emerald-400" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteBagsEntry(entry)}
-                          className="bg-white hover:bg-rose-50 text-rose-600 border border-slate-200 hover:border-rose-300 font-bold p-1 rounded-md transition cursor-pointer"
-                          title="ਰਸੀਦ ਹਟਾਓ (Delete Slip)"
-                        >
-                          <Trash2 className="w-3.5 h-3.5 text-rose-600" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
+                      </td>
+                    </tr>
                   );
                 })
               )}
             </tbody>
+
+            {/* TABLE SUMMARY TOTALS FOOTER (ਸਭ ਦਾ ਕੁੱਲ ਜੋੜ) */}
+            {filteredSavedEntries.length > 0 && (
+              <tfoot className="bg-slate-100/90 font-black text-slate-900 border-t-2 border-slate-300 text-xs">
+                <tr>
+                  <td colSpan={3} className="py-2.5 px-3 text-right uppercase font-bold text-[11px] text-slate-700">
+                    {isEn ? 'Total Summary (All Filtered):' : 'ਕੁੱਲ ਜੋੜ (ਸਭ ਦਾ ਕੁੱਲ ਜੋੜ):'}
+                  </td>
+                  <td className="py-2.5 px-3 text-center font-mono font-black text-indigo-950 text-sm">
+                    {savedEntriesTotals.totalBags}
+                  </td>
+                  <td className="py-2.5 px-3 text-center font-mono font-black text-indigo-900">
+                    {savedEntriesTotals.totalPakkiBags} ਬੋ.<br/>
+                    <span className="text-[10px] text-slate-600 font-normal">₹{Math.round(savedEntriesTotals.totalPakkiAmount)}</span>
+                  </td>
+                  <td className="py-2.5 px-3 text-center font-mono font-black text-amber-900">
+                    {savedEntriesTotals.totalDoubleBags} ਬੋ.<br/>
+                    <span className="text-[10px] text-slate-600 font-normal">₹{Math.round(savedEntriesTotals.totalDoubleAmount)}</span>
+                  </td>
+                  <td className="py-2.5 px-3 text-center font-mono font-black text-teal-900">
+                    {savedEntriesTotals.totalSukkiBags} ਬੋ.<br/>
+                    <span className="text-[10px] text-slate-600 font-normal">₹{Math.round(savedEntriesTotals.totalSukkiAmount)}</span>
+                  </td>
+                  <td className="py-2.5 px-3 text-center font-mono font-black text-emerald-900">
+                    {savedEntriesTotals.totalCleanBags} ਬੋ.
+                  </td>
+                  <td className="py-2.5 px-3 text-right font-mono font-black text-slate-800">
+                    {savedEntriesTotals.totalWeightKg > 0 ? formatKgToQulKg(savedEntriesTotals.totalWeightKg).displayPa : '0 Qul'}
+                  </td>
+                  <td className="py-2.5 px-3 text-right font-mono font-black text-rose-800">
+                    -{formatCurrency(savedEntriesTotals.totalLabourDeduction)}
+                  </td>
+                  <td className="py-2.5 px-3 text-right font-mono font-black text-emerald-950 text-sm">
+                    {formatCurrency(savedEntriesTotals.totalNetAmount)}
+                  </td>
+                  <td></td>
+                </tr>
+              </tfoot>
+            )}
           </table>
         </div>
       </div>

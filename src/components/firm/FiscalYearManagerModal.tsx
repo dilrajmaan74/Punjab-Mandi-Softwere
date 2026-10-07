@@ -16,7 +16,8 @@ import {
   Search,
   Sparkles,
   Info,
-  DollarSign
+  DollarSign,
+  ArrowRightLeft
 } from 'lucide-react';
 import {
   parseFiscalYear,
@@ -44,6 +45,7 @@ export const FiscalYearManagerModal: React.FC<FiscalYearManagerModalProps> = ({
     isYearLocked,
     toggleYearLock,
     carryForwardBalancesToNextYear,
+    transferAllDataTo2026_27,
     getFarmerOpeningBalanceForYear,
     setFarmerOpeningBalanceForYear,
     farmers,
@@ -135,6 +137,18 @@ export const FiscalYearManagerModal: React.FC<FiscalYearManagerModalProps> = ({
   }, [farmers, openingSearch]);
 
   if (!isOpen) return null;
+
+  const handleTransferAllTo2026_27 = () => {
+    const res = transferAllDataTo2026_27();
+    if (res.success) {
+      notifySaveSuccess({
+        titlePa: '100% ਡਾਟਾ ਤਬਦੀਲ ਹੋ ਗਿਆ',
+        titleEn: '100% Data Transferred to FY 2026-27',
+        messagePa: res.messagePa,
+        messageEn: res.messageEn
+      });
+    }
+  };
 
   const handleCreateYear = (e: React.FormEvent) => {
     e.preventDefault();
@@ -347,6 +361,32 @@ export const FiscalYearManagerModal: React.FC<FiscalYearManagerModalProps> = ({
                     </p>
                   </div>
                 </div>
+              </div>
+
+              {/* 100% Data Transfer to FY 2026-27 Card */}
+              <div className="bg-gradient-to-r from-emerald-900 to-slate-900 text-white rounded-xl p-4 shadow-sm border border-emerald-700/60 flex items-center justify-between gap-4 flex-wrap">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-black uppercase tracking-wider text-emerald-300 flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                      100% ਡਾਟਾ ਟ੍ਰਾਂਸਫਰ (FY 2026-27 Data Transfer)
+                    </span>
+                    <span className="text-[11px] bg-emerald-500/30 text-emerald-200 border border-emerald-500/40 px-2 py-0.5 rounded font-mono font-bold">
+                      ਡਿਫਾਲਟ ਸਾਲ: 2026-27
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-200 mt-1 max-w-xl">
+                    ਸਾਰੀਆਂ ਬੋਰੀਆਂ ਦੀਆਂ ਐਂਟਰੀਆਂ, ਰੋਜ਼ਾਨਾ ਖਰੀਦ, ਪੇਸ਼ਗੀਆਂ, ਅਦਾਇਗੀਆਂ ਅਤੇ ਕਿਸਾਨ ਖਾਤਾ ਬੈਲੈਂਸ 100% ਵਿੱਤੀ ਸਾਲ 2026-27 ਵਿੱਚ ਤਬਦੀਲ ਕੀਤੇ ਗਏ ਹਨ। ਪਿਛਲੇ ਸਾਲ 2025-26 ਵਿੱਚ ਕੋਈ ਡਾਟਾ ਨਹੀਂ ਦਿਖੇਗਾ।
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleTransferAllTo2026_27}
+                  className="px-4 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs rounded-lg transition shadow-sm flex items-center gap-2 cursor-pointer shrink-0"
+                >
+                  <ArrowRightLeft className="w-4 h-4" />
+                  {isEn ? '100% Re-Sync All to FY 2026-27' : 'ਪੂਰਾ ਡਾਟਾ 2026-27 ਵਿੱਚ ਤਬਦੀਲ ਕਰੋ'}
+                </button>
               </div>
 
               {/* Create New Year Form */}

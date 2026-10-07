@@ -15,7 +15,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { Farmer, BagsEntryRecord, DailyPurchaseRecord, MandiSettings } from '../../types/mandi';
-import { formatKgToQulKg } from '../../utils/calculations';
+import { formatKgToQulKg, getBagsEntryLabourBreakdown } from '../../utils/calculations';
 
 interface FarmerBagLabourReconciliationCardProps {
   farmer: Farmer;
@@ -348,47 +348,56 @@ export const FarmerBagLabourReconciliationCard: React.FC<FarmerBagLabourReconcil
             <table className="w-full text-left text-xs border-collapse">
               <thead>
                 <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 text-[11px]">
-                  <th className="py-2 px-3">ਪਰਚੀ / ਐਂਟਰੀ</th>
-                  <th className="py-2 px-3">ਮਿਤੀ (Date)</th>
-                  <th className="py-2 px-3 text-right">ਨਵੇਂ ਜੂਟ</th>
-                  <th className="py-2 px-3 text-right">ਪੁਰਾਣੇ</th>
-                  <th className="py-2 px-3 text-right">ਕੁੱਲ ਬੋਰੀਆਂ</th>
-                  <th className="py-2 px-3 text-right">ਵਜ਼ਨ</th>
-                  <th className="py-2 px-3 text-right">ਲੇਬਰ (₹)</th>
+                  <th className="py-2 px-2.5">ਪਰਚੀ</th>
+                  <th className="py-2 px-2.5">ਮਿਤੀ (Date)</th>
+                  <th className="py-2 px-2.5 text-center">ਕੁੱਲ ਬੋਰੀਆਂ</th>
+                  <th className="py-2 px-2.5 text-center">ਪੱਕੀ ਲੇਬਰ</th>
+                  <th className="py-2 px-2.5 text-center">ਡਬਲ ਪੱਖਾ</th>
+                  <th className="py-2 px-2.5 text-center">ਸੁੱਕ ਲੱਗੀ</th>
+                  <th className="py-2 px-2.5 text-center">ਸਾਫ਼ ਬੋਰੀਆਂ</th>
+                  <th className="py-2 px-2.5 text-right">ਵਜ਼ਨ</th>
+                  <th className="py-2 px-2.5 text-right">ਲੇਬਰ (₹)</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {farmerArrivals.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="py-6 text-center text-xs text-slate-400 italic">
+                    <td colSpan={9} className="py-6 text-center text-xs text-slate-400 italic">
                       ਇਸ ਕਿਸਾਨ ਲਈ ਕੋਈ ਤੁਲਾਈ ਆਮਦ ਐਂਟਰੀ ਦਰਜ ਨਹੀਂ ਹੈ।
                     </td>
                   </tr>
                 ) : (
                   farmerArrivals.map((arr, i) => {
-                    const lDeduction = Number(
-                      arr.labourDeductions?.totalLabourDeduction ??
-                      arr.labourDeductions?.grandTotalDeductions ??
-                      0
+                    const brk = getBagsEntryLabourBreakdown(
+                      arr,
+                      settings.defaultPakkiLabourRate ?? 7,
+                      settings.defaultPakkaDoubleLabourRate ?? 14,
+                      settings.defaultSukhiLabourRate ?? 5
                     );
                     return (
                       <tr key={arr.id || i} className="hover:bg-slate-50">
-                        <td className="py-2 px-3 font-medium text-slate-900">
+                        <td className="py-2 px-2.5 font-medium text-slate-900 font-mono">
                           {arr.entryNumber || (arr as any).parchiNumber || `#${i + 1}`}
                         </td>
-                        <td className="py-2 px-3 text-slate-600">{arr.date}</td>
-                        <td className="py-2 px-3 text-right text-slate-500">
-                          {arr.newBags ?? (arr.bardana === 'NEW' ? arr.bags : 0)}
+                        <td className="py-2 px-2.5 text-slate-600 whitespace-nowrap">{arr.date}</td>
+                        <td className="py-2 px-2.5 text-center font-black text-slate-900">{brk.totalBags}</td>
+                        <td className="py-2 px-2.5 text-center font-bold text-indigo-900">
+                          {brk.pakkiBags > 0 ? `${brk.pakkiBags} ਬੋ.` : '—'}
                         </td>
-                        <td className="py-2 px-3 text-right text-slate-500">
-                          {arr.oldBags ?? (arr.bardana === 'OLD' ? arr.bags : 0)}
+                        <td className="py-2 px-2.5 text-center font-bold text-amber-900">
+                          {brk.doubleBags > 0 ? `💨 ${brk.doubleBags} ਬੋ.` : 'ਬਿਨਾਂ ਪੱਖਾ'}
                         </td>
-                        <td className="py-2 px-3 text-right font-black text-slate-900">{arr.bags}</td>
-                        <td className="py-2 px-3 text-right font-medium text-slate-700">
+                        <td className="py-2 px-2.5 text-center font-bold text-teal-900">
+                          {brk.sukkiBags > 0 ? `☀️ ${brk.sukkiBags} ਬੋ.` : '—'}
+                        </td>
+                        <td className="py-2 px-2.5 text-center font-bold text-emerald-900 font-mono">
+                          {brk.cleanBags} ਬੋ.
+                        </td>
+                        <td className="py-2 px-2.5 text-right font-medium text-slate-700">
                           {arr.grandTotalDisplay || formatKgToQulKg(arr.grandTotalKg).displayEn}
                         </td>
-                        <td className="py-2 px-3 text-right font-bold text-amber-700">
-                          ₹{Math.round(lDeduction).toLocaleString('en-IN')}
+                        <td className="py-2 px-2.5 text-right font-bold text-rose-700">
+                          ₹{Math.round(brk.totalLabour).toLocaleString('en-IN')}
                         </td>
                       </tr>
                     );
@@ -398,10 +407,11 @@ export const FarmerBagLabourReconciliationCard: React.FC<FarmerBagLabourReconcil
               {farmerArrivals.length > 0 && (
                 <tfoot>
                   <tr className="bg-slate-100 font-bold border-t-2 border-slate-300 text-slate-900">
-                    <td colSpan={4} className="py-2 px-3 text-right uppercase text-[10px]">ਕੁੱਲ ਜੋੜ:</td>
-                    <td className="py-2 px-3 text-right font-black text-emerald-800 text-sm">{totalBagsBrought}</td>
-                    <td className="py-2 px-3 text-right">{formatKgToQulKg(totalWeightBroughtKg).displayEn}</td>
-                    <td className="py-2 px-3 text-right font-black text-amber-800">
+                    <td colSpan={2} className="py-2 px-2.5 text-right uppercase text-[10px]">ਕੁੱਲ ਜੋੜ:</td>
+                    <td className="py-2 px-2.5 text-center font-black text-emerald-800 text-sm">{totalBagsBrought}</td>
+                    <td colSpan={4}></td>
+                    <td className="py-2 px-2.5 text-right">{formatKgToQulKg(totalWeightBroughtKg).displayEn}</td>
+                    <td className="py-2 px-2.5 text-right font-black text-rose-800">
                       ₹{Math.round(recordedLabourTotal).toLocaleString('en-IN')}
                     </td>
                   </tr>
