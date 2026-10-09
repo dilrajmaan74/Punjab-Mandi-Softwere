@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#064e3b" />
+      <stop offset="50%" stop-color="#047857" />
+      <stop offset="100%" stop-color="#0f172a" />
+    </linearGradient>
+    <linearGradient id="gold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fde047" />
+      <stop offset="50%" stop-color="#f59e0b" />
+      <stop offset="100%" stop-color="#d97706" />
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#000" flood-opacity="0.45" />
+    </filter>
+  </defs>
+
+  <!-- Background Canvas -->
+  <rect width="512" height="512" rx="112" fill="url(#bg)" />
+
+  <!-- Inner Golden Border -->
+  <rect x="20" y="20" width="472" height="472" rx="96" fill="none" stroke="#34d399" stroke-width="4" stroke-opacity="0.3" />
+
+  <!-- Wheat / Mandi Emblem Graphics -->
+  <g filter="url(#shadow)" transform="translate(256, 230)">
+    <!-- Central Wheat Stem -->
+    <path d="M0,130 Q-2,30 0,-120" stroke="#fef08a" stroke-width="8" stroke-linecap="round" fill="none" />
+    
+    <!-- Left Wheat Grains -->
+    <path d="M-6,-90 C-40,-105 -50,-70 -8,-65 Z" fill="url(#gold)" />
+    <path d="M-6,-45 C-52,-60 -62,-20 -8,-18 Z" fill="url(#gold)" />
+    <path d="M-6,0 C-58,-12 -65,30 -8,30 Z" fill="url(#gold)" />
+    <path d="M-6,45 C-56,35 -60,78 -8,78 Z" fill="url(#gold)" />
+
+    <!-- Right Wheat Grains -->
+    <path d="M6,-90 C40,-105 50,-70 8,-65 Z" fill="url(#gold)" />
+    <path d="M6,-45 C52,-60 62,-20 8,-18 Z" fill="url(#gold)" />
+    <path d="M6,0 C58,-12 65,30 8,30 Z" fill="url(#gold)" />
+    <path d="M6,45 C56,35 60,78 8,78 Z" fill="url(#gold)" />
+
+    <!-- Top Awns / Whisker -->
+    <path d="M0,-120 Q-25,-160 -45,-190" stroke="#fde047" stroke-width="5" stroke-linecap="round" fill="none" />
+    <path d="M0,-120 Q0,-165 0,-198" stroke="#fde047" stroke-width="6" stroke-linecap="round" fill="none" />
+    <path d="M0,-120 Q25,-160 45,-190" stroke="#fde047" stroke-width="5" stroke-linecap="round" fill="none" />
+  </g>
+
+  <!-- Weighing Scale Base Icon / 37.5 KG Stamp -->
+  <g transform="translate(256, 400)">
+    <rect x="-140" y="-36" width="280" height="48" rx="24" fill="#0f172a" stroke="#fbbf24" stroke-width="3" filter="url(#shadow)" />
+    <text x="0" y="-4" fill="#fbbf24" font-family="system-ui, -apple-system, 'Plus Jakarta Sans', sans-serif" font-size="24" font-weight="900" text-anchor="middle" letter-spacing="1">MANDI PRIME</text>
+    <text x="0" y="28" fill="#a7f3d0" font-family="system-ui, -apple-system, 'Mukta Mahee', sans-serif" font-size="16" font-weight="800" text-anchor="middle">ਪੰਜਾਬ ਮੰਡੀ ਸਾਫਟਵੇਅਰ</text>
+  </g>
+</svg>

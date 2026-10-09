@@ -27,10 +27,13 @@ import {
   Receipt,
   TrendingUp,
   FileCheck2,
-  Wheat
+  Wheat,
+  Laptop
 } from 'lucide-react';
 import { GoogleSheetsSyncModal } from '../farmer/GoogleSheetsSyncModal';
+import { DesktopAppInstallModal } from './DesktopAppInstallModal';
 import { useGoogleSheetsSync } from '../../context/GoogleSheetsSyncContext';
+import { usePWAInstall } from '../../hooks/usePWAInstall';
 
 interface NavItem {
   id: NavigationSection;
@@ -265,8 +268,10 @@ export const Sidebar: React.FC = () => {
     jFormRecords
   } = useMandi();
   const { syncStatus, autoSyncEnabled, conflicts } = useGoogleSheetsSync();
+  const { isInstallable, isInstalled } = usePWAInstall();
 
   const [isGoogleSheetsModalOpen, setIsGoogleSheetsModalOpen] = useState(false);
+  const [isDesktopInstallModalOpen, setIsDesktopInstallModalOpen] = useState(false);
 
   const isEn = language === 'en';
   const isPakka = appMode === 'PAKKA';
@@ -397,6 +402,40 @@ export const Sidebar: React.FC = () => {
         })}
       </div>
 
+      {/* Desktop App (Tally Prime Style PC Install) */}
+      <div className="p-3 border-t border-slate-100 bg-slate-50/80">
+        <button
+          type="button"
+          onClick={() => setIsDesktopInstallModalOpen(true)}
+          className={`w-full flex items-center justify-between px-3 py-2 border rounded-lg text-xs font-bold transition shadow-2xs cursor-pointer group ${
+            isInstalled
+              ? 'bg-slate-100 hover:bg-slate-200 border-slate-300 text-slate-800'
+              : 'bg-gradient-to-r from-emerald-600 to-teal-700 hover:brightness-105 border-emerald-500 text-white ring-1 ring-emerald-400/30'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            <Laptop className={`w-4 h-4 transition-transform group-hover:scale-110 ${
+              isInstalled ? 'text-slate-600' : 'text-emerald-200'
+            }`} />
+            <div className="text-left">
+              <div className="leading-tight">
+                {isInstalled
+                  ? isEn ? 'PC Desktop App' : 'ਡੈਸਕਟੌਪ ਸਾਫਟਵੇਅਰ'
+                  : isEn ? 'Install on PC / Laptop' : 'ਲੈਪਟਾਪ ਤੇ ਇੰਸਟਾਲ ਕਰੋ'}
+              </div>
+              <div className={`text-[10px] font-normal ${isInstalled ? 'text-slate-500' : 'text-emerald-100'}`}>
+                {isEn ? 'Tally Prime Style' : 'Tally Prime ਵਾਂਗ ਸਿੱਧਾ ਐਕਸੈਸ'}
+              </div>
+            </div>
+          </div>
+          <span className={`text-[10px] px-1.5 py-0.5 rounded font-black ${
+            isInstalled ? 'bg-slate-200 text-slate-700' : 'bg-amber-400 text-slate-950'
+          }`}>
+            {isInstalled ? 'Installed' : 'Install'}
+          </span>
+        </button>
+      </div>
+
       {/* Google Sheets Quick Access */}
       <div className="p-3 border-t border-slate-100">
         <button
@@ -447,6 +486,12 @@ export const Sidebar: React.FC = () => {
       <GoogleSheetsSyncModal
         isOpen={isGoogleSheetsModalOpen}
         onClose={() => setIsGoogleSheetsModalOpen(false)}
+      />
+
+      {/* Desktop App Install Modal */}
+      <DesktopAppInstallModal
+        isOpen={isDesktopInstallModalOpen}
+        onClose={() => setIsDesktopInstallModalOpen(false)}
       />
     </aside>
   );

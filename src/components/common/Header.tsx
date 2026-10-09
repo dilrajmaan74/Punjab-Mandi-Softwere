@@ -22,7 +22,9 @@ import {
   Moon,
   Sparkles,
   Scale,
-  ArrowRightLeft
+  ArrowRightLeft,
+  Laptop,
+  Download
 } from 'lucide-react';
 import { FirmManagerModal } from '../firm/FirmManagerModal';
 import { FiscalYearManagerModal } from '../firm/FiscalYearManagerModal';
@@ -30,6 +32,8 @@ import { SellerMasterModal } from '../seller/SellerMasterModal';
 import { SupabaseSyncModal } from '../supabase/SupabaseSyncModal';
 import { GoogleSheetsSyncModal } from '../farmer/GoogleSheetsSyncModal';
 import { AiMunimSummaryModal } from '../reports/AiMunimSummaryModal';
+import { DesktopAppInstallModal } from './DesktopAppInstallModal';
+import { usePWAInstall } from '../../hooks/usePWAInstall';
 import { useGoogleSheetsSync } from '../../context/GoogleSheetsSyncContext';
 import { TopQuickNavigationBar } from './TopQuickNavigationBar';
 import { CropSwitcher } from './CropSwitcher';
@@ -58,12 +62,14 @@ export const Header: React.FC = () => {
   } = useMandi();
   const { syncStatus: sheetsSyncStatus, lastSyncTime, conflicts } = useGoogleSheetsSync();
   const { currentUser, logout, setIsAuthModalOpen, setAuthModalMode } = useAuth();
+  const { isInstallable, isInstalled } = usePWAInstall();
 
   const [isFirmModalOpen, setIsFirmModalOpen] = useState(false);
   const [isFiscalYearModalOpen, setIsFiscalYearModalOpen] = useState(false);
   const [isSellerModalOpen, setIsSellerModalOpen] = useState(false);
   const [isGoogleSheetsModalOpen, setIsGoogleSheetsModalOpen] = useState(false);
   const [isAiMunimModalOpen, setIsAiMunimModalOpen] = useState(false);
+  const [isDesktopInstallModalOpen, setIsDesktopInstallModalOpen] = useState(false);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
 
   const totalBags = bagsEntries.reduce((sum, b) => sum + (b.bags || 0), 0);
@@ -298,6 +304,34 @@ export const Header: React.FC = () => {
               </span>
             </button>
 
+            {/* Laptop / PC App (Tally Prime Style Desktop Install) */}
+            <button
+              type="button"
+              onClick={() => setIsDesktopInstallModalOpen(true)}
+              title={
+                isInstalled
+                  ? 'Running as Desktop App (Tally Style)'
+                  : 'Install on Laptop / PC as Desktop Software (Tally Prime Style)'
+              }
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-bold transition shadow-xs cursor-pointer ${
+                isInstalled
+                  ? 'bg-slate-800/90 border-slate-700 text-slate-300 hover:text-white'
+                  : 'bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 border-emerald-400/80 text-white hover:brightness-110 ring-1 ring-emerald-400/50'
+              }`}
+            >
+              <Laptop className="w-3.5 h-3.5 text-emerald-200" />
+              <span className="hidden sm:inline">
+                {isInstalled
+                  ? language === 'en' ? 'Desktop App' : 'ਡੈਸਕਟੌਪ ਐਪ'
+                  : language === 'en' ? 'PC App Install' : 'PC ਐਪ ਇੰਸਟਾਲ'}
+              </span>
+              {!isInstalled && (
+                <span className="text-[9px] bg-amber-400 text-slate-950 font-black px-1.5 py-0.2 rounded-md">
+                  Tally Style
+                </span>
+              )}
+            </button>
+
             {/* Quick Metrics */}
             <div className="hidden xl:flex items-center gap-2 bg-slate-800/60 px-2 py-1 rounded-lg border border-slate-700/60 text-xs">
               <div className="flex items-center gap-1 text-slate-300">
@@ -465,6 +499,12 @@ export const Header: React.FC = () => {
       <AiMunimSummaryModal
         isOpen={isAiMunimModalOpen}
         onClose={() => setIsAiMunimModalOpen(false)}
+      />
+
+      {/* Laptop / Desktop Accounting Software (Tally Prime Style) Install Modal */}
+      <DesktopAppInstallModal
+        isOpen={isDesktopInstallModalOpen}
+        onClose={() => setIsDesktopInstallModalOpen(false)}
       />
     </>
   );

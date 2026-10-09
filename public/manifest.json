@@ -1,0 +1,51 @@
+{
+  "id": "/",
+  "name": "Punjab Mandi Software | ਪੰਜਾਬ ਮੰਡੀ ਸਾਫਟਵੇਅਰ",
+  "short_name": "Mandi Prime",
+  "description": "Complete Laptop & Desktop Punjab Mandi Kacha & Pakka Accounting Software. Farmer Bags Weighment, Bardana, Daily Purchase, Boli, Lifting, and CA Balance Sheet.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone"],
+  "orientation": "any",
+  "theme_color": "#0f172a",
+  "background_color": "#0f172a",
+  "categories": ["business", "finance", "productivity"],
+  "icons": [
+    {
+      "src": "/pwa-icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-icon.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Bags Entry (ਤੁਲਾਈ)",
+      "short_name": "Bags Entry",
+      "description": "Directly record 37.5 KG weighment and labour deductions",
+      "url": "/?section=bags-entry",
+      "icons": [{ "src": "/pwa-icon.svg", "sizes": "192x192" }]
+    },
+    {
+      "name": "Farmer Account (ਕਿਸਾਨ ਖਾਤਾ)",
+      "short_name": "Farmer Ledger",
+      "description": "View farmer ledgers, advance payment, and interest",
+      "url": "/?section=farmer-account",
+      "icons": [{ "src": "/pwa-icon.svg", "sizes": "192x192" }]
+    },
+    {
+      "name": "Daily Purchase (ਰੋਜ਼ਾਨਾ ਖਰੀਦ)",
+      "short_name": "Daily Purchase",
+      "description": "Record daily agency auction purchase",
+      "url": "/?section=daily-purchase",
+      "icons": [{ "src": "/pwa-icon.svg", "sizes": "192x192" }]
+    }
+  ]
+}
