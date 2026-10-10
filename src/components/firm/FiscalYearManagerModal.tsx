@@ -68,7 +68,7 @@ export const FiscalYearManagerModal: React.FC<FiscalYearManagerModalProps> = ({
   // Carry Forward State
   const [fromYear, setFromYear] = useState<string>(() => {
     const idx = fiscalYears.indexOf(activeFiscalYear);
-    return idx > 0 ? fiscalYears[idx - 1] : fiscalYears[0] || '2025-26';
+    return idx > 0 ? fiscalYears[idx - 1] : fiscalYears[0] || '2026-27';
   });
   const [toYear, setToYear] = useState<string>(activeFiscalYear);
   const [isCarryingForward, setIsCarryingForward] = useState(false);

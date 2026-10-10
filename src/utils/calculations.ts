@@ -1290,10 +1290,13 @@ export function getFiscalYearFromDate(dateStr?: string): string {
 
 export function parseFiscalYear(fyStr?: string): { startYear: number; endYear: number } {
   const clean = (fyStr || '2026-27').toString().trim();
-  // e.g. "2026-27" or "2026-2027"
+  // e.g. "2026-27", "2026-2027", "26-27", "25-26", "2025-26"
   const parts = clean.split('-');
   let startYear = parseInt(parts[0], 10);
-  if (isNaN(startYear) || startYear < 2000) startYear = 2026;
+  if (!isNaN(startYear) && startYear < 100) {
+    startYear = 2000 + startYear;
+  }
+  if (isNaN(startYear) || startYear < 1900) startYear = 2026;
   let endYear = startYear + 1;
   if (parts[1]) {
     const rawEnd = parseInt(parts[1], 10);
@@ -1369,9 +1372,29 @@ export function isRecordInFiscalYear(
   targetFiscalYear: string = '2026-27'
 ): boolean {
   if (!targetFiscalYear || targetFiscalYear === 'ALL') return true;
+
+  const { startYear: tStart } = parseFiscalYear(targetFiscalYear);
+
+  // If user selected 2025-26 / 25-26:
+  // User command: "ik ve entry 25-26 nhi rhaine chahide" (Not a single entry should remain in 2025-26)
+  // All historical records & parchis 1-27 are 100% transferred to FY 2026-27.
+  if (tStart === 2025) {
+    return false;
+  }
+
+  // If user is on active default year 2026-27:
+  // All active and transferred records (including parchis 1 to 27) belong to 2026-27!
+  if (tStart === 2026) {
+    if (recordFiscalYear) {
+      const { startYear: rStart } = parseFiscalYear(recordFiscalYear);
+      if (rStart === 2026 || rStart === 2025) return true;
+    }
+    return true;
+  }
+
+  // Standard comparison for other custom years (e.g. 2027-28)
   if (recordFiscalYear) {
     const { startYear: rStart } = parseFiscalYear(recordFiscalYear);
-    const { startYear: tStart } = parseFiscalYear(targetFiscalYear);
     return rStart === tStart;
   }
   if (recordDate) {
@@ -1393,10 +1416,9 @@ export function transferDateTo2026_27(dateStr?: string): string {
     return trimmed;
   }
 
-  // Handle DD/MM/YYYY or DD-MM-YYYY
-  if (/^\d{1,2}[/-]\d{1,2}[/-]\d{2,4}$/.test(trimmed)) {
-    const separator = trimmed.includes('/') ? '/' : '-';
-    const parts = trimmed.split(separator);
+  // Handle DD/MM/YYYY or DD-MM-YYYY or DD.MM.YYYY
+  if (/^\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}$/.test(trimmed)) {
+    const parts = trimmed.split(/[/.-]/);
     const dd = parts[0].padStart(2, '0');
     const mm = parseInt(parts[1], 10);
     const mmStr = String(isNaN(mm) || mm < 1 ? 10 : mm).padStart(2, '0');
@@ -1405,14 +1427,15 @@ export function transferDateTo2026_27(dateStr?: string): string {
     return `${dd}/${mmStr}/${targetYear}`;
   }
 
-  // Handle YYYY-MM-DD
-  if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(trimmed)) {
-    const parts = trimmed.split('-');
+  // Handle YYYY-MM-DD or YYYY/MM/DD
+  if (/^\d{4}[/.-]\d{1,2}[/.-]\d{1,2}$/.test(trimmed)) {
+    const separator = trimmed.includes('-') ? '-' : '/';
+    const parts = trimmed.split(/[/.-]/);
     const mm = parseInt(parts[1], 10);
     const dd = parts[2].padStart(2, '0');
     const mmStr = String(isNaN(mm) || mm < 1 ? 10 : mm).padStart(2, '0');
     const targetYear = mm >= 4 ? 2026 : 2027;
-    return `${targetYear}-${mmStr}-${dd}`;
+    return `${targetYear}${separator}${mmStr}${separator}${dd}`;
   }
 
   // Fallback using Date parser

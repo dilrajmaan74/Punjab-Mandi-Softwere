@@ -239,7 +239,7 @@ export const TallyDashboardView: React.FC<TallyDashboardViewProps> = ({ onExitTa
           <div className="hidden sm:flex items-center gap-2 text-slate-300 font-mono text-[11px]">
             <span className="text-amber-400 font-bold">{activeFirm?.name || 'Jammu Trading Company'}</span>
             <span>|</span>
-            <span>FY: {activeFiscalYear || '2024-25'}</span>
+            <span>FY: {activeFiscalYear || '2026-27'}</span>
             <span>|</span>
             <span className="text-emerald-400">{todayDateStr}</span>
           </div>

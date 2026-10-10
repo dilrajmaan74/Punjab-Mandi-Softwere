@@ -613,9 +613,31 @@ export const saveFirmData = <T,>(baseKey: string, firmId: string, data: T) => {
 export function transferRecordArrayTo2026_27<T extends Record<string, any>>(records: T[], dateField: string = 'date'): T[] {
   if (!Array.isArray(records)) return [];
   return records.map((item) => {
+    if (!item || typeof item !== 'object') return item;
     const copy: any = { ...item, fiscalYear: '2026-27' };
     if (dateField && copy[dateField]) {
       copy[dateField] = transferDateTo2026_27(copy[dateField]);
+    }
+    if (copy.date && dateField !== 'date') {
+      copy.date = transferDateTo2026_27(copy.date);
+    }
+    if (copy.dispatchDate && dateField !== 'dispatchDate') {
+      copy.dispatchDate = transferDateTo2026_27(copy.dispatchDate);
+    }
+    if (copy.receivingDate) {
+      copy.receivingDate = transferDateTo2026_27(copy.receivingDate);
+    }
+    if (copy.paymentDate) {
+      copy.paymentDate = transferDateTo2026_27(copy.paymentDate);
+    }
+    if (copy.advanceDate) {
+      copy.advanceDate = transferDateTo2026_27(copy.advanceDate);
+    }
+    if (copy.weighmentDate) {
+      copy.weighmentDate = transferDateTo2026_27(copy.weighmentDate);
+    }
+    if (copy.entryDate) {
+      copy.entryDate = transferDateTo2026_27(copy.entryDate);
     }
     if (Array.isArray(copy.repayments)) {
       copy.repayments = copy.repayments.map((r: any) => ({
@@ -632,15 +654,17 @@ export function transferFarmersTo2026_27(farmersList: Farmer[]): Farmer[] {
   if (!Array.isArray(farmersList)) return [];
   return farmersList.filter((f) => f && f.id).map((f) => {
     const updatedYOB = { ...(f.yearOpeningBalances || {}) };
-    if (updatedYOB['2025-26']) {
+    const prevEntry = updatedYOB['2025-26'] || updatedYOB['25-26'];
+    if (prevEntry) {
       updatedYOB['2026-27'] = {
-        ...updatedYOB['2025-26'],
-        date: transferDateTo2026_27(updatedYOB['2025-26'].date),
-        notes: updatedYOB['2025-26'].notes
-          ? `${updatedYOB['2025-26'].notes} (2026-27 ਵਿੱਚ ਤਬਦੀਲ)`
+        ...prevEntry,
+        date: transferDateTo2026_27(prevEntry.date),
+        notes: prevEntry.notes
+          ? `${prevEntry.notes} (2026-27 ਵਿੱਚ ਤਬਦੀਲ)`
           : '2026-27 ਓਪਨਿੰਗ ਬੈਲੈਂਸ'
       };
       delete updatedYOB['2025-26'];
+      delete updatedYOB['25-26'];
     }
     return {
       ...f,
@@ -649,6 +673,84 @@ export function transferFarmersTo2026_27(farmersList: Farmer[]): Farmer[] {
     };
   });
 }
+
+// Global synchronizer: Migrates all historical localStorage keys across all firms to FY 2026-27
+export function migrateAllStorageKeysTo2026_27(): void {
+  try {
+    localStorage.setItem(LOCAL_STORAGE_KEYS.ACTIVE_FISCAL_YEAR, DEFAULT_ACTIVE_YEAR);
+    const keys = Object.keys(localStorage);
+    keys.forEach((key) => {
+      try {
+        if (
+          key.includes('bags_entries') ||
+          key.includes('daily_purchases') ||
+          key.includes('farmer_payments') ||
+          key.includes('advances') ||
+          key.includes('bardana') ||
+          key.includes('boli_records') ||
+          key.includes('lefting') ||
+          key.includes('labour_work') ||
+          key.includes('labour_advance') ||
+          key.includes('pakka_vouchers') ||
+          key.includes('iform') ||
+          key.includes('jform') ||
+          key.includes('tds')
+        ) {
+          const raw = localStorage.getItem(key);
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              const dateKey = key.includes('lefting') ? 'dispatchDate' : 'date';
+              const migrated = transferRecordArrayTo2026_27(parsed, dateKey);
+              localStorage.setItem(key, JSON.stringify(migrated));
+            }
+          }
+        } else if (key.includes('farmers')) {
+          const raw = localStorage.getItem(key);
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              const migrated = transferFarmersTo2026_27(parsed);
+              localStorage.setItem(key, JSON.stringify(migrated));
+            }
+          }
+        } else if (key.startsWith('draft_')) {
+          const raw = localStorage.getItem(key);
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (parsed && typeof parsed === 'object') {
+              let changed = false;
+              if (parsed.dateInput && typeof parsed.dateInput === 'string') {
+                parsed.dateInput = transferDateTo2026_27(parsed.dateInput);
+                changed = true;
+              }
+              if (parsed.batchDate && typeof parsed.batchDate === 'string') {
+                parsed.batchDate = transferDateTo2026_27(parsed.batchDate);
+                changed = true;
+              }
+              if (parsed.purchaseDate && typeof parsed.purchaseDate === 'string') {
+                parsed.purchaseDate = transferDateTo2026_27(parsed.purchaseDate);
+                changed = true;
+              }
+              if (changed) {
+                localStorage.setItem(key, JSON.stringify(parsed));
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.warn(`Error migrating storage key ${key}:`, err);
+      }
+    });
+  } catch (e) {
+    console.warn('Storage migration error:', e);
+  }
+}
+
+// Immediate synchronous pass on module load
+try {
+  migrateAllStorageKeysTo2026_27();
+} catch {}
 
 export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // 1. Multi-Firm Management: initialize active firm first
@@ -695,7 +797,9 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   // 2. Farmers list - strictly isolated per active firm
   const [farmers, setFarmers] = useState<Farmer[]>(() => {
     const list = loadFirmData<Farmer[]>(LOCAL_STORAGE_KEYS.FARMERS, activeFirmId, []);
-    return transferFarmersTo2026_27(Array.isArray(list) ? list : []);
+    const transferred = transferFarmersTo2026_27(Array.isArray(list) ? list : []);
+    saveFirmData(LOCAL_STORAGE_KEYS.FARMERS, activeFirmId, transferred);
+    return transferred;
   });
 
   // 3. Bags entries - strictly isolated per active firm
@@ -703,7 +807,6 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const list = loadFirmData<BagsEntryRecord[]>(LOCAL_STORAGE_KEYS.BAGS_ENTRIES, activeFirmId, []);
     if (!Array.isArray(list)) return [];
     // Auto-repair any entries where Pakha or Sukhi was calculated, but fixed Pakki labour was omitted
-    let needsSave = false;
     const repaired = list.map((entry) => {
       const totalBags = entry.bags || ((entry.newBags || 0) + (entry.oldBags || 0));
       const hasDoubleOrSukki = 
@@ -716,7 +819,6 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const pakkiBags = entry.conditionBreakdown?.pakkiBags ?? entry.labourDeductions?.pakkiBagsCount ?? 0;
 
       if (totalBags > 0 && hasDoubleOrSukki && (pakkiAmount === 0 || pakkiBags === 0)) {
-        needsSave = true;
         const doubleBags = entry.conditionBreakdown?.doubleBags ?? entry.labourDeductions?.doubleBagsCount ?? 0;
         const doubleRate = entry.conditionBreakdown?.doubleRate ?? entry.labourDeductions?.pakkaDoubleLabourRate ?? 14;
         const sukkiBags = entry.conditionBreakdown?.sukkiBags ?? entry.labourDeductions?.sukkiBagsCount ?? 0;
@@ -746,16 +848,16 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     });
 
     const transferred = transferRecordArrayTo2026_27(repaired, 'date');
-    if (needsSave) {
-      saveFirmData(LOCAL_STORAGE_KEYS.BAGS_ENTRIES, activeFirmId, transferred);
-    }
+    saveFirmData(LOCAL_STORAGE_KEYS.BAGS_ENTRIES, activeFirmId, transferred);
     return transferred;
   });
 
   // 4. Bardana Received Records - strictly isolated per active firm
   const [bardanaRecords, setBardanaRecords] = useState<BardanaReceivedRecord[]>(() => {
     const list = loadFirmData<BardanaReceivedRecord[]>(LOCAL_STORAGE_KEYS.BARDANA, activeFirmId, []);
-    return transferRecordArrayTo2026_27(Array.isArray(list) ? list : [], 'date');
+    const transferred = transferRecordArrayTo2026_27(Array.isArray(list) ? list : [], 'date');
+    saveFirmData(LOCAL_STORAGE_KEYS.BARDANA, activeFirmId, transferred);
+    return transferred;
   });
 
   // 5. Daily Purchase Records - strictly isolated per active firm
@@ -780,25 +882,33 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       seen.add(r.id);
       return r;
     });
-    return transferRecordArrayTo2026_27(sanitized, 'date');
+    const transferred = transferRecordArrayTo2026_27(sanitized, 'date');
+    saveFirmData(LOCAL_STORAGE_KEYS.DAILY_PURCHASES, activeFirmId, transferred);
+    return transferred;
   });
 
   // 6. Farmer Payment Records - strictly isolated per active firm
   const [farmerPayments, setFarmerPayments] = useState<FarmerPaymentRecord[]>(() => {
     const list = loadFirmData<FarmerPaymentRecord[]>(LOCAL_STORAGE_KEYS.FARMER_PAYMENTS, activeFirmId, []);
-    return transferRecordArrayTo2026_27(Array.isArray(list) ? list : [], 'date');
+    const transferred = transferRecordArrayTo2026_27(Array.isArray(list) ? list : [], 'date');
+    saveFirmData(LOCAL_STORAGE_KEYS.FARMER_PAYMENTS, activeFirmId, transferred);
+    return transferred;
   });
 
   // 7. Farmer Advance Records - strictly isolated per active firm
   const [farmerAdvances, setFarmerAdvances] = useState<FarmerAdvanceRecord[]>(() => {
     const list = loadFirmData<FarmerAdvanceRecord[]>(LOCAL_STORAGE_KEYS.ADVANCES, activeFirmId, []);
-    return transferRecordArrayTo2026_27(Array.isArray(list) ? list : [], 'date');
+    const transferred = transferRecordArrayTo2026_27(Array.isArray(list) ? list : [], 'date');
+    saveFirmData(LOCAL_STORAGE_KEYS.ADVANCES, activeFirmId, transferred);
+    return transferred;
   });
 
   // 8. Boli Records - strictly isolated per active firm
   const [boliRecords, setBoliRecords] = useState<BoliRecord[]>(() => {
     const list = loadFirmData<BoliRecord[]>(LOCAL_STORAGE_KEYS.BOLI_RECORDS, activeFirmId, []);
-    return transferRecordArrayTo2026_27(Array.isArray(list) ? list : [], 'date');
+    const transferred = transferRecordArrayTo2026_27(Array.isArray(list) ? list : [], 'date');
+    saveFirmData(LOCAL_STORAGE_KEYS.BOLI_RECORDS, activeFirmId, transferred);
+    return transferred;
   });
 
   // 9. Labour Mates - isolated per firm
@@ -1148,25 +1258,57 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           d.trucks.length > 0;
 
         if (hasSupabaseData) {
-          // Supabase is the PRIMARY source of truth
-          if (d.farmers) setFarmers(d.farmers);
-          if (d.bagsEntries) setBagsEntries(d.bagsEntries);
-          if (d.bardanaRecords) setBardanaRecords(d.bardanaRecords);
-          if (d.dailyPurchaseRecords) setDailyPurchaseRecords(d.dailyPurchaseRecords);
-          if (d.farmerPayments) setFarmerPayments(d.farmerPayments);
-          if (d.farmerAdvances) setFarmerAdvances(d.farmerAdvances);
-          if (d.boliRecords) setBoliRecords(d.boliRecords);
-          if (d.leftingRecords) setLeftingRecords(d.leftingRecords);
+          // Supabase is the PRIMARY source of truth - Ensure 100% data belongs to FY 2026-27
+          const cleanFarmers = transferFarmersTo2026_27(d.farmers || []);
+          const cleanBags = transferRecordArrayTo2026_27(d.bagsEntries || [], 'date');
+          const cleanBardana = transferRecordArrayTo2026_27(d.bardanaRecords || [], 'date');
+          const cleanPurchases = transferRecordArrayTo2026_27(d.dailyPurchaseRecords || [], 'date');
+          const cleanPayments = transferRecordArrayTo2026_27(d.farmerPayments || [], 'date');
+          const cleanAdvances = transferRecordArrayTo2026_27(d.farmerAdvances || [], 'date');
+          const cleanBolis = transferRecordArrayTo2026_27(d.boliRecords || [], 'date');
+          const cleanLefting = transferRecordArrayTo2026_27(d.leftingRecords || [], 'dispatchDate');
+
+          if (d.farmers) setFarmers(cleanFarmers);
+          if (d.bagsEntries) setBagsEntries(cleanBags);
+          if (d.bardanaRecords) setBardanaRecords(cleanBardana);
+          if (d.dailyPurchaseRecords) setDailyPurchaseRecords(cleanPurchases);
+          if (d.farmerPayments) setFarmerPayments(cleanPayments);
+          if (d.farmerAdvances) setFarmerAdvances(cleanAdvances);
+          if (d.boliRecords) setBoliRecords(cleanBolis);
+          if (d.leftingRecords) setLeftingRecords(cleanLefting);
           if (d.recycleBinItems) setRecycleBinItems(d.recycleBinItems);
           if (d.agencies && d.agencies.length > 0) setAgencies(d.agencies);
           if (d.pinCodes && d.pinCodes.length > 0) setPinCodes(d.pinCodes);
           if (d.firms && d.firms.length > 0) setFirms(d.firms);
           if (d.activeFirmId) setActiveFirmId(d.activeFirmId);
           if (d.fiscalYears && d.fiscalYears.length > 0) setFiscalYears(d.fiscalYears);
-          if (d.activeFiscalYear) setActiveFiscalYear(d.activeFiscalYear);
+
+          // Strict Default: 2026-27 (Never allow reverting to 2025-26)
+          setActiveFiscalYear(DEFAULT_ACTIVE_YEAR);
+          try {
+            localStorage.setItem(LOCAL_STORAGE_KEYS.ACTIVE_FISCAL_YEAR, DEFAULT_ACTIVE_YEAR);
+          } catch {}
+
           if (d.sellers && d.sellers.length > 0) setSellers(d.sellers);
           if (d.trucks && d.trucks.length > 0) setTrucks(d.trucks);
           if (d.settings) setSettings(d.settings);
+
+          // Save cleaned records to active firm storage
+          saveFirmData(LOCAL_STORAGE_KEYS.BAGS_ENTRIES, activeFirmId, cleanBags);
+          saveFirmData(LOCAL_STORAGE_KEYS.DAILY_PURCHASES, activeFirmId, cleanPurchases);
+          saveFirmData(LOCAL_STORAGE_KEYS.FARMERS, activeFirmId, cleanFarmers);
+          saveFirmData(LOCAL_STORAGE_KEYS.ADVANCES, activeFirmId, cleanAdvances);
+          saveFirmData(LOCAL_STORAGE_KEYS.FARMER_PAYMENTS, activeFirmId, cleanPayments);
+          saveFirmData(LOCAL_STORAGE_KEYS.BARDANA, activeFirmId, cleanBardana);
+          saveFirmData(LOCAL_STORAGE_KEYS.BOLI_RECORDS, activeFirmId, cleanBolis);
+          saveFirmData(LOCAL_STORAGE_KEYS.LEFTING, activeFirmId, cleanLefting);
+
+          // Background sync migrated records to Supabase with FY 2026-27
+          cleanBags.forEach((b) => supabaseUpsertBagsEntry(b, activeFirmId, DEFAULT_ACTIVE_YEAR).catch(console.error));
+          cleanPurchases.forEach((p) => supabaseUpsertDailyPurchase(p, activeFirmId, DEFAULT_ACTIVE_YEAR).catch(console.error));
+          cleanAdvances.forEach((a) => supabaseUpsertAdvance(a, activeFirmId, DEFAULT_ACTIVE_YEAR).catch(console.error));
+          cleanPayments.forEach((py) => supabaseUpsertPayment(py, activeFirmId, DEFAULT_ACTIVE_YEAR).catch(console.error));
+          cleanFarmers.forEach((f) => supabaseUpsertFarmer(f, activeFirmId).catch(console.error));
         } else {
           // Supabase is empty or newly created: Do NOT auto-migrate until security audit & explicit user migration
           console.info('Supabase database connected. Ready for manual migration after security audit.');
@@ -1199,47 +1341,8 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   useEffect(() => {
     try {
       localStorage.setItem(LOCAL_STORAGE_KEYS.ACTIVE_FISCAL_YEAR, DEFAULT_ACTIVE_YEAR);
-      const allKeys = Object.keys(localStorage);
-      allKeys.forEach((key) => {
-        if (
-          key.includes('bags_entries') ||
-          key.includes('daily_purchases') ||
-          key.includes('farmer_payments') ||
-          key.includes('advances') ||
-          key.includes('bardana') ||
-          key.includes('boli_records') ||
-          key.includes('lefting') ||
-          key.includes('labour_work') ||
-          key.includes('labour_advance') ||
-          key.includes('pakka_vouchers') ||
-          key.includes('iform') ||
-          key.includes('jform') ||
-          key.includes('tds')
-        ) {
-          try {
-            const raw = localStorage.getItem(key);
-            if (raw) {
-              const parsed = JSON.parse(raw);
-              if (Array.isArray(parsed) && parsed.length > 0) {
-                const dateKey = key.includes('lefting') ? 'dispatchDate' : 'date';
-                const migrated = transferRecordArrayTo2026_27(parsed, dateKey);
-                localStorage.setItem(key, JSON.stringify(migrated));
-              }
-            }
-          } catch {}
-        } else if (key.includes('farmers')) {
-          try {
-            const raw = localStorage.getItem(key);
-            if (raw) {
-              const parsed = JSON.parse(raw);
-              if (Array.isArray(parsed) && parsed.length > 0) {
-                const migrated = transferFarmersTo2026_27(parsed);
-                localStorage.setItem(key, JSON.stringify(migrated));
-              }
-            }
-          } catch {}
-        }
-      });
+      migrateAllStorageKeysTo2026_27();
+      transferAllDataTo2026_27();
     } catch (e) {
       console.warn('Initial FY 2026-27 storage transfer check error:', e);
     }
@@ -4574,11 +4677,28 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       return updated;
     });
 
-    // 11. Ensure active fiscal year is '2026-27'
+    // 11. Ensure active fiscal year is strictly '2026-27'
     setActiveFiscalYear(DEFAULT_ACTIVE_YEAR);
     try {
       localStorage.setItem(LOCAL_STORAGE_KEYS.ACTIVE_FISCAL_YEAR, DEFAULT_ACTIVE_YEAR);
     } catch {}
+
+    // 12. Run full storage key migration across all firms
+    migrateAllStorageKeysTo2026_27();
+
+    // 13. Sync active firm's transferred records to Supabase in background
+    if (isSupabaseConfigured()) {
+      try {
+        supabaseSaveActiveFiscalYearContext(DEFAULT_ACTIVE_YEAR).catch(console.error);
+        bagsEntries.forEach((b) => supabaseUpsertBagsEntry({ ...b, fiscalYear: '2026-27', date: transferDateTo2026_27(b.date) }, activeFirmId, DEFAULT_ACTIVE_YEAR).catch(console.error));
+        dailyPurchaseRecords.forEach((p) => supabaseUpsertDailyPurchase({ ...p, fiscalYear: '2026-27', date: transferDateTo2026_27(p.date) }, activeFirmId, DEFAULT_ACTIVE_YEAR).catch(console.error));
+        farmerAdvances.forEach((a) => supabaseUpsertAdvance({ ...a, fiscalYear: '2026-27', date: transferDateTo2026_27(a.date) }, activeFirmId, DEFAULT_ACTIVE_YEAR).catch(console.error));
+        farmerPayments.forEach((py) => supabaseUpsertPayment({ ...py, fiscalYear: '2026-27', date: transferDateTo2026_27(py.date) }, activeFirmId, DEFAULT_ACTIVE_YEAR).catch(console.error));
+        farmers.forEach((f) => supabaseUpsertFarmer(f, activeFirmId).catch(console.error));
+      } catch (err) {
+        console.warn('Background Supabase sync notice in transferAllDataTo2026_27:', err);
+      }
+    }
 
     return {
       success: true,
