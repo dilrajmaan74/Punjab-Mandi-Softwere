@@ -24,7 +24,8 @@ import {
   Scale,
   ArrowRightLeft,
   Laptop,
-  Download
+  Download,
+  Smartphone
 } from 'lucide-react';
 import { FirmManagerModal } from '../firm/FirmManagerModal';
 import { FiscalYearManagerModal } from '../firm/FiscalYearManagerModal';
@@ -33,10 +34,12 @@ import { SupabaseSyncModal } from '../supabase/SupabaseSyncModal';
 import { GoogleSheetsSyncModal } from '../farmer/GoogleSheetsSyncModal';
 import { AiMunimSummaryModal } from '../reports/AiMunimSummaryModal';
 import { DesktopAppInstallModal } from './DesktopAppInstallModal';
+import { AndroidAppInstallModal } from './AndroidAppInstallModal';
 import { usePWAInstall } from '../../hooks/usePWAInstall';
 import { useGoogleSheetsSync } from '../../context/GoogleSheetsSyncContext';
 import { TopQuickNavigationBar } from './TopQuickNavigationBar';
 import { CropSwitcher } from './CropSwitcher';
+import { BardanaLowStockAlertBanner } from '../bardana/BardanaLowStockAlertBanner';
 
 export const Header: React.FC = () => {
   const {
@@ -70,6 +73,7 @@ export const Header: React.FC = () => {
   const [isGoogleSheetsModalOpen, setIsGoogleSheetsModalOpen] = useState(false);
   const [isAiMunimModalOpen, setIsAiMunimModalOpen] = useState(false);
   const [isDesktopInstallModalOpen, setIsDesktopInstallModalOpen] = useState(false);
+  const [isAndroidInstallModalOpen, setIsAndroidInstallModalOpen] = useState(false);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
 
   const totalBags = bagsEntries.reduce((sum, b) => sum + (b.bags || 0), 0);
@@ -103,8 +107,19 @@ export const Header: React.FC = () => {
               </div>
             </div>
 
-            {/* Mobile Firm Switch Button */}
+            {/* Mobile Firm Switch & Android Install Buttons */}
             <div className="flex md:hidden items-center gap-1.5">
+              {!isInstalled && (
+                <button
+                  type="button"
+                  onClick={() => setIsAndroidInstallModalOpen(true)}
+                  className="px-2 py-1 text-[11px] font-black bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-lg border border-emerald-400/80 flex items-center gap-1 shadow-xs animate-pulse cursor-pointer"
+                  title="ਐਂਡਰਾਇਡ ਫੋਨ 'ਚ ਐਪ ਇੰਸਟਾਲ ਕਰੋ"
+                >
+                  <Smartphone className="w-3.5 h-3.5 text-amber-300 shrink-0" />
+                  <span>ਐਪ ਇੰਸਟਾਲ</span>
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => setIsFirmModalOpen(true)}
@@ -209,6 +224,9 @@ export const Header: React.FC = () => {
 
             {/* Active Crop Switcher (Wheat / Maize / Paddy) */}
             <CropSwitcher />
+
+            {/* Bardana Low Stock Real-time Alert Badge */}
+            <BardanaLowStockAlertBanner variant="header-badge" />
 
             {/* Seller Master Button */}
             <button
@@ -328,6 +346,32 @@ export const Header: React.FC = () => {
               {!isInstalled && (
                 <span className="text-[9px] bg-amber-400 text-slate-950 font-black px-1.5 py-0.2 rounded-md">
                   Tally Style
+                </span>
+              )}
+            </button>
+
+            {/* Android Phone App Install Button */}
+            <button
+              type="button"
+              onClick={() => setIsAndroidInstallModalOpen(true)}
+              title={
+                isInstalled
+                  ? 'Running as Installed Mobile App'
+                  : 'Install on Android Phone as App (No Chrome needed)'
+              }
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-bold transition shadow-xs cursor-pointer ${
+                isInstalled
+                  ? 'bg-slate-800/90 border-slate-700 text-slate-300 hover:text-white'
+                  : 'bg-gradient-to-r from-teal-700 to-emerald-800 border-teal-500/80 text-white hover:brightness-110'
+              }`}
+            >
+              <Smartphone className="w-3.5 h-3.5 text-amber-300" />
+              <span className="hidden sm:inline">
+                {language === 'en' ? 'Android App' : 'ਫੋਨ ਐਪ ਇੰਸਟਾਲ'}
+              </span>
+              {!isInstalled && (
+                <span className="text-[9px] bg-emerald-400 text-slate-950 font-black px-1.5 py-0.2 rounded-md">
+                  APK
                 </span>
               )}
             </button>
@@ -505,6 +549,12 @@ export const Header: React.FC = () => {
       <DesktopAppInstallModal
         isOpen={isDesktopInstallModalOpen}
         onClose={() => setIsDesktopInstallModalOpen(false)}
+      />
+
+      {/* Android Mobile Phone PWA / APK Install Modal */}
+      <AndroidAppInstallModal
+        isOpen={isAndroidInstallModalOpen}
+        onClose={() => setIsAndroidInstallModalOpen(false)}
       />
     </>
   );

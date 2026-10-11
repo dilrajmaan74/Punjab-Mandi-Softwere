@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useMandi } from '../../context/MandiContext';
-import { Printer, X, FileText, User, MessageSquare, Send, Smartphone, QrCode, Volume2, Sparkles } from 'lucide-react';
+import { Printer, X, FileText, User, MessageSquare, Send, Smartphone, QrCode, Volume2, Sparkles, Scale } from 'lucide-react';
 import { formatCurrency } from '../../utils/calculations';
 import { generateBagsWeighmentWhatsAppMessage, openWhatsApp } from '../../utils/whatsappNotification';
 import { generateParchiQrCode } from '../../utils/qrCodeGenerator';
 import { AiWhatsAppVoiceModal } from './AiWhatsAppVoiceModal';
 
 export const ReceiptModal: React.FC = () => {
-  const { activeReceipt, setActiveReceipt, settings, firms, activeFirm, language } = useMandi();
+  const { activeReceipt, setActiveReceipt, setActiveKachiReceipt, settings, firms, activeFirm, language } = useMandi();
   const isEn = language === 'en';
 
   // Print Mode: 'standard' (A4/Half-page) vs 'thermal' (58mm / 80mm roll)
@@ -131,6 +131,21 @@ export const ReceiptModal: React.FC = () => {
                 <span>{isEn ? 'Thermal (3")' : 'ਥਰਮਲ (3-inch)'}</span>
               </button>
             </div>
+
+            {/* Kachi Tol Parchi Switcher Button */}
+            <button
+              type="button"
+              onClick={() => {
+                const rec = activeReceipt;
+                setActiveReceipt(null);
+                setActiveKachiReceipt(rec);
+              }}
+              className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black px-2.5 py-1.5 rounded-lg text-xs flex items-center gap-1.5 shadow-2xs transition active:scale-95 cursor-pointer border border-amber-600/40"
+              title={isEn ? 'Switch to Kachi Tol Parchi (Only Weight & Labour / JPG)' : 'ਕੱਚੀ ਤੋਲ ਪਰਚੀ (ਸਿਰਫ਼ ਤੋਲ ਤੇ ਲੇਬਰ ਕਟੌਤੀ, ਬਿਨਾਂ ਰਕਮ)'}
+            >
+              <Scale className="w-3.5 h-3.5 text-slate-950" />
+              <span>{isEn ? 'Kachi Tol (JPG)' : 'ਕੱਚੀ ਤੋਲ ਪਰਚੀ (JPG)'}</span>
+            </button>
 
             {/* AI Voice WhatsApp Button */}
             <button

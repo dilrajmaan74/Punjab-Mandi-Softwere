@@ -40,6 +40,7 @@ import { BardanaEditModal } from './BardanaEditModal';
 import { SellerMasterModal } from '../seller/SellerMasterModal';
 import { ParchiUploadWidget } from './ParchiUploadWidget';
 import { ParchiViewerModal } from './ParchiViewerModal';
+import { BardanaLowStockAlertBanner } from './BardanaLowStockAlertBanner';
 import {
   exportBardanaReceivedVoucherPDF,
   exportBardanaRegisterPDF
@@ -658,6 +659,9 @@ export const BardanaManagement: React.FC = () => {
       </div>
     </div>
 
+      {/* Real-time Proactive Bardana Low Stock Alert Banner */}
+      <BardanaLowStockAlertBanner variant="dashboard" />
+
       {/* Crop Filter Bar for Bardana */}
       <div className="bg-slate-50 border border-slate-200 rounded-xl p-2.5 flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-2">
@@ -786,17 +790,31 @@ export const BardanaManagement: React.FC = () => {
         </div>
 
         {/* Card 3: Total Stock Balance */}
-        <div className="bg-white border border-slate-300 rounded-xl p-3.5 shadow-2xs space-y-2">
+        <div className={`bg-white rounded-xl p-3.5 shadow-2xs space-y-2 border ${
+          (settings.isBardanaAlertEnabled ?? true) && summary.totalRemaining <= (settings.bardanaLowStockAlertThreshold ?? 750)
+            ? 'border-2 border-rose-500 bg-rose-50/20 ring-2 ring-rose-200/50'
+            : 'border border-slate-300'
+        }`}>
           <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
             <div className="flex items-center gap-1.5">
-              <div className="w-2 h-2 rounded-full bg-slate-700" />
+              <div className={`w-2 h-2 rounded-full ${
+                (settings.isBardanaAlertEnabled ?? true) && summary.totalRemaining <= (settings.bardanaLowStockAlertThreshold ?? 750)
+                  ? 'bg-rose-600 animate-ping'
+                  : 'bg-slate-700'
+              }`} />
               <span className="text-xs font-black text-slate-900">
                 ਕੁੱਲ ਬਾਰਦਾਨਾ ਸੰਤੁਲਨ (Total Stock)
               </span>
             </div>
-            <span className="text-[10px] bg-slate-100 text-slate-700 font-bold px-2 py-0.5 rounded">
-              All Bags Combined
-            </span>
+            {(settings.isBardanaAlertEnabled ?? true) && summary.totalRemaining <= (settings.bardanaLowStockAlertThreshold ?? 750) ? (
+              <span className="text-[10px] bg-rose-600 text-white font-black px-2 py-0.5 rounded animate-pulse">
+                ⚠️ ਘੱਟ ਸਟਾਕ (ਮੰਗਵਾਓ)
+              </span>
+            ) : (
+              <span className="text-[10px] bg-slate-100 text-slate-700 font-bold px-2 py-0.5 rounded">
+                All Bags Combined
+              </span>
+            )}
           </div>
 
           <div className="grid grid-cols-3 gap-2 text-center pt-1">

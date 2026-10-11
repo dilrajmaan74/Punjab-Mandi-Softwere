@@ -289,6 +289,8 @@ interface MandiContextType {
   // Receipt Modal State
   activeReceipt: BagsEntryRecord | null;
   setActiveReceipt: (rec: BagsEntryRecord | null) => void;
+  activeKachiReceipt: BagsEntryRecord | null;
+  setActiveKachiReceipt: (rec: BagsEntryRecord | null) => void;
 
   // Bags Entry Edit Modal State
   activeBagsEntryToEdit: BagsEntryRecord | null;
@@ -563,7 +565,9 @@ const DEFAULT_SETTINGS: MandiSettings = {
   defaultPakkiLabourRate: 8, // default ₹8 / Bag (Fixed Labour - ਪੱਕੀ ਲੇਬਰ)
   defaultPakkaDoubleLabourRate: 14, // default ₹14 / Bag
   defaultSukhiLabourRate: 5, // default ₹5 / Bag
-  requireAgencyPurchaseBeforeLefting: true
+  requireAgencyPurchaseBeforeLefting: true,
+  bardanaLowStockAlertThreshold: 750,
+  isBardanaAlertEnabled: true
 };
 
 // Firm-specific storage key generator
@@ -1181,6 +1185,7 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   });
   const [activeReceipt, setActiveReceipt] = useState<BagsEntryRecord | null>(null);
+  const [activeKachiReceipt, setActiveKachiReceipt] = useState<BagsEntryRecord | null>(null);
   const [activeBagsEntryToEdit, setActiveBagsEntryToEdit] = useState<BagsEntryRecord | null>(null);
   const [selectedFarmerForBags, setSelectedFarmerForBags] = useState<Farmer | null>(null);
   const [selectedFarmerForAccount, setSelectedFarmerForAccount] = useState<Farmer | null>(null);
@@ -5232,6 +5237,8 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         setLanguage,
         activeReceipt,
         setActiveReceipt,
+        activeKachiReceipt,
+        setActiveKachiReceipt,
         activeBagsEntryToEdit,
         setActiveBagsEntryToEdit,
         selectedFarmerForBags,

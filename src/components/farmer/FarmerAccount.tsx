@@ -255,6 +255,7 @@ export const FarmerAccount: React.FC = () => {
     setSelectedFarmerForAccount,
     setSelectedFarmerForBags,
     setActiveReceipt,
+    setActiveKachiReceipt,
     setActiveBagsEntryToEdit,
     setActiveSection,
     getCompleteFarmerAccount,
@@ -2209,6 +2210,14 @@ export const FarmerAccount: React.FC = () => {
                                     title="WhatsApp Slip"
                                   >
                                     <Send className="w-3 h-3 text-white" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setActiveKachiReceipt(entry)}
+                                    className="p-1 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded transition shadow-2xs cursor-pointer border border-amber-600/30"
+                                    title="ਕੱਚੀ ਪਰਚੀ ਤੋਲ ਦੀ (Kachi Tol Slip & JPG)"
+                                  >
+                                    <Scale className="w-3 h-3 text-slate-950" />
                                   </button>
                                   <button
                                     type="button"

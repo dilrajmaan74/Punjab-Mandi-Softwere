@@ -810,6 +810,10 @@ export interface MandiSettings {
     rate: number;
     enabledByDefault?: boolean;
   }[];
+
+  // Bardana Low Stock Alert Settings
+  bardanaLowStockAlertThreshold?: number; // e.g. 750 (default: 750 bags)
+  isBardanaAlertEnabled?: boolean; // default: true
 }
 
 export interface LeftingRecord {

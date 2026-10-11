@@ -11,6 +11,7 @@ export function usePWAInstall() {
   const [isWindows, setIsWindows] = useState(false);
   const [isMac, setIsMac] = useState(false);
   const [isIOS, setIsIOS] = useState(false);
+  const [isAndroid, setIsAndroid] = useState(false);
 
   useEffect(() => {
     // Detect standalone mode (already running installed on desktop/mobile)
@@ -25,6 +26,7 @@ export function usePWAInstall() {
     setIsWindows(/windows|win32|win64/.test(ua));
     setIsMac(/macintosh|mac os x/.test(ua));
     setIsIOS(/iphone|ipad|ipod/.test(ua));
+    setIsAndroid(/android/.test(ua));
 
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
@@ -71,6 +73,7 @@ export function usePWAInstall() {
     isWindows,
     isMac,
     isIOS,
+    isAndroid,
     triggerInstall,
   };
 }

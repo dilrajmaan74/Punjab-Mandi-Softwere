@@ -3,6 +3,7 @@ import { useMandi } from '../../context/MandiContext';
 import { CropFilterType, CropType } from '../../types/mandi';
 import { TodayGlanceBanner } from './TodayGlanceBanner';
 import { TallyDashboardView } from './TallyDashboardView';
+import { BardanaLowStockAlertBanner } from '../bardana/BardanaLowStockAlertBanner';
 import {
   User,
   UserPlus,
@@ -25,8 +26,12 @@ import {
   ShoppingBag,
   Truck,
   BarChart3,
-  Trash2
+  Trash2,
+  Smartphone,
+  Download
 } from 'lucide-react';
+import { usePWAInstall } from '../../hooks/usePWAInstall';
+import { AndroidAppInstallModal } from '../common/AndroidAppInstallModal';
 import {
   formatKgToQulKg,
   formatCurrency,
@@ -56,6 +61,8 @@ export const Dashboard: React.FC = () => {
   } = useMandi();
 
   const isEn = language === 'en';
+  const { isInstalled } = usePWAInstall();
+  const [isAndroidModalOpen, setIsAndroidModalOpen] = useState(false);
   const [isTallyMode, setIsTallyMode] = useState(false);
   const [dashboardCropFilter, setDashboardCropFilter] = useState<CropFilterType>(activeCrop);
 
@@ -104,6 +111,12 @@ export const Dashboard: React.FC = () => {
         onOpenBoli={() => setActiveSection('boli')}
         onOpenBags={() => setActiveSection('bags-entry')}
         onOpenLifting={() => setActiveSection('lefting')}
+      />
+
+      {/* Real-time Proactive Bardana Low Stock Alert Banner */}
+      <BardanaLowStockAlertBanner
+        variant="dashboard"
+        onNavigateToBardana={() => setActiveSection('bardana')}
       />
 
       {/* Crop Filter Bar: All / Wheat / Maize / Paddy */}
@@ -171,8 +184,18 @@ export const Dashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* Action Buttons with Tally Mode Toggle */}
+        {/* Action Buttons with Tally Mode & Android App Install */}
         <div className="flex flex-wrap items-center gap-2 self-start md:self-auto">
+          {!isInstalled && (
+            <button
+              onClick={() => setIsAndroidModalOpen(true)}
+              className="flex items-center gap-1.5 bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:brightness-110 text-white font-extrabold px-3 py-1.5 rounded-lg text-xs transition shadow-2xs active:scale-95 border border-emerald-400/80 cursor-pointer animate-pulse"
+              title="ਐਂਡਰਾਇਡ ਫੋਨ 'ਚ ਐਪ ਇੰਸਟਾਲ ਕਰੋ (No Chrome needed)"
+            >
+              <Smartphone className="w-3.5 h-3.5 text-amber-300" />
+              <span>ਫੋਨ 'ਚ ਐਪ ਇੰਸਟਾਲ (Android App)</span>
+            </button>
+          )}
           <button
             onClick={() => setIsTallyMode(true)}
             className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black px-3 py-1.5 rounded-lg text-xs transition shadow-2xs active:scale-95 border border-amber-300 cursor-pointer"
@@ -197,6 +220,36 @@ export const Dashboard: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {/* Mobile Android PWA Quick Install Strip */}
+      {!isInstalled && (
+        <div className="bg-gradient-to-r from-teal-900 via-slate-900 to-emerald-950 text-white rounded-xl p-3 border border-emerald-700/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shadow-xs">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-emerald-600 flex items-center justify-center text-white shrink-0 shadow-xs ring-1 ring-emerald-400/40">
+              <Smartphone className="w-5 h-5 text-amber-300" />
+            </div>
+            <div>
+              <h4 className="text-xs font-black text-white flex items-center gap-1.5">
+                <span>ਐਂਡਰਾਇਡ ਫੋਨ ਵਿੱਚ ਐਪਲੀਕੇਸ਼ਨ ਵਾਂਗ ਚਲਾਓ</span>
+                <span className="text-[10px] bg-amber-400 text-slate-950 font-black px-1.5 py-0.2 rounded">
+                  No Chrome
+                </span>
+              </h4>
+              <p className="text-[11px] text-slate-300 mt-0.5">
+                ਕ੍ਰੋਮ ਖੋਲ੍ਹੇ ਬਿਨਾਂ ਸਿੱਧਾ ਮੋਬਾਈਲ ਸਕ੍ਰੀਨ ਦੇ ਆਈਕਨ ਤੋਂ ਚਲਾਉਣ ਲਈ ਇੰਸਟਾਲ ਕਰੋ।
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsAndroidModalOpen(true)}
+            className="px-3.5 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs rounded-lg shadow-sm transition active:scale-95 flex items-center justify-center gap-1.5 self-start sm:self-auto cursor-pointer shrink-0"
+          >
+            <Download className="w-3.5 h-3.5 text-slate-950" />
+            <span>ਹੁਣੇ ਇੰਸਟਾਲ ਕਰੋ (Install App)</span>
+          </button>
+        </div>
+      )}
 
       {/* Aggregate Stats Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
@@ -705,6 +758,12 @@ export const Dashboard: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Android Mobile Phone PWA Install Modal */}
+      <AndroidAppInstallModal
+        isOpen={isAndroidModalOpen}
+        onClose={() => setIsAndroidModalOpen(false)}
+      />
     </div>
   );
 };

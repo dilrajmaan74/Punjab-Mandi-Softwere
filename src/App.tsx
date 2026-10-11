@@ -27,6 +27,7 @@ import { BoliRegister } from './components/boli/BoliRegister';
 import { LabourGangLedger } from './components/labour/LabourGangLedger';
 import { SettingsManager } from './components/settings/SettingsManager';
 import { ReceiptModal } from './components/common/ReceiptModal';
+import { KachiTolParchiModal } from './components/bags/KachiTolParchiModal';
 import { BagsEntryEditModal } from './components/bags/BagsEntryEditModal';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { PakkaDashboard } from './components/pakka/PakkaDashboard';
@@ -233,6 +234,9 @@ const MainAppContent: React.FC = () => {
 
       {/* Official Weighment Slip / Receipt Print Modal */}
       <ReceiptModal />
+
+      {/* Kachi Tol Parchi (Only Weight & Labour Slip / JPG Export) Modal */}
+      <KachiTolParchiModal />
 
       {/* Farmer Bags Entry Edit Modal */}
       <BagsEntryEditModal />

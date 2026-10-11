@@ -43,6 +43,7 @@ import { BagsEntryRecord, BardanaType, LabourAndDeductions, CropFilterType } fro
 import { SearchableSelect, SearchableSelectOption } from '../common/SearchableSelect';
 import { generateBagsWeighmentWhatsAppMessage, openWhatsApp } from '../../utils/whatsappNotification';
 import { VoiceWeighmentAssistant, ParsedVoiceData } from '../common/VoiceWeighmentAssistant';
+import { BardanaLowStockAlertBanner } from '../bardana/BardanaLowStockAlertBanner';
 
 interface BagsEntryDraft {
   dateInput: string;
@@ -68,6 +69,7 @@ export const BagsEntry: React.FC = () => {
     selectedFarmerForBags,
     setSelectedFarmerForBags,
     setActiveReceipt,
+    setActiveKachiReceipt,
     setActiveBagsEntryToEdit,
     setActiveSection,
     getBardanaSummary,
@@ -623,6 +625,15 @@ export const BagsEntry: React.FC = () => {
               <span>{isEn ? 'Print Weighment Slip' : 'ਰਸੀਦ ਪ੍ਰਿੰਟ ਕਰੋ (Print Weighment Slip)'}</span>
             </button>
             <button
+              type="button"
+              onClick={() => setActiveKachiReceipt(savedReceiptRecord)}
+              className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black px-4 py-1.5 rounded-lg text-xs flex items-center gap-1.5 shadow-sm transition active:scale-95 cursor-pointer border border-amber-600/30"
+              title="ਕੱਚੀ ਪਰਚੀ ਤੋਲ ਦੀ (Kachi Tol Parchi - Only Weight & Labour / JPG)"
+            >
+              <Scale className="w-3.5 h-3.5 text-slate-950" />
+              <span>{isEn ? 'Kachi Tol Parchi (JPG)' : 'ਕੱਚੀ ਪਰਚੀ ਤੋਲ ਦੀ (JPG)'}</span>
+            </button>
+            <button
               onClick={() => {
                 setSavedReceiptRecord(null);
                 setNewBagsInput('');
@@ -661,6 +672,12 @@ export const BagsEntry: React.FC = () => {
         </div>
       ) : (
         <div className="space-y-4">
+          {/* Real-time Bardana Low Stock Warning Banner */}
+          <BardanaLowStockAlertBanner
+            variant="compact"
+            onNavigateToBardana={() => setActiveSection('bardana')}
+          />
+
           {/* Smart Punjabi Voice Typing Assistant */}
           <VoiceWeighmentAssistant onApplyData={handleVoiceApply} />
 
@@ -1852,6 +1869,14 @@ export const BagsEntry: React.FC = () => {
                             title="ਵ੍ਹਟਸਐਪ ਤੇ ਭੇਜੋ (Send WhatsApp)"
                           >
                             <Send className="w-3.5 h-3.5 text-white" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setActiveKachiReceipt(entry)}
+                            className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black p-1 rounded-md transition shadow-2xs cursor-pointer border border-amber-600/30"
+                            title="ਕੱਚੀ ਪਰਚੀ ਤੋਲ ਦੀ (Kachi Tol Parchi & JPG)"
+                          >
+                            <Scale className="w-3.5 h-3.5 text-slate-950" />
                           </button>
                           <button
                             type="button"
