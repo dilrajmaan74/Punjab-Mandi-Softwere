@@ -24,6 +24,34 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Mukta+Mahee:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <script>
+      // Global error shield to prevent harmless iframe / dev-server noise from crashing the UI
+      window.addEventListener('error', function (event) {
+        if (!event.error && event.message === 'Script error.') {
+          event.preventDefault();
+          return true;
+        }
+        if (event.message && (
+          event.message.indexOf('WebSocket') !== -1 ||
+          event.message.indexOf('ResizeObserver') !== -1 ||
+          event.message.indexOf('virtual:pwa') !== -1
+        )) {
+          event.preventDefault();
+          return true;
+        }
+      });
+      window.addEventListener('unhandledrejection', function (event) {
+        var reason = '' + (event.reason || '');
+        if (
+          reason.indexOf('WebSocket') !== -1 ||
+          reason.indexOf('service worker') !== -1 ||
+          reason.indexOf('ServiceWorker') !== -1
+        ) {
+          event.preventDefault();
+          return true;
+        }
+      });
+    </script>
   </head>
   <body class="bg-slate-100 text-slate-900 antialiased font-sans">
     <div id="root"></div>

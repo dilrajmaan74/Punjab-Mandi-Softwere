@@ -13,7 +13,8 @@ import {
   Truck,
   ArrowRight,
   TrendingUp,
-  FileSpreadsheet
+  FileSpreadsheet,
+  MapPin
 } from 'lucide-react';
 import { formatCurrency, formatLeftingWeightQtlKg } from '../../utils/calculations';
 
@@ -34,11 +35,12 @@ interface AgencySummaryItem {
 }
 
 export const AgencyLiftingReport: React.FC = () => {
-  const { leftingRecords, dailyPurchaseRecords, language, activeFirm, settings } = useMandi();
+  const { leftingRecords, dailyPurchaseRecords, language, activeFirm, firms, settings } = useMandi();
   const isEn = language === 'en';
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedAgencyFilter, setSelectedAgencyFilter] = useState<string>('ALL');
+  const [selectedMandiFilter, setSelectedMandiFilter] = useState<string>('ALL'); // 'ALL' | 'FIRM-001' | 'FIRM-002' | 'FIRM-003'
 
   // List of all distinct agencies present across purchases or lefting
   const allAgencies = useMemo(() => {
@@ -89,6 +91,13 @@ export const AgencyLiftingReport: React.FC = () => {
 
     // Accumulate purchases
     dailyPurchaseRecords.forEach((p) => {
+      if (selectedMandiFilter !== 'ALL') {
+        const pFirmId = p.firmId || (
+          (p.mandiName || '').toLowerCase().includes('mehrajwala') ? 'FIRM-002' :
+          (p.mandiName || '').toLowerCase().includes('kamalpur') ? 'FIRM-003' : 'FIRM-001'
+        );
+        if (pFirmId !== selectedMandiFilter) return;
+      }
       const pName = p.agency?.trim() || 'Unknown';
       let foundKey = Array.from(map.keys()).find((k) => normalize(k) === normalize(pName));
       if (!foundKey) {
@@ -118,6 +127,13 @@ export const AgencyLiftingReport: React.FC = () => {
 
     // Accumulate liftings
     leftingRecords.forEach((l) => {
+      if (selectedMandiFilter !== 'ALL') {
+        const lFirmId = l.firmId || (
+          (l.mandiName || '').toLowerCase().includes('mehrajwala') ? 'FIRM-002' :
+          (l.mandiName || '').toLowerCase().includes('kamalpur') ? 'FIRM-003' : 'FIRM-001'
+        );
+        if (lFirmId !== selectedMandiFilter) return;
+      }
       const lName = l.agency?.trim() || 'Unknown';
       let foundKey = Array.from(map.keys()).find((k) => normalize(k) === normalize(lName));
       if (!foundKey) {
@@ -166,7 +182,7 @@ export const AgencyLiftingReport: React.FC = () => {
 
     // Sort descending by total purchases
     return results.sort((a, b) => b.totalPurchasedBags - a.totalPurchasedBags);
-  }, [allAgencies, dailyPurchaseRecords, leftingRecords]);
+  }, [allAgencies, dailyPurchaseRecords, leftingRecords, selectedMandiFilter]);
 
   // Filtered summaries
   const filteredSummaries = useMemo(() => {
@@ -358,6 +374,45 @@ export const AgencyLiftingReport: React.FC = () => {
               />
             </div>
           </div>
+        </div>
+
+        {/* Mandi Branch Filter Bar */}
+        <div className="flex items-center gap-2 flex-wrap pt-2 pb-1 border-t border-slate-100 print:hidden">
+          <span className="text-xs font-bold text-slate-600 flex items-center gap-1">
+            <MapPin className="w-3.5 h-3.5 text-amber-600" />
+            <span>ਮੰਡੀ ਸ਼ਾਖਾ:</span>
+          </span>
+          <button
+            type="button"
+            onClick={() => setSelectedMandiFilter('ALL')}
+            className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+              selectedMandiFilter === 'ALL'
+                ? 'bg-slate-900 text-white font-black shadow-xs ring-1 ring-slate-700'
+                : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
+            }`}
+          >
+            🌟 ਸਾਰੀਆਂ ਮੰਡੀਆਂ (All Mandis)
+          </button>
+          {firms.map((f) => {
+            const isSelected = selectedMandiFilter === f.id;
+            const isMehraj = f.id === 'FIRM-002' || f.name.includes('Mehrajwala') || f.address.includes('Mehrajwala');
+            const isKamal = f.id === 'FIRM-003' || f.name.includes('Kamalpur') || f.address.includes('Kamalpur');
+            const shortLabel = isMehraj ? 'ਦਾਣਾ ਮੰਡੀ ਮਹਿਰਾਜਵਾਲਾ' : isKamal ? 'ਦਾਣਾ ਮੰਡੀ ਕਮਾਲਪੁਰ' : 'ਦਾਣਾ ਮੰਡੀ ਕੰਗ ਖੁਰਦ';
+            return (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => setSelectedMandiFilter(f.id)}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                  isSelected
+                    ? 'bg-amber-600 text-white font-black shadow-xs ring-2 ring-amber-400'
+                    : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                📍 {shortLabel}
+              </button>
+            );
+          })}
         </div>
 
         {/* Filter & Search Bar (Hidden during Print) */}

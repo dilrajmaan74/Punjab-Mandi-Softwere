@@ -491,10 +491,22 @@ export async function exportDailyPurchaseReportPDF(
   settings: MandiSettings,
   mode: 'DATE_WISE' | 'FULL_REGISTER',
   filterDate?: string,
-  filterAgency?: string
+  filterAgency?: string,
+  mandiTitle?: string,
+  targetFirm?: MandiFirm | null
 ) {
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
   registerGurmukhiFont(doc);
+
+  const effectiveSettings = targetFirm
+    ? {
+        ...settings,
+        firmNameEn: targetFirm.name || settings.firmNameEn,
+        firmAddress: targetFirm.address || settings.firmAddress,
+        firmLicence: targetFirm.licenceNo || settings.firmLicence,
+        firmMobile: targetFirm.mobile || settings.firmMobile
+      }
+    : settings;
 
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
@@ -525,14 +537,16 @@ export async function exportDailyPurchaseReportPDF(
     ? `ਰੋਜ਼ਾਨਾ ਖਰੀਦ ਰਿਪੋਰਟ - ਮਿਤੀ: ${cleanPdfText(filterDate || 'ਸਾਰੀਆਂ')}`
     : 'ਪੂਰਾ ਸਰਕਾਰੀ ਖਰੀਦ ਤੇ ਮਾਰਕੀਟ ਕਮੇਟੀ ਰਜਿਸਟਰ';
 
+  const mandiBanner = mandiTitle ? `Mandi: ${cleanPdfText(mandiTitle)} | ` : '';
+
   let currentY = renderStandardPdfHeader({
     doc,
-    settings,
+    settings: effectiveSettings,
     title: `${titleEn} / ${subtitlePa}`,
-    subtitle: `Agency: ${cleanPdfText(filterAgency || 'All Agencies')} | Total Records: ${records.length}`,
+    subtitle: `${mandiBanner}Agency: ${cleanPdfText(filterAgency || 'All Agencies')} | Total Records: ${records.length}`,
     agencyName: filterAgency !== 'ALL' && filterAgency !== 'All Agencies' ? filterAgency : undefined,
-    badgeLabel: 'REGISTER',
-    badgeValue: mode === 'DATE_WISE' ? 'DATE-WISE' : 'FULL REGISTER',
+    badgeLabel: 'MANDI REGISTER',
+    badgeValue: mandiTitle ? cleanPdfText(mandiTitle).slice(0, 18) : (mode === 'DATE_WISE' ? 'DATE-WISE' : 'FULL REGISTER'),
     startY: 6
   });
 

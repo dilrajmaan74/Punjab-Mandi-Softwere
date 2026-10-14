@@ -269,6 +269,67 @@ export const DailyPurchase: React.FC = () => {
   const [dateViewSearch, setDateViewSearch] = useState<string>('');
   const [dateViewAgency, setDateViewAgency] = useState<string>('ALL');
 
+  // Mandi Branch Selection for newly added purchases
+  const [entryMandiFirmId, setEntryMandiFirmId] = useState<string>(() => activeFirm?.id || 'FIRM-001');
+
+  // Mandi Branch Filter for viewing/reporting/exporting
+  const [selectedMandiFilter, setSelectedMandiFilter] = useState<string>('ALL'); // 'ALL' | 'FIRM-001' | 'FIRM-002' | 'FIRM-003'
+
+  // Resolve Mandi firm for a purchase record
+  const getRecordFirm = (rec: DailyPurchaseRecord): MandiFirm => {
+    if (rec.firmId) {
+      const match = firms.find((f) => f.id === rec.firmId);
+      if (match) return match;
+    }
+    const nameMatch = ((rec.mandiName || '') + ' ' + (rec.mandiNamePa || '')).toLowerCase();
+    if (nameMatch.includes('mehrajwala') || nameMatch.includes('ਮਹਿਰਾਜਵਾਲਾ')) {
+      const mw = firms.find((f) => f.id === 'FIRM-002' || f.name.toLowerCase().includes('mehrajwala'));
+      if (mw) return mw;
+    }
+    if (nameMatch.includes('kamalpur') || nameMatch.includes('ਕਮਾਲਪੁਰ')) {
+      const kp = firms.find((f) => f.id === 'FIRM-003' || f.name.toLowerCase().includes('kamalpur'));
+      if (kp) return kp;
+    }
+    return firms.find((f) => f.id === 'FIRM-001') || firms[0] || activeFirm;
+  };
+
+  // Live Mandi-wise Breakdown statistics
+  const mandiBranchStats = useMemo(() => {
+    const stats: Record<string, { firm: MandiFirm; count: number; totalBags: number; totalWeightKg: number; totalAmount: number; farmers: Set<string> }> = {};
+    firms.forEach((f) => {
+      stats[f.id] = {
+        firm: f,
+        count: 0,
+        totalBags: 0,
+        totalWeightKg: 0,
+        totalAmount: 0,
+        farmers: new Set()
+      };
+    });
+
+    dailyPurchaseRecords.forEach((rec) => {
+      if (!isRecordInFiscalYear(rec.date, rec.fiscalYear, activeFiscalYear)) return;
+      const firm = getRecordFirm(rec);
+      if (!stats[firm.id]) {
+        stats[firm.id] = {
+          firm,
+          count: 0,
+          totalBags: 0,
+          totalWeightKg: 0,
+          totalAmount: 0,
+          farmers: new Set()
+        };
+      }
+      stats[firm.id].count++;
+      stats[firm.id].totalBags += Number(rec.bags) || 0;
+      stats[firm.id].totalWeightKg += Number(rec.totalWeightKg) || 0;
+      stats[firm.id].totalAmount += Number(rec.totalAmount) || 0;
+      stats[firm.id].farmers.add(rec.farmerId);
+    });
+
+    return stats;
+  }, [dailyPurchaseRecords, firms, activeFiscalYear]);
+
   const [expandedDates, setExpandedDates] = useState<{ [date: string]: boolean }>({});
   const [viewRecord, setViewRecord] = useState<DailyPurchaseRecord | null>(null);
   const [editRecord, setEditRecord] = useState<DailyPurchaseRecord | null>(null);
@@ -632,9 +693,14 @@ export const DailyPurchase: React.FC = () => {
           netPayableAmount: rowNet
         } : undefined;
 
+        const targetEntryFirm = firms.find((f) => f.id === entryMandiFirmId) || activeFirm;
+
         const result = addDailyPurchase({
           date: purchaseDate.trim(),
           agency: fixedAgency,
+          firmId: targetEntryFirm.id,
+          mandiName: targetEntryFirm.name,
+          mandiNamePa: targetEntryFirm.namePa || targetEntryFirm.name,
           cropType: batchCrop,
           farmerId: farmer.id,
           farmerName: farmer.farmerName,
@@ -953,12 +1019,26 @@ export const DailyPurchase: React.FC = () => {
     const effectiveDate = dateLabel || (selectedFilterDate && selectedFilterDate !== 'ALL' ? selectedFilterDate : 'All Dates');
     const effectiveAgency = agencyLabel && agencyLabel !== 'ALL' ? agencyLabel : 'All Agencies';
 
+    const targetFirm = selectedMandiFilter !== 'ALL'
+      ? firms.find((f) => f.id === selectedMandiFilter) || null
+      : null;
+
+    const mandiTitle = selectedMandiFilter === 'FIRM-001'
+      ? 'DANA MANDI KANG KHURD (ਦਾਣਾ ਮੰਡੀ ਕੰਗ ਖੁਰਦ)'
+      : selectedMandiFilter === 'FIRM-002'
+      ? 'DANA MANDI MEHRAJWALA (ਦਾਣਾ ਮੰਡੀ ਮਹਿਰਾਜਵਾਲਾ)'
+      : selectedMandiFilter === 'FIRM-003'
+      ? 'DANA MANDI KAMALPUR (ਦਾਣਾ ਮੰਡੀ ਕਮਾਲਪੁਰ)'
+      : 'ALL MANDIS (ਦਾਣਾ ਮੰਡੀ ਕੰਗ ਖੁਰਦ / ਮਹਿਰਾਜਵਾਲਾ / ਕਮਾਲਪੁਰ)';
+
     exportDailyPurchaseRegisterPDF(
       recordsToExport,
       settings,
       effectiveAgency,
       effectiveDate,
-      dailyPurchaseRecords
+      dailyPurchaseRecords,
+      targetFirm,
+      mandiTitle
     );
   };
 
@@ -976,6 +1056,14 @@ export const DailyPurchase: React.FC = () => {
       // Fiscal year filter
       if (!isRecordInFiscalYear(rec.date, rec.fiscalYear, activeFiscalYear)) {
         return false;
+      }
+
+      // Mandi filter
+      if (selectedMandiFilter !== 'ALL') {
+        const recFirm = getRecordFirm(rec);
+        if (recFirm.id !== selectedMandiFilter) {
+          return false;
+        }
       }
 
       // Crop filter
@@ -1014,7 +1102,7 @@ export const DailyPurchase: React.FC = () => {
       if (dateDiff !== 0) return dateDiff;
       return a.id.localeCompare(b.id);
     });
-  }, [dailyPurchaseRecords, allFarmersAgency, allFarmersSearch, purchaseCropFilter]);
+  }, [dailyPurchaseRecords, allFarmersAgency, allFarmersSearch, purchaseCropFilter, selectedMandiFilter, activeFiscalYear]);
 
   // Totals for "All Farmers View"
   const allFarmersTotals = useMemo(() => {
@@ -1070,6 +1158,10 @@ export const DailyPurchase: React.FC = () => {
     const dateCounts: { [date: string]: number } = {};
     dailyPurchaseRecords.forEach((r) => {
       if (!isRecordInFiscalYear(r.date, r.fiscalYear, activeFiscalYear)) return;
+      if (selectedMandiFilter !== 'ALL') {
+        const recFirm = getRecordFirm(r);
+        if (recFirm.id !== selectedMandiFilter) return;
+      }
       if (purchaseCropFilter !== 'ALL') {
         const itemCrop = r.cropType || 'PADDY';
         if (itemCrop !== purchaseCropFilter) return;
@@ -1083,13 +1175,19 @@ export const DailyPurchase: React.FC = () => {
         date,
         count: dateCounts[date]
       }));
-  }, [dailyPurchaseRecords, purchaseCropFilter, activeFiscalYear]);
+  }, [dailyPurchaseRecords, purchaseCropFilter, selectedMandiFilter, activeFiscalYear]);
 
   // Filtered records for "Date-wise View" when a date is selected
   const filteredDateRecords = useMemo(() => {
     return dailyPurchaseRecords.filter((rec) => {
       if (!isRecordInFiscalYear(rec.date, rec.fiscalYear, activeFiscalYear)) {
         return false;
+      }
+      if (selectedMandiFilter !== 'ALL') {
+        const recFirm = getRecordFirm(rec);
+        if (recFirm.id !== selectedMandiFilter) {
+          return false;
+        }
       }
       if (purchaseCropFilter !== 'ALL') {
         const itemCrop = rec.cropType || 'PADDY';
@@ -1121,7 +1219,7 @@ export const DailyPurchase: React.FC = () => {
       if (dateDiff !== 0) return dateDiff;
       return a.id.localeCompare(b.id);
     });
-  }, [dailyPurchaseRecords, selectedFilterDate, dateViewAgency, dateViewSearch, purchaseCropFilter]);
+  }, [dailyPurchaseRecords, selectedFilterDate, dateViewAgency, dateViewSearch, purchaseCropFilter, selectedMandiFilter, activeFiscalYear]);
 
   // Totals for selected date in "Date-wise View"
   const dateViewTotals = useMemo(() => {
@@ -1323,8 +1421,45 @@ export const DailyPurchase: React.FC = () => {
           </div>
         </div>
 
-        {/* Agency and Date Selectors */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        {/* Mandi Branch, Agency and Date Selectors */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          {/* Feature: Mandi Branch Selector for Purchase Batch */}
+          <div className="space-y-1">
+            <label className="text-xs font-bold text-slate-700 flex items-center justify-between">
+              <span className="flex items-center gap-1.5">
+                <MapPin className="w-3.5 h-3.5 text-amber-600" />
+                <span>ਖਰੀਦ ਮੰਡੀ (Purchase Mandi):</span>
+              </span>
+              <span className="text-[10px] text-amber-900 font-bold bg-amber-100 px-1 rounded">
+                ਸ਼ਾਖਾ
+              </span>
+            </label>
+            <div className="grid grid-cols-3 gap-1">
+              {firms.map((f) => {
+                const isSelected = entryMandiFirmId === f.id;
+                const isMehraj = f.address?.includes('Mehrajwala') || f.name.includes('Mehrajwala');
+                const isKamal = f.address?.includes('Kamalpur') || f.name.includes('Kamalpur');
+                const isKang = f.address?.includes('Kang Khurd') || f.name.includes('Kang');
+                const shortLabel = isMehraj ? 'ਮਹਿਰਾਜਵਾਲਾ' : isKamal ? 'ਕਮਾਲਪੁਰ' : isKang ? 'ਕੰਗ ਖੁਰਦ' : (f.namePa || f.name);
+                return (
+                  <button
+                    key={f.id}
+                    type="button"
+                    onClick={() => setEntryMandiFirmId(f.id)}
+                    className={`py-2 px-1 text-[11px] font-bold rounded-lg border transition text-center truncate cursor-pointer ${
+                      isSelected
+                        ? 'bg-amber-600 text-white border-amber-600 shadow-2xs font-black ring-2 ring-amber-400'
+                        : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                    }`}
+                    title={f.name}
+                  >
+                    📍 {shortLabel}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           {/* Agency Selector with Feature 1.2: Govt vs Private Buyer Toggle */}
           <div className="space-y-1">
             <div className="flex items-center justify-between">
@@ -1964,6 +2099,167 @@ export const DailyPurchase: React.FC = () => {
           </div>
         </div>
 
+        {/* MANDI BRANCH FILTER STRIP & LIVE BREAKDOWN METRIC CARDS */}
+        <div className="space-y-2.5">
+          {/* Mandi Branch Filter Strip */}
+          <div className="flex items-center gap-1.5 p-2 bg-gradient-to-r from-amber-50/90 via-slate-50 to-indigo-50/70 border border-amber-200/80 rounded-xl flex-wrap">
+            <span className="text-xs font-black text-slate-800 flex items-center gap-1 shrink-0 mr-1">
+              <MapPin className="w-3.5 h-3.5 text-amber-600" />
+              <span>ਮੰਡੀ ਫਿਲਟਰ (Mandi Filter):</span>
+            </span>
+
+            <button
+              type="button"
+              onClick={() => setSelectedMandiFilter('ALL')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                selectedMandiFilter === 'ALL'
+                  ? 'bg-slate-900 text-white shadow-xs font-black ring-2 ring-slate-700'
+                  : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
+              }`}
+            >
+              <span>🌟 ਸਾਰੀਆਂ ਮੰਡੀਆਂ (All Mandis)</span>
+              <span className="text-[10px] px-1.5 py-0.2 rounded-full font-mono bg-slate-700 text-slate-200">
+                {dailyPurchaseRecords.length}
+              </span>
+            </button>
+
+            {firms.map((f) => {
+              const isKang = f.id === 'FIRM-001' || f.name.includes('Kang') || f.address.includes('Kang');
+              const isMehraj = f.id === 'FIRM-002' || f.name.includes('Mehrajwala') || f.address.includes('Mehrajwala');
+              const isKamal = f.id === 'FIRM-003' || f.name.includes('Kamalpur') || f.address.includes('Kamalpur');
+              const shortLabel = isMehraj ? 'ਦਾਣਾ ਮੰਡੀ ਮਹਿਰਾਜਵਾਲਾ' : isKamal ? 'ਦਾਣਾ ਮੰਡੀ ਕਮਾਲਪੁਰ' : isKang ? 'ਦਾਣਾ ਮੰਡੀ ਕੰਗ ਖੁਰਦ' : (f.namePa || f.name);
+              const fStat = mandiBranchStats[f.id];
+              const count = fStat ? fStat.count : 0;
+              const isSelected = selectedMandiFilter === f.id;
+              return (
+                <button
+                  key={f.id}
+                  type="button"
+                  onClick={() => setSelectedMandiFilter(f.id)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                    isSelected
+                      ? 'bg-amber-600 text-white shadow-xs font-black ring-2 ring-amber-400'
+                      : 'bg-white text-slate-700 border border-amber-200 hover:bg-amber-50'
+                  }`}
+                >
+                  <span>📍</span>
+                  <span>{shortLabel}</span>
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+                    isSelected ? 'bg-amber-800 text-amber-100' : 'bg-amber-100 text-amber-900'
+                  }`}>
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Mandi Breakdown Metric Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+            {firms.map((f) => {
+              const fStat = mandiBranchStats[f.id] || { count: 0, totalBags: 0, totalWeightKg: 0, totalAmount: 0, farmers: new Set() };
+              const isKang = f.id === 'FIRM-001' || f.name.includes('Kang') || f.address.includes('Kang');
+              const isMehraj = f.id === 'FIRM-002' || f.name.includes('Mehrajwala') || f.address.includes('Mehrajwala');
+              const isKamal = f.id === 'FIRM-003' || f.name.includes('Kamalpur') || f.address.includes('Kamalpur');
+              const titlePa = isMehraj ? 'ਦਾਣਾ ਮੰਡੀ ਮਹਿਰਾਜਵਾਲਾ' : isKamal ? 'ਦਾਣਾ ਮੰਡੀ ਕਮਾਲਪੁਰ' : isKang ? 'ਦਾਣਾ ਮੰਡੀ ਕੰਗ ਖੁਰਦ' : (f.namePa || f.name);
+              const cardBorder = isMehraj ? 'border-purple-200 bg-purple-50/50' : isKamal ? 'border-emerald-200 bg-emerald-50/50' : 'border-amber-200 bg-amber-50/50';
+              const textAccent = isMehraj ? 'text-purple-900' : isKamal ? 'text-emerald-900' : 'text-amber-900';
+              const wtBreakdown = formatKgToQulKg(fStat.totalWeightKg);
+              const isSelected = selectedMandiFilter === f.id;
+
+              return (
+                <div
+                  key={f.id}
+                  onClick={() => setSelectedMandiFilter(selectedMandiFilter === f.id ? 'ALL' : f.id)}
+                  className={`p-2.5 rounded-xl border transition cursor-pointer ${cardBorder} ${
+                    isSelected ? 'ring-2 ring-slate-900 shadow-xs' : 'hover:shadow-2xs'
+                  }`}
+                  title="ਇਸ ਮੰਡੀ ਦੀ ਰਿਪੋਰਟ ਵੇਖਣ ਲਈ ਕਲਿੱਕ ਕਰੋ"
+                >
+                  <div className="flex items-center justify-between text-xs font-black">
+                    <span className={`flex items-center gap-1 ${textAccent}`}>
+                      <span>📍</span>
+                      <span className="truncate">{titlePa}</span>
+                    </span>
+                    <span className="text-[10px] font-mono font-bold bg-white/80 px-1.5 py-0.5 rounded border border-slate-200">
+                      {fStat.count} ਐਂਟਰੀਆਂ
+                    </span>
+                  </div>
+                  <div className="mt-1.5 grid grid-cols-2 gap-1 text-[11px]">
+                    <div>
+                      <span className="text-slate-500 block text-[10px]">ਬੋਰੀਆਂ (Bags):</span>
+                      <span className="font-mono font-black text-slate-900 text-xs">
+                        {fStat.totalBags.toLocaleString('en-IN')}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 block text-[10px]">ਵਜ਼ਨ (Qtl):</span>
+                      <span className="font-mono font-bold text-slate-800 text-[11px]">
+                        {wtBreakdown.qtl}Q {wtBreakdown.kg}K
+                      </span>
+                    </div>
+                  </div>
+                  <div className="mt-1 pt-1 border-t border-slate-200/60 flex items-center justify-between text-[11px]">
+                    <span className="text-slate-500 text-[10px]">ਕੁੱਲ ਰਕਮ:</span>
+                    <span className="font-mono font-black text-slate-900">
+                      ₹{fStat.totalAmount.toLocaleString('en-IN')}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* Combined Totals Card */}
+            <div
+              onClick={() => setSelectedMandiFilter('ALL')}
+              className={`p-2.5 rounded-xl border border-slate-300 bg-slate-900 text-white transition cursor-pointer ${
+                selectedMandiFilter === 'ALL' ? 'ring-2 ring-emerald-400 shadow-xs' : 'hover:shadow-2xs'
+              }`}
+              title="ਸਾਰੀਆਂ ਮੰਡੀਆਂ ਇਕੱਠੀਆਂ ਵੇਖਣ ਲਈ ਕਲਿੱਕ ਕਰੋ"
+            >
+              <div className="flex items-center justify-between text-xs font-black">
+                <span className="flex items-center gap-1 text-emerald-300">
+                  <span>🌟</span>
+                  <span>ਕੁੱਲ ਜੋੜ (All Mandis)</span>
+                </span>
+                <span className="text-[10px] font-mono font-bold bg-slate-800 text-emerald-300 px-1.5 py-0.5 rounded border border-slate-700">
+                  {dailyPurchaseRecords.length} ਕੁੱਲ
+                </span>
+              </div>
+              {(() => {
+                const totalBags = dailyPurchaseRecords.reduce((sum, r) => sum + (Number(r.bags) || 0), 0);
+                const totalWt = dailyPurchaseRecords.reduce((sum, r) => sum + (Number(r.totalWeightKg) || 0), 0);
+                const totalAmt = dailyPurchaseRecords.reduce((sum, r) => sum + (Number(r.totalAmount) || 0), 0);
+                const wt = formatKgToQulKg(totalWt);
+                return (
+                  <>
+                    <div className="mt-1.5 grid grid-cols-2 gap-1 text-[11px]">
+                      <div>
+                        <span className="text-slate-400 block text-[10px]">ਕੁੱਲ ਬੋਰੀਆਂ:</span>
+                        <span className="font-mono font-black text-emerald-400 text-xs">
+                          {totalBags.toLocaleString('en-IN')}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block text-[10px]">ਕੁੱਲ ਵਜ਼ਨ:</span>
+                        <span className="font-mono font-bold text-slate-200 text-[11px]">
+                          {wt.qtl}Q {wt.kg}K
+                        </span>
+                      </div>
+                    </div>
+                    <div className="mt-1 pt-1 border-t border-slate-800 flex items-center justify-between text-[11px]">
+                      <span className="text-slate-400 text-[10px]">ਕੁੱਲ ਰਕਮ:</span>
+                      <span className="font-mono font-black text-amber-300">
+                        ₹{totalAmt.toLocaleString('en-IN')}
+                      </span>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+          </div>
+        </div>
+
         {/* Multi-Select Floating / Sticky Action Bar (appears when 1 or more entries selected) */}
         {selectedRecordIds.size > 0 && (
           <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-3 rounded-xl shadow-md border border-indigo-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in slide-in-from-top-2 duration-200">
@@ -2285,9 +2581,23 @@ export const DailyPurchase: React.FC = () => {
                             <td className="py-2 px-3 font-mono text-slate-600">{rec.mobile || '-'}</td>
                             <td className="py-2 px-3 text-slate-600">{rec.village || '-'}</td>
                             <td className="py-2 px-3">
-                              <span className="bg-indigo-50 border border-indigo-200 text-indigo-800 px-2 py-0.5 rounded-full text-[10px] font-bold">
-                                {rec.agency}
-                              </span>
+                              <div className="flex flex-col gap-0.5">
+                                <span className="bg-indigo-50 border border-indigo-200 text-indigo-800 px-2 py-0.5 rounded-full text-[10px] font-bold w-fit">
+                                  {rec.agency}
+                                </span>
+                                {(() => {
+                                  const rf = getRecordFirm(rec);
+                                  const isMehraj = rf.id === 'FIRM-002' || rf.name.includes('Mehrajwala');
+                                  const isKamal = rf.id === 'FIRM-003' || rf.name.includes('Kamalpur');
+                                  const label = isMehraj ? 'ਮਹਿਰਾਜਵਾਲਾ' : isKamal ? 'ਕਮਾਲਪੁਰ' : 'ਕੰਗ ਖੁਰਦ';
+                                  const badgeCls = isMehraj ? 'bg-purple-100 text-purple-900 border-purple-200' : isKamal ? 'bg-emerald-100 text-emerald-900 border-emerald-200' : 'bg-amber-100 text-amber-900 border-amber-200';
+                                  return (
+                                    <span className={`text-[9px] font-black px-1.5 py-0.2 rounded border w-fit ${badgeCls}`}>
+                                      📍 {label}
+                                    </span>
+                                  );
+                                })()}
+                              </div>
                             </td>
                             <td className="py-2 px-3 text-center bg-emerald-50/50">
                               <span className="font-mono font-black text-emerald-950 text-xs">
@@ -2735,9 +3045,23 @@ export const DailyPurchase: React.FC = () => {
                                 <td className="py-2 px-3 font-mono text-slate-600">{rec.mobile || '-'}</td>
                                 <td className="py-2 px-3 text-slate-600">{rec.village || '-'}</td>
                                 <td className="py-2 px-3">
-                                  <span className="bg-indigo-50 border border-indigo-200 text-indigo-800 px-2 py-0.5 rounded-full text-[10px] font-bold">
-                                    {rec.agency}
-                                  </span>
+                                  <div className="flex flex-col gap-0.5">
+                                    <span className="bg-indigo-50 border border-indigo-200 text-indigo-800 px-2 py-0.5 rounded-full text-[10px] font-bold w-fit">
+                                      {rec.agency}
+                                    </span>
+                                    {(() => {
+                                      const rf = getRecordFirm(rec);
+                                      const isMehraj = rf.id === 'FIRM-002' || rf.name.includes('Mehrajwala');
+                                      const isKamal = rf.id === 'FIRM-003' || rf.name.includes('Kamalpur');
+                                      const label = isMehraj ? 'ਮਹਿਰਾਜਵਾਲਾ' : isKamal ? 'ਕਮਾਲਪੁਰ' : 'ਕੰਗ ਖੁਰਦ';
+                                      const badgeCls = isMehraj ? 'bg-purple-100 text-purple-900 border-purple-200' : isKamal ? 'bg-emerald-100 text-emerald-900 border-emerald-200' : 'bg-amber-100 text-amber-900 border-amber-200';
+                                      return (
+                                        <span className={`text-[9px] font-black px-1.5 py-0.2 rounded border w-fit ${badgeCls}`}>
+                                          📍 {label}
+                                        </span>
+                                      );
+                                    })()}
+                                  </div>
                                 </td>
                                 <td className="py-2 px-3 text-center bg-emerald-50/50">
                                   <span className="font-mono font-black text-emerald-950 text-xs">

@@ -421,6 +421,11 @@ export interface LabourAndDeductions {
   netPayableAmount: number; // grossAmount - grandTotalDeductions
 }
 
+export interface VarietyBreakdownItem {
+  variety: string; // e.g. "PR-126", "Hybrid", "PR-110"
+  bags: number; // e.g. 150
+}
+
 export interface BagsEntryRecord {
   id: string;
   entryNumber: string; // e.g. "BAG-00001"
@@ -446,6 +451,8 @@ export interface BagsEntryRecord {
   grandTotalKg: number; // totalBagsWeightKg + totaKg
   grandTotalDisplay: string; // e.g. "37 Qul 70 Kg"
   cropType?: CropType; // 'PADDY' | 'WHEAT' | 'MAIZE'
+  variety?: string; // Selected Variety (e.g. 'PR-126', 'Hybrid', 'PR-110')
+  varietyBreakdown?: VarietyBreakdownItem[]; // Split bag count across multiple varieties
   moisturePercent?: number; // e.g. 19.5%
   moistureCutKg?: number; // Cut in KG based on moisture
   isDirectWeighbridge?: boolean; // For Maize/Trolley loose weighment
@@ -508,6 +515,8 @@ export interface DailyPurchaseRecord {
   transferredIFormId?: string;
   transferredIFormNo?: string;
   firmId?: string;
+  mandiName?: string;
+  mandiNamePa?: string;
   fiscalYear?: string;
   createdAt: string;
   updatedAt?: string;
@@ -814,6 +823,9 @@ export interface MandiSettings {
   // Bardana Low Stock Alert Settings
   bardanaLowStockAlertThreshold?: number; // e.g. 750 (default: 750 bags)
   isBardanaAlertEnabled?: boolean; // default: true
+
+  // Configured Crop / Paddy Varieties
+  paddyVarieties?: string[];
 }
 
 export interface LeftingRecord {
@@ -844,6 +856,8 @@ export interface LeftingRecord {
   kg: number;
   totalWeightKg: number; // (qul * 100) + kg
   cropType?: CropType; // 'PADDY' | 'WHEAT' | 'MAIZE'
+  variety?: string; // Selected Variety (e.g. 'PR-126', 'Hybrid', 'PR-110')
+  varietyBreakdown?: VarietyBreakdownItem[]; // Split bag count across multiple varieties
   destination: string; // Mill / Sheller Address
   truckNo: string; // e.g. "PB-10-AZ-1234"
   driverName: string;
@@ -861,6 +875,8 @@ export interface LeftingRecord {
   status: 'DISPATCHED' | 'DELIVERED' | 'REJECTED_PARTIAL';
   remarks?: string;
   firmId?: string;
+  mandiName?: string;
+  mandiNamePa?: string;
   fiscalYear?: string;
   createdAt: string;
   updatedAt?: string;
@@ -937,6 +953,7 @@ export type NavigationSection =
   | 'bardana'
   | 'search-farmer'
   | 'reports'
+  | 'letterhead'
   | 'recycle-bin'
   | 'settings'
   // Pakka (Official & CA Accounting) Sections

@@ -149,7 +149,8 @@ export async function exportLeftingVoucherPDF(
   doc.setTextColor(15, 23, 42);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8.5);
-  doc.text('Paddy Dispatch', margin + 4, currentY + 6);
+  const varietyLabel = record.variety ? `Paddy (${cleanText(record.variety)})` : 'Paddy Dispatch';
+  doc.text(varietyLabel, margin + 4, currentY + 6);
   doc.setFont('helvetica', 'normal');
   doc.text(`${cleanText(record.bardanaType)} (${record.newBags || 0}N / ${record.oldBags || 0}O)`, margin + 65, currentY + 6);
   doc.setFont('helvetica', 'bold');
@@ -158,6 +159,22 @@ export async function exportLeftingVoucherPDF(
   doc.text(formatLeftingWeightQtlKg(dispWeightKg), margin + 135, currentY + 6);
 
   currentY += 9;
+
+  // Optional Row: Variety Breakdown
+  if (record.varietyBreakdown && record.varietyBreakdown.length > 0) {
+    doc.setFillColor(254, 249, 195); // amber-50
+    doc.rect(margin, currentY, contentWidth, 7, 'F');
+    doc.setDrawColor(253, 224, 71);
+    doc.rect(margin, currentY, contentWidth, 7, 'S');
+
+    doc.setTextColor(113, 63, 18);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    const brkSummary = record.varietyBreakdown.map((vb) => `${cleanText(vb.variety)}: ${vb.bags} Bags`).join(' | ');
+    doc.text(`Variety Breakdown: ${brkSummary}`, margin + 4, currentY + 4.8);
+
+    currentY += 7;
+  }
 
   // Row 2: Sheller Receiving & Shortage
   if (record.shortageKg || record.rejectedBags) {

@@ -41,6 +41,7 @@ import { ProfitLossView } from './components/pakka/ProfitLossView';
 import { BankCashBookView } from './components/pakka/BankCashBookView';
 import { DebtorsCreditorsView } from './components/pakka/DebtorsCreditorsView';
 import { TDSRegisterView } from './components/pakka/TDSRegisterView';
+import { FirmLetterheadView } from './components/letterhead/FirmLetterheadView';
 import {
   LayoutDashboard,
   ShoppingBag,
@@ -95,6 +96,7 @@ const MainAppContent: React.FC = () => {
           {activeSection === 'reports' && <MandiReports />}
           {activeSection === 'farmer-bag-balance-labour' && <FarmerBagBalanceReport />}
           {activeSection === 'labour-ledger' && <LabourGangLedger />}
+          {activeSection === 'letterhead' && <FirmLetterheadView />}
           {activeSection === 'settings' && <SettingsManager />}
 
           {/* Pakka (Official & CA Mandi Accounting) Sections */}

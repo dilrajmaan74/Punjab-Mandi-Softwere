@@ -1,4 +1,4 @@
-import { DailyPurchaseRecord, MandiSettings, FarmerPurchaseSummary } from '../types/mandi';
+import { DailyPurchaseRecord, MandiSettings, FarmerPurchaseSummary, MandiFirm } from '../types/mandi';
 import { formatCurrencyINR, maskAadhaarNumber } from './calculations';
 import { cleanPdfText } from './translations';
 import { renderStandardPdfHeader } from './pdfHeaderHelper';
@@ -341,12 +341,14 @@ function renderContinuationHeader(
   agencyName: string | undefined,
   filterDate: string,
   pageNum: number,
-  totalPages: number
+  totalPages: number,
+  selectedFirm?: MandiFirm | null,
+  mandiTitle?: string
 ): number {
   const pageWidth = doc.internal.pageSize.getWidth();
   const margin = 8;
   const contentWidth = pageWidth - margin * 2;
-  const firmName = (cleanPdfText(settings.firmNameEn) || 'JAMMU TRADING CO').toUpperCase();
+  const firmName = (cleanPdfText(selectedFirm?.name || settings.firmNameEn) || 'JAMMU TRADING CO').toUpperCase();
 
   const curY = 5;
   const barHeight = 5.8;
@@ -361,7 +363,8 @@ function renderContinuationHeader(
   doc.setTextColor(0, 0, 0);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8.5);
-  doc.text(`${firmName} — DAILY PURCHASE REGISTER (Contd.)`, margin + 3, curY + 4.1);
+  const mandiHeaderShort = mandiTitle ? `[${mandiTitle}] ` : '';
+  doc.text(`${firmName} — ${mandiHeaderShort}PURCHASE (Contd.)`, margin + 3, curY + 4.1);
 
   const agencyPart = agencyName ? `Agency: ${cleanPdfText(agencyName)}  |  ` : '';
   doc.setFont('helvetica', 'bold');
@@ -378,7 +381,6 @@ function renderContinuationHeader(
   doc.text(`Page ${pageNum} of ${totalPages}`, pageWidth - margin - 3, curY + 4.1, { align: 'right' });
 
   // Compact Information Line: "1 Bag = 37.5 Kg  |  1 Qtl Rate = Rs. 2,461"
-  // Shown ONCE near the top of the page, clearly applying to ALL farmer entries on this page
   const infoBarY = curY + barHeight + 1.2;
   const infoBarHeight = 4.8;
   doc.setFillColor(246, 246, 246);
@@ -411,43 +413,75 @@ function renderDailyPurchaseBWHeader(
   settings: MandiSettings,
   filterDate: string,
   selectedAgency: string | undefined,
-  totalRecords: number
+  totalRecords: number,
+  selectedFirm?: MandiFirm | null,
+  mandiTitle?: string
 ): number {
   const pageWidth = doc.internal.pageSize.getWidth();
   const margin = 8;
   const contentWidth = pageWidth - margin * 2;
   const centerX = pageWidth / 2;
 
-  // Firm Information from Settings / Profile
-  const firmName = (cleanPdfText(settings.firmNameEn) || 'JAMMU TRADING CO').toUpperCase();
-  const firmAddress = cleanPdfText(settings.firmAddress) || 'Dana Mandi Kang Khurd, Teh. Shahkot, Distt. Jalandhar, Punjab - 144629';
-  const licenceNo = cleanPdfText(settings.firmLicence) || 'JAL/LKH/133';
-  const mobile = cleanPdfText(settings.firmMobile) || '98147-74651';
-  const pan = cleanPdfText(settings.firmPan);
-  const marketCommittee = cleanPdfText(settings.marketCommitteeEn) || 'Market Committee Lohian Khas';
+  // Firm Information from Selected Firm or Settings / Profile
+  const firmName = (cleanPdfText(selectedFirm?.name || settings.firmNameEn) || 'JAMMU TRADING CO').toUpperCase();
+  const firmAddress = selectedFirm
+    ? (cleanPdfText(selectedFirm.address) || settings.firmAddress)
+    : 'Dana Mandi Kang Khurd / Dana Mandi Mehrajwala / Dana Mandi Kamalpur, Teh. Shahkot, Distt. Jalandhar, Punjab';
+  const licenceNo = selectedFirm
+    ? (cleanPdfText(selectedFirm.licenceNo) || settings.firmLicence)
+    : 'JAL/LKH/133 (Kang Khurd) | JAL/LKH/133/M (Mehrajwala) | JAL/LKH/133/K (Kamalpur)';
+  const mobile = cleanPdfText(selectedFirm?.mobile || settings.firmMobile) || '98147-74651';
+  const pan = cleanPdfText(selectedFirm?.pan || settings.firmPan);
+  const marketCommittee = cleanPdfText(selectedFirm?.marketCommittee || settings.marketCommitteeEn) || 'Market Committee Lohian Khas';
 
-  let curY = 5;
+  // Specific prominent Mandi Header Tag so no one gets confused
+  let mandiBadgeText = mandiTitle || '';
+  if (!mandiBadgeText) {
+    if (selectedFirm?.address?.includes('Mehrajwala') || selectedFirm?.name?.includes('Mehrajwala') || selectedFirm?.id === 'FIRM-002') {
+      mandiBadgeText = 'DANA MANDI MEHRAJWALA (ਦਾਣਾ ਮੰਡੀ ਮਹਿਰਾਜਵਾਲਾ)';
+    } else if (selectedFirm?.address?.includes('Kamalpur') || selectedFirm?.name?.includes('Kamalpur') || selectedFirm?.id === 'FIRM-003') {
+      mandiBadgeText = 'DANA MANDI KAMALPUR (ਦਾਣਾ ਮੰਡੀ ਕਮਾਲਪੁਰ)';
+    } else if (selectedFirm?.address?.includes('Kang Khurd') || selectedFirm?.name?.includes('Kang') || selectedFirm?.id === 'FIRM-001') {
+      mandiBadgeText = 'DANA MANDI KANG KHURD (ਦਾਣਾ ਮੰਡੀ ਕੰਗ ਖੁਰਦ)';
+    } else {
+      mandiBadgeText = 'ALL MANDIS COMBINED (ਕੰਗ ਖੁਰਦ • ਮਹਿਰਾਜਵਾਲਾ • ਕਮਾਲਪੁਰ)';
+    }
+  }
+
+  let curY = 4.0;
 
   // 1. Firm Name - Bold Solid Black, Centered
   doc.setTextColor(0, 0, 0);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(13);
-  doc.text(firmName, centerX, curY + 4, { align: 'center' });
+  doc.text(firmName, centerX, curY + 3.8, { align: 'center' });
+
+  // 1.5 PROMINENT MANDI BRANCH BANNER (Crystal Clear prominent box so no one gets confused)
+  doc.setFillColor(242, 242, 242);
+  doc.roundedRect(centerX - 85, curY + 5.6, 170, 5.2, 1, 1, 'F');
+  doc.setDrawColor(0, 0, 0);
+  doc.setLineWidth(0.3);
+  doc.roundedRect(centerX - 85, curY + 5.6, 170, 5.2, 1, 1, 'S');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8.5);
+  doc.setTextColor(0, 0, 0);
+  doc.text(`★ MANDI BRANCH: ${mandiBadgeText.toUpperCase()} ★`, centerX, curY + 9.3, { align: 'center' });
 
   // 2. Firm Address - Solid Black, Centered
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
-  doc.text(firmAddress, centerX, curY + 8.2, { align: 'center' });
+  doc.setFontSize(7.5);
+  doc.text(firmAddress, centerX, curY + 13.0, { align: 'center' });
 
   // 3. Licence No, Mobile, PAN, Market Committee - Solid Black, Centered
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7.5);
+  doc.setFontSize(7.2);
   const panPart = pan ? `   |   PAN: ${pan}` : '';
-  const creds = `Licence No: ${licenceNo}   |   Mobile: +91 ${mobile}${panPart}   |   ${marketCommittee}`;
-  doc.text(creds, centerX, curY + 12, { align: 'center' });
+  const creds = `Licence: ${licenceNo}   |   Mobile: +91 ${mobile}${panPart}   |   ${marketCommittee}`;
+  doc.text(creds, centerX, curY + 16.0, { align: 'center' });
 
   // Thin Black Divider Line
-  curY += 13.8;
+  curY += 16.8;
   doc.setDrawColor(0, 0, 0);
   doc.setLineWidth(0.25);
   doc.line(margin, curY, margin + contentWidth, curY);
@@ -522,7 +556,9 @@ export async function exportDailyPurchaseRegisterPDF(
   settings: MandiSettings,
   filterAgency = 'All Agencies',
   filterDate = 'All Dates',
-  allDailyPurchaseRecords?: DailyPurchaseRecord[]
+  allDailyPurchaseRecords?: DailyPurchaseRecord[],
+  selectedFirm?: MandiFirm | null,
+  mandiTitle?: string
 ): Promise<void> {
   const { jsPDF } = await import('jspdf');
   const doc = new jsPDF({
@@ -630,7 +666,9 @@ export async function exportDailyPurchaseRegisterPDF(
         settings,
         filterDate,
         selectedAgency,
-        records.length
+        records.length,
+        selectedFirm,
+        mandiTitle
       );
     } else {
       y = renderContinuationHeader(
@@ -639,7 +677,9 @@ export async function exportDailyPurchaseRegisterPDF(
         selectedAgency,
         filterDate,
         pageNum,
-        totalPages
+        totalPages,
+        selectedFirm,
+        mandiTitle
       );
     }
 
@@ -733,10 +773,17 @@ export async function exportDailyPurchaseRegisterPDF(
       curX += columns[9].width;
 
       // 11. Agency (bold solid black)
-      const agencyStr = cleanText(rec.agency);
+      const baseAgency = cleanText(rec.agency);
+      let agencyDisplay = baseAgency;
+      if (!selectedFirm) {
+        const isMehraj = rec.firmId === 'FIRM-002' || (rec.mandiName || '').toLowerCase().includes('mehrajwala');
+        const isKamal = rec.firmId === 'FIRM-003' || (rec.mandiName || '').toLowerCase().includes('kamalpur');
+        const mTag = isMehraj ? 'MW' : isKamal ? 'KP' : 'KK';
+        agencyDisplay = `${baseAgency} [${mTag}]`;
+      }
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(0, 0, 0);
-      doc.text(agencyStr.length > 13 ? agencyStr.slice(0, 12) + '...' : agencyStr, curX + 2, y + 5.0);
+      doc.text(agencyDisplay.length > 15 ? agencyDisplay.slice(0, 14) + '..' : agencyDisplay, curX + 2, y + 5.0);
       doc.setFont('helvetica', 'normal');
 
       y += rowHeight;
@@ -801,5 +848,6 @@ export async function exportDailyPurchaseRegisterPDF(
 
   const cleanDate = (filterDate || 'All_Dates').replace(/[^a-zA-Z0-9]/g, '_');
   const cleanAgency = (selectedAgency || filterAgency || 'All_Agencies').replace(/[^a-zA-Z0-9]/g, '_');
-  doc.save(`Daily_Purchase_Register_${cleanAgency}_${cleanDate}.pdf`);
+  const cleanMandi = (mandiTitle || (selectedFirm ? selectedFirm.name : 'All_Mandis')).replace(/[^a-zA-Z0-9]/g, '_');
+  doc.save(`Daily_Purchase_Register_${cleanMandi}_${cleanAgency}_${cleanDate}.pdf`);
 }

@@ -39,11 +39,12 @@ import {
   formatKgToQulKg,
   getBagsEntryLabourBreakdown
 } from '../../utils/calculations';
-import { BagsEntryRecord, BardanaType, LabourAndDeductions, CropFilterType } from '../../types/mandi';
+import { BagsEntryRecord, BardanaType, LabourAndDeductions, CropFilterType, VarietyBreakdownItem } from '../../types/mandi';
 import { SearchableSelect, SearchableSelectOption } from '../common/SearchableSelect';
 import { generateBagsWeighmentWhatsAppMessage, openWhatsApp } from '../../utils/whatsappNotification';
 import { VoiceWeighmentAssistant, ParsedVoiceData } from '../common/VoiceWeighmentAssistant';
 import { BardanaLowStockAlertBanner } from '../bardana/BardanaLowStockAlertBanner';
+import { VarietySelector } from '../common/VarietySelector';
 
 interface BagsEntryDraft {
   dateInput: string;
@@ -142,6 +143,8 @@ export const BagsEntry: React.FC = () => {
   const [moisturePercentInput, setMoisturePercentInput] = useState<string>('');
   const [customBagWeightInput, setCustomBagWeightInput] = useState<string>('');
   const [farmerSearchTerm, setFarmerSearchTerm] = useState('');
+  const [selectedVariety, setSelectedVariety] = useState<string>('PR-126');
+  const [varietyBreakdown, setVarietyBreakdown] = useState<VarietyBreakdownItem[]>([]);
 
   // Auto-save draft on every change
   useEffect(() => {
@@ -491,6 +494,8 @@ export const BagsEntry: React.FC = () => {
       bags: bagsCount,
       weightPerBagKg: effectiveBagWeight,
       cropType: activeCrop,
+      variety: selectedVariety,
+      varietyBreakdown: varietyBreakdown && varietyBreakdown.length > 0 ? varietyBreakdown : undefined,
       moisturePercent: moisturePercent > 0 ? moisturePercent : undefined,
       moistureCutKg: moistureCutResult.cutKg > 0 ? moistureCutResult.cutKg : undefined,
       totalBagsWeightKg: bagsWeightBreakdown.totalKg,
@@ -535,6 +540,7 @@ export const BagsEntry: React.FC = () => {
     setPakkiRateInput(String(settings?.defaultPakkiLabourRate ?? 8));
     setDoubleRateInput(String(settings?.defaultPakkaDoubleLabourRate ?? 14));
     setSukkiRateInput(String(settings?.defaultSukhiLabourRate ?? 5));
+    setVarietyBreakdown([]);
 
     setSavedReceiptRecord(newRecord);
     setIsSaving(false);
@@ -976,6 +982,18 @@ export const BagsEntry: React.FC = () => {
                   </div>
                 )}
               </div>
+            </div>
+
+            {/* Paddy Variety Selection & Split Breakdown */}
+            <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xs">
+              <VarietySelector
+                variety={selectedVariety}
+                onVarietyChange={setSelectedVariety}
+                varietyBreakdown={varietyBreakdown}
+                onBreakdownChange={setVarietyBreakdown}
+                totalBags={bagsCount}
+                label={isEn ? 'Paddy Variety Selection & Split' : 'ਝੋਨੇ ਦੀ ਕਿਸਮ ਦੀ ਚੋਣ ਅਤੇ ਵੰਡ (Paddy Variety & Split)'}
+              />
             </div>
 
             {/* Restored Labour Columns/Fields Section */}
@@ -1776,6 +1794,19 @@ export const BagsEntry: React.FC = () => {
                             (N:{entry.newBags || 0} O:{entry.oldBags || 0})
                           </div>
                         )}
+                        {entry.varietyBreakdown && entry.varietyBreakdown.length > 0 ? (
+                          <div className="flex flex-col gap-0.5 mt-1 items-center">
+                            {entry.varietyBreakdown.map((vb, i) => (
+                              <span key={i} className="text-[9px] bg-amber-50 text-amber-900 border border-amber-200 px-1 py-0.2 rounded font-bold whitespace-nowrap">
+                                {vb.variety}: {vb.bags}
+                              </span>
+                            ))}
+                          </div>
+                        ) : entry.variety ? (
+                          <div className="text-[10px] text-amber-800 font-bold mt-0.5">
+                            🌾 {entry.variety}
+                          </div>
+                        ) : null}
                       </td>
 
                       {/* 1. Pakki Labour Bags */}

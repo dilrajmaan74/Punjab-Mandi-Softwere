@@ -70,6 +70,8 @@ export const MandiReports: React.FC = () => {
     farmerAdvances,
     agencies,
     settings,
+    firms,
+    activeFirm,
     getAllFarmersPurchaseSummaries,
     language
   } = useMandi();
@@ -85,6 +87,7 @@ export const MandiReports: React.FC = () => {
   const [filterFarmerId, setFilterFarmerId] = useState<string>('ALL');
   const [filterAgency, setFilterAgency] = useState<string>('ALL');
   const [filterVillage, setFilterVillage] = useState<string>('ALL');
+  const [filterMandi, setFilterMandi] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
   // Live adjustments from storage
@@ -193,6 +196,13 @@ export const MandiReports: React.FC = () => {
       if (filterDate && p.date !== filterDate) return false;
       if (filterAgency !== 'ALL' && p.agency !== filterAgency) return false;
       if (filterFarmerId !== 'ALL' && p.farmerId !== filterFarmerId) return false;
+      if (filterMandi !== 'ALL') {
+        const pFirmId = p.firmId || (
+          (p.mandiName || '').toLowerCase().includes('mehrajwala') ? 'FIRM-002' :
+          (p.mandiName || '').toLowerCase().includes('kamalpur') ? 'FIRM-003' : 'FIRM-001'
+        );
+        if (pFirmId !== filterMandi) return false;
+      }
       if (searchQuery) {
         const q = searchQuery.toLowerCase();
         const match =
@@ -203,7 +213,7 @@ export const MandiReports: React.FC = () => {
       }
       return true;
     });
-  }, [dailyPurchaseRecords, filterDate, filterAgency, filterFarmerId, searchQuery]);
+  }, [dailyPurchaseRecords, filterDate, filterAgency, filterFarmerId, filterMandi, searchQuery]);
 
   // 4. Filtered Lefting
   const filteredLeftings = useMemo(() => {
@@ -211,6 +221,13 @@ export const MandiReports: React.FC = () => {
       const d = l.date || (l as any).dispatchDate;
       if (filterDate && d !== filterDate) return false;
       if (filterAgency !== 'ALL' && l.agency !== filterAgency && (l as any).sellerOrAgency !== filterAgency) return false;
+      if (filterMandi !== 'ALL') {
+        const lFirmId = l.firmId || (
+          (l.mandiName || '').toLowerCase().includes('mehrajwala') ? 'FIRM-002' :
+          (l.mandiName || '').toLowerCase().includes('kamalpur') ? 'FIRM-003' : 'FIRM-001'
+        );
+        if (lFirmId !== filterMandi) return false;
+      }
       if (searchQuery) {
         const q = searchQuery.toLowerCase();
         const match =
@@ -222,7 +239,7 @@ export const MandiReports: React.FC = () => {
       }
       return true;
     });
-  }, [leftingRecords, filterDate, filterAgency, searchQuery]);
+  }, [leftingRecords, filterDate, filterAgency, filterMandi, searchQuery]);
 
   // 5. Filtered Bardana
   const filteredBardana = useMemo(() => {
@@ -644,6 +661,30 @@ export const MandiReports: React.FC = () => {
                     {ag.nameEn} ({ag.code || ag.namePa})
                   </option>
                 ))}
+              </select>
+            </div>
+          )}
+
+          {/* Mandi Branch Filter (for daily purchase, lefting, stock balance) */}
+          {(activeTab === 'daily-purchase' || activeTab === 'lefting' || activeTab === 'stock-balance') && (
+            <div className="min-w-[170px]">
+              <select
+                id="report-filter-mandi"
+                value={filterMandi}
+                onChange={(e) => setFilterMandi(e.target.value)}
+                className="w-full text-xs py-2 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-bold"
+              >
+                <option value="ALL">🌟 All Mandis / ਸਾਰੀਆਂ ਮੰਡੀਆਂ</option>
+                {firms.map((f) => {
+                  const isMehraj = f.id === 'FIRM-002' || f.name.includes('Mehrajwala');
+                  const isKamal = f.id === 'FIRM-003' || f.name.includes('Kamalpur');
+                  const label = isMehraj ? 'ਦਾਣਾ ਮੰਡੀ ਮਹਿਰਾਜਵਾਲਾ' : isKamal ? 'ਦਾਣਾ ਮੰਡੀ ਕਮਾਲਪੁਰ' : 'ਦਾਣਾ ਮੰਡੀ ਕੰਗ ਖੁਰਦ';
+                  return (
+                    <option key={f.id} value={f.id}>
+                      📍 {label}
+                    </option>
+                  );
+                })}
               </select>
             </div>
           )}

@@ -152,6 +152,13 @@ const KACHA_NAV_ITEMS: NavItem[] = [
     icon: FileSpreadsheet
   },
   {
+    id: 'letterhead',
+    titleEn: 'Official Letterhead Pad',
+    titlePa: 'ਫਰਮ ਲੈਟਰ ਪੈਡ (Letterpad)',
+    icon: FileText,
+    badgeColor: 'bg-indigo-600'
+  },
+  {
     id: 'recycle-bin',
     titleEn: 'Recycle Bin',
     titlePa: 'ਰੀਸਾਈਕਲ ਬਿਨ',

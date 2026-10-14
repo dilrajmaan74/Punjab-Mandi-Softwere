@@ -103,7 +103,14 @@ export const KachiTolParchiModal: React.FC = () => {
     msg += `📅 ਮਿਤੀ: *${entry.date}*\n`;
     msg += `👤 ਕਿਸਾਨ: *${farmerName}*${farmerFatherName ? ` ਸਪੁੱਤਰ ${farmerFatherName}` : ''}\n`;
     if (farmerVillage) msg += `🏡 ਪਿੰਡ: *${farmerVillage}*\n`;
-    msg += `🌾 ਫਸਲ: *ਝੋਨਾ (Paddy - 37.5 KG)*\n\n`;
+    msg += `🌾 ਫਸਲ: *ਝੋਨਾ (Paddy - 37.5 KG)*\n`;
+    if (entry.variety) {
+      msg += `🌾 ਕਿਸਮ (Variety): *${entry.variety}*\n`;
+    }
+    if (entry.varietyBreakdown && entry.varietyBreakdown.length > 0) {
+      msg += `📦 ਕਿਸਮ ਅਨੁਸਾਰ ਵੰਡ: ${entry.varietyBreakdown.map((v) => `${v.variety} (${v.bags} ਬੋਰੀਆਂ)`).join(' | ')}\n`;
+    }
+    msg += `\n`;
 
     msg += `⚖️ *ਤੋਲ ਦਾ ਵੇਰਵਾ:*\n`;
     msg += `• ਕੁੱਲ ਬੋਰੀਆਂ: *${totalBags} ਬੋਰੀਆਂ* (${bardanaText})\n`;
@@ -389,8 +396,10 @@ export const KachiTolParchiModal: React.FC = () => {
               <span className="text-slate-950 font-black">{entry.date}</span>
             </div>
             <div className="text-right">
-              <span className="text-slate-500 text-[10px] block">ਫਸਲ (Commodity)</span>
-              <span className="text-emerald-900 font-black">ਝੋਨਾ (Paddy - 37.5 KG)</span>
+              <span className="text-slate-500 text-[10px] block">ਫਸਲ ਤੇ ਕਿਸਮ (Variety)</span>
+              <span className="text-emerald-900 font-black">
+                {entry.variety ? `ਝੋਨਾ (${entry.variety})` : 'ਝੋਨਾ (37.5 KG)'}
+              </span>
             </div>
           </div>
 
@@ -438,6 +447,21 @@ export const KachiTolParchiModal: React.FC = () => {
                     {totalBags} ਬੋਰੀਆਂ
                   </td>
                 </tr>
+
+                {entry.varietyBreakdown && entry.varietyBreakdown.length > 0 && (
+                  <tr className="bg-amber-50/70">
+                    <td className="border border-slate-300 py-1.5 px-2.5 font-bold text-amber-950" colSpan={3}>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="text-[11px] font-black text-amber-900">ਕਿਸਮ ਅਨੁਸਾਰ ਵੰਡ:</span>
+                        {entry.varietyBreakdown.map((vb, i) => (
+                          <span key={i} className="bg-white text-amber-900 border border-amber-300 px-2 py-0.5 rounded text-[11px] font-mono font-bold">
+                            {vb.variety}: {vb.bags} ਬੋਰੀਆਂ
+                          </span>
+                        ))}
+                      </div>
+                    </td>
+                  </tr>
+                )}
 
                 <tr className="hover:bg-slate-50">
                   <td className="border border-slate-300 py-1.5 px-2.5 font-medium text-slate-700">

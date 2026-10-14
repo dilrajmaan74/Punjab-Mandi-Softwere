@@ -147,8 +147,8 @@ export const DEFAULT_AGENCIES: ProcurementAgency[] = [
 
 export const DEFAULT_FIRM: MandiFirm = {
   id: 'FIRM-001',
-  name: 'Jammu Trading Co',
-  namePa: 'ਜੰਮੂ ਟਰੇਡਿੰਗ ਕੰਪਨੀ',
+  name: 'Jammu Trading Co (Kang Khurd)',
+  namePa: 'ਜੰਮੂ ਟਰੇਡਿੰਗ ਕੰਪਨੀ (ਦਾਣਾ ਮੰਡੀ ਕੰਗ ਖੁਰਦ)',
   address: 'Dana Mandi Kang Khurd, Teh. Shahkot, Distt. Jalandhar, Punjab - 144629',
   addressPa: 'ਦਾਣਾ ਮੰਡੀ ਕੰਗ ਖੁਰਦ, ਤਹਿ. ਸ਼ਾਹਕੋਟ, ਜ਼ਿਲ੍ਹਾ ਜਲੰਧਰ, ਪੰਜਾਬ - 144629',
   marketCommittee: 'Lohian Khas',
@@ -160,6 +160,44 @@ export const DEFAULT_FIRM: MandiFirm = {
   isDefault: true,
   createdAt: '01/04/2024'
 };
+
+export const DEFAULT_FIRM_MEHRAJWALA: MandiFirm = {
+  id: 'FIRM-002',
+  name: 'Jammu Trading Co (Mehrajwala)',
+  namePa: 'ਜੰਮੂ ਟਰੇਡਿੰਗ ਕੰਪਨੀ (ਦਾਣਾ ਮੰਡੀ ਮਹਿਰਾਜਵਾਲਾ)',
+  address: 'Dana Mandi Mehrajwala, Teh. Shahkot, Distt. Jalandhar, Punjab - 144629',
+  addressPa: 'ਦਾਣਾ ਮੰਡੀ ਮਹਿਰਾਜਵਾਲਾ, ਤਹਿ. ਸ਼ਾਹਕੋਟ, ਜ਼ਿਲ੍ਹਾ ਜਲੰਧਰ, ਪੰਜਾਬ - 144629',
+  marketCommittee: 'Lohian Khas',
+  marketCommitteePa: 'ਲੋਹੀਆਂ ਖਾਸ',
+  mobile: '98147-74651',
+  licenceNo: 'JAL/LKH/133/M',
+  pan: 'AAACJ1234F',
+  gstin: '03AAACJ1234F1Z5',
+  isDefault: false,
+  createdAt: '01/04/2026'
+};
+
+export const DEFAULT_FIRM_KAMALPUR: MandiFirm = {
+  id: 'FIRM-003',
+  name: 'Jammu Trading Co (Kamalpur)',
+  namePa: 'ਜੰਮੂ ਟਰੇਡਿੰਗ ਕੰਪਨੀ (ਦਾਣਾ ਮੰਡੀ ਕਮਾਲਪੁਰ)',
+  address: 'Dana Mandi Kamalpur, Teh. Shahkot, Distt. Jalandhar, Punjab - 144629',
+  addressPa: 'ਦਾਣਾ ਮੰਡੀ ਕਮਾਲਪੁਰ, ਤਹਿ. ਸ਼ਾਹਕੋਟ, ਜ਼ਿਲ੍ਹਾ ਜਲੰਧਰ, ਪੰਜਾਬ - 144629',
+  marketCommittee: 'Lohian Khas',
+  marketCommitteePa: 'ਲੋਹੀਆਂ ਖਾਸ',
+  mobile: '98147-74651',
+  licenceNo: 'JAL/LKH/133/K',
+  pan: 'AAACJ1234F',
+  gstin: '03AAACJ1234F1Z5',
+  isDefault: false,
+  createdAt: '01/04/2026'
+};
+
+export const INITIAL_DEFAULT_FIRMS: MandiFirm[] = [
+  DEFAULT_FIRM,
+  DEFAULT_FIRM_MEHRAJWALA,
+  DEFAULT_FIRM_KAMALPUR
+];
 
 export const DEFAULT_FISCAL_YEARS = ['2024-25', '2025-26', '2026-27'];
 export const DEFAULT_ACTIVE_YEAR = '2026-27';
@@ -428,6 +466,7 @@ interface MandiContextType {
 
   // Settings & DB Reset
   updateSettings: (newSettings: Partial<MandiSettings>) => void;
+  addPaddyVariety: (varietyName: string) => void;
   resetAllData: () => void;
 
   // Supabase Cloud PostgreSQL Integration
@@ -548,6 +587,18 @@ const DEFAULT_LABOUR_MATES: LabourMate[] = [
   }
 ];
 
+export const DEFAULT_PADDY_VARIETIES: string[] = [
+  'PR-126',
+  'Hybrid (ਹਾਈਬ੍ਰਿਡ)',
+  'PR-110',
+  'PR-8822',
+  'PB NO-1 (ਬਾਸਮਤੀ ਨੰ. 1)',
+  'Paddy Grade-A (ਝੋਨਾ ਗ੍ਰੇਡ-ਏ)',
+  'Paddy Common (ਝੋਨਾ ਕਾਮਨ)',
+  '1509 (ਬਾਸਮਤੀ)',
+  '1121 (ਬਾਸਮਤੀ)'
+];
+
 const DEFAULT_SETTINGS: MandiSettings = {
   mandiNameEn: 'Dana Mandi Kang Khurd',
   mandiNamePa: 'ਦਾਣਾ ਮੰਡੀ ਕੰਗ ਖੁਰਦ',
@@ -567,7 +618,8 @@ const DEFAULT_SETTINGS: MandiSettings = {
   defaultSukhiLabourRate: 5, // default ₹5 / Bag
   requireAgencyPurchaseBeforeLefting: true,
   bardanaLowStockAlertThreshold: 750,
-  isBardanaAlertEnabled: true
+  isBardanaAlertEnabled: true,
+  paddyVarieties: DEFAULT_PADDY_VARIETIES
 };
 
 // Firm-specific storage key generator
@@ -764,12 +816,13 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       if (stored) {
         const parsed = JSON.parse(stored);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.map((f: MandiFirm) => {
+          const list = parsed.map((f: MandiFirm) => {
             if (f.id === 'FIRM-001' || f.isDefault) {
               return {
                 ...DEFAULT_FIRM,
                 ...f,
                 name: f.name || DEFAULT_FIRM.name,
+                namePa: f.namePa || DEFAULT_FIRM.namePa,
                 address: f.address || DEFAULT_FIRM.address,
                 marketCommittee: f.marketCommittee || DEFAULT_FIRM.marketCommittee,
                 mobile: f.mobile || DEFAULT_FIRM.mobile,
@@ -778,11 +831,40 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             }
             return f;
           });
+
+          // Ensure Mehrajwala is present in the list
+          const hasMehrajwala = list.some(
+            (f) =>
+              f.id === 'FIRM-002' ||
+              f.name.toLowerCase().includes('mehrajwala') ||
+              (f.address && f.address.toLowerCase().includes('mehrajwala'))
+          );
+          if (!hasMehrajwala) {
+            list.push(DEFAULT_FIRM_MEHRAJWALA);
+            try {
+              localStorage.setItem(LOCAL_STORAGE_KEYS.FIRMS, JSON.stringify(list));
+            } catch {}
+          }
+
+          // Ensure Kamalpur is present in the list
+          const hasKamalpur = list.some(
+            (f) =>
+              f.id === 'FIRM-003' ||
+              f.name.toLowerCase().includes('kamalpur') ||
+              (f.address && f.address.toLowerCase().includes('kamalpur'))
+          );
+          if (!hasKamalpur) {
+            list.push(DEFAULT_FIRM_KAMALPUR);
+            try {
+              localStorage.setItem(LOCAL_STORAGE_KEYS.FIRMS, JSON.stringify(list));
+            } catch {}
+          }
+          return list;
         }
       }
-      return [DEFAULT_FIRM];
+      return INITIAL_DEFAULT_FIRMS;
     } catch {
-      return [DEFAULT_FIRM];
+      return INITIAL_DEFAULT_FIRMS;
     }
   });
 
@@ -3536,7 +3618,7 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     if (isLinkedFarmer && linkedToMainFarmer) {
       // Sub-Farmer draws from Main Farmer's Mandi bag pool
-      const mainArrivalEntries = bagsEntries.filter((b) => {
+      let mainArrivalEntries = bagsEntries.filter((b) => {
         if (b.farmerId !== linkedToMainFarmer.id) return false;
         if (shouldFilterCrop) {
           const itemCrop = b.cropType || 'PADDY';
@@ -3544,6 +3626,29 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         }
         return true;
       });
+
+      // Collect main arrival entries from all firms (e.g. Kang Khurd)
+      firms.forEach((f) => {
+        if (f.id !== activeFirmId) {
+          const otherBags = loadFirmData<BagsEntryRecord[]>(LOCAL_STORAGE_KEYS.BAGS_ENTRIES, f.id, []);
+          if (Array.isArray(otherBags)) {
+            const matched = otherBags.filter((b) => {
+              if (b.farmerId !== linkedToMainFarmer.id) return false;
+              if (shouldFilterCrop) {
+                const itemCrop = b.cropType || 'PADDY';
+                return itemCrop === targetCrop;
+              }
+              return true;
+            });
+            matched.forEach((m) => {
+              if (!mainArrivalEntries.some((existing) => existing.id === m.id)) {
+                mainArrivalEntries.push(m);
+              }
+            });
+          }
+        }
+      });
+
       const mandiArrivalBags = mainArrivalEntries.reduce((sum, b) => sum + (Number(b.bags) || 0), 0);
       const mandiArrivalWeightKg = mainArrivalEntries.reduce((sum, b) => sum + (Number(b.grandTotalKg) || 0), 0);
       const arrivalBreakdown = formatKgToQulKg(mandiArrivalWeightKg);
@@ -3627,7 +3732,7 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
 
     // Main Farmer or Independent Farmer
-    const farmerEntries = bagsEntries.filter((b) => {
+    let farmerEntries = bagsEntries.filter((b) => {
       if (b.farmerId !== farmerId) return false;
       if (shouldFilterCrop) {
         const itemCrop = b.cropType || 'PADDY';
@@ -3635,6 +3740,29 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
       return true;
     });
+
+    // Collect arrival bags across all firms (e.g. Kang Khurd)
+    firms.forEach((f) => {
+      if (f.id !== activeFirmId) {
+        const otherBags = loadFirmData<BagsEntryRecord[]>(LOCAL_STORAGE_KEYS.BAGS_ENTRIES, f.id, []);
+        if (Array.isArray(otherBags)) {
+          const matched = otherBags.filter((b) => {
+            if (b.farmerId !== farmerId) return false;
+            if (shouldFilterCrop) {
+              const itemCrop = b.cropType || 'PADDY';
+              return itemCrop === targetCrop;
+            }
+            return true;
+          });
+          matched.forEach((m) => {
+            if (!farmerEntries.some((existing) => existing.id === m.id)) {
+              farmerEntries.push(m);
+            }
+          });
+        }
+      }
+    });
+
     const mandiArrivalBags = farmerEntries.reduce((sum, b) => sum + (Number(b.bags) || 0), 0);
     const mandiArrivalWeightKg = farmerEntries.reduce((sum, b) => sum + (Number(b.grandTotalKg) || 0), 0);
     const arrivalBreakdown = formatKgToQulKg(mandiArrivalWeightKg);
@@ -3646,6 +3774,28 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         return itemCrop === targetCrop;
       }
       return true;
+    });
+
+    // Also collect purchases for this farmer across other firms
+    firms.forEach((f) => {
+      if (f.id !== activeFirmId) {
+        const otherPurchases = loadFirmData<DailyPurchaseRecord[]>(LOCAL_STORAGE_KEYS.DAILY_PURCHASES, f.id, []);
+        if (Array.isArray(otherPurchases)) {
+          const matched = otherPurchases.filter((p) => {
+            if (p.farmerId !== farmerId) return false;
+            if (shouldFilterCrop) {
+              const itemCrop = p.cropType || 'PADDY';
+              return itemCrop === targetCrop;
+            }
+            return true;
+          });
+          matched.forEach((m) => {
+            if (!directPurchases.some((existing) => existing.id === m.id)) {
+              directPurchases.push(m);
+            }
+          });
+        }
+      }
     });
     let linkedPurchases: DailyPurchaseRecord[] = [];
     let linkedPurchasedBags = 0;
@@ -3790,8 +3940,14 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       ? farmers.find((f) => f.id === farmer.linkedMainFarmerId)
       : undefined;
 
+    const effectiveFirmId = purchaseData.firmId || activeFirmId;
+    const effectiveFirmObj = firms.find((f) => f.id === effectiveFirmId) || activeFirm;
+
     const newRecord: DailyPurchaseRecord = {
       ...purchaseData,
+      firmId: effectiveFirmId,
+      mandiName: purchaseData.mandiName || effectiveFirmObj.name,
+      mandiNamePa: purchaseData.mandiNamePa || effectiveFirmObj.namePa || effectiveFirmObj.name,
       fiscalYear: purchaseData.fiscalYear || activeFiscalYear,
       id: nextId,
       mainFarmerId: linkedMainFarmer ? linkedMainFarmer.id : undefined,
@@ -3969,10 +4125,15 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const netDeliveredBags = recordData.bags - (Number(recordData.rejectedBags) || 0);
     const netDeliveredKg = recordData.totalWeightKg - (Number(recordData.shortageKg) || 0);
 
+    const effectiveLeftingFirmId = recordData.firmId || activeFirmId;
+    const effectiveLeftingFirm = firms.find((f) => f.id === effectiveLeftingFirmId) || activeFirm;
+
     const newRecord: LeftingRecord = {
       ...recordData,
       id: nextId,
-      firmId: recordData.firmId || activeFirmId,
+      firmId: effectiveLeftingFirmId,
+      mandiName: recordData.mandiName || effectiveLeftingFirm.name,
+      mandiNamePa: recordData.mandiNamePa || effectiveLeftingFirm.namePa || effectiveLeftingFirm.name,
       fiscalYear: recordData.fiscalYear || activeFiscalYear,
       netDeliveredBags,
       netDeliveredKg,
@@ -4395,8 +4556,10 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setActiveFirmIdState(newFirmId);
     localStorage.setItem(LOCAL_STORAGE_KEYS.ACTIVE_FIRM_ID, newFirmId);
 
-    // 5. Update state arrays to target firm (100% transferred to FY 2026-27)
-    setFarmers(transferFarmersTo2026_27(Array.isArray(newFarmers) ? newFarmers : []));
+    const effectiveTargetFarmers = Array.isArray(newFarmers) && newFarmers.length > 0
+      ? newFarmers
+      : (Array.isArray(farmers) && farmers.length > 0 ? farmers : loadFirmData<Farmer[]>(LOCAL_STORAGE_KEYS.FARMERS, DEFAULT_FIRM.id, []));
+    setFarmers(transferFarmersTo2026_27(effectiveTargetFarmers));
     setBagsEntries(transferRecordArrayTo2026_27(Array.isArray(newBags) ? newBags : [], 'date'));
     setBardanaRecords(transferRecordArrayTo2026_27(Array.isArray(newBardana) ? newBardana : [], 'date'));
     setDailyPurchaseRecords(transferRecordArrayTo2026_27(Array.isArray(newPurchases) ? newPurchases : [], 'date'));
@@ -4801,6 +4964,20 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (newSettings.firmPan !== undefined && activeFirmId) {
       updateFirm(activeFirmId, { pan: newSettings.firmPan.trim() });
     }
+  };
+
+  /**
+   * Add a new Paddy / Crop Variety to settings
+   */
+  const addPaddyVariety = (varietyName: string) => {
+    const trimmed = varietyName.trim();
+    if (!trimmed) return;
+    const currentList = settings.paddyVarieties && settings.paddyVarieties.length > 0
+      ? settings.paddyVarieties
+      : DEFAULT_PADDY_VARIETIES;
+    if (currentList.some((v) => v.toLowerCase() === trimmed.toLowerCase())) return;
+    const updated = [...currentList, trimmed];
+    updateSettings({ paddyVarieties: updated });
   };
 
   /**
@@ -5307,6 +5484,7 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         addVillageToPinCode,
         addNewPinCode,
         updateSettings,
+        addPaddyVariety,
         resetAllData,
         supabaseSyncStatus,
         supabaseSyncError,

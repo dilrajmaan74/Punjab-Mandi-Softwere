@@ -1,8 +1,9 @@
 import React, { useState, useMemo } from 'react';
 import { useMandi } from '../../context/MandiContext';
 import { useNotification } from '../../context/NotificationContext';
-import { LeftingRecord, BardanaType, SellerMaster, CropFilterType, CropType } from '../../types/mandi';
+import { LeftingRecord, BardanaType, SellerMaster, CropFilterType, CropType, VarietyBreakdownItem } from '../../types/mandi';
 import { SearchableSelect, SearchableSelectOption } from '../common/SearchableSelect';
+import { VarietySelector } from '../common/VarietySelector';
 import {
   Truck,
   FileText,
@@ -53,6 +54,8 @@ export const LeftingManagement: React.FC = () => {
     sellers,
     trucks,
     settings,
+    activeFirm,
+    firms,
     addLeftingRecord,
     updateLeftingRecord,
     deleteLeftingRecord,
@@ -66,6 +69,12 @@ export const LeftingManagement: React.FC = () => {
 
   // Active Tab
   const [activeTab, setActiveTab] = useState<'dispatch' | 'history' | 'agency-report'>('dispatch');
+
+  // Mandi Branch Selection for newly added dispatches
+  const [entryMandiFirmId, setEntryMandiFirmId] = useState<string>(() => activeFirm?.id || 'FIRM-001');
+
+  // Mandi Filter for history table
+  const [selectedMandiFilter, setSelectedMandiFilter] = useState<string>('ALL'); // 'ALL' | 'FIRM-001' | 'FIRM-002' | 'FIRM-003'
 
   // Form State
   const getTodayFormatted = () => {
@@ -98,6 +107,8 @@ export const LeftingManagement: React.FC = () => {
   const [photos, setPhotos] = useState<string[]>([]);
   const [photoUrl, setPhotoUrl] = useState<string>('');
   const [formError, setFormError] = useState<string>('');
+  const [selectedVariety, setSelectedVariety] = useState<string>('PR-126');
+  const [varietyBreakdown, setVarietyBreakdown] = useState<VarietyBreakdownItem[]>([]);
 
   // Seller & Truck Master Modal States
   const [isSellerModalOpen, setIsSellerModalOpen] = useState<boolean>(false);
@@ -293,8 +304,13 @@ export const LeftingManagement: React.FC = () => {
 
     const allPhotos = photos.length > 0 ? photos : (photoUrl ? [photoUrl] : undefined);
 
+    const targetFirm = firms.find((f) => f.id === entryMandiFirmId) || activeFirm;
+
     const res = addLeftingRecord({
       date: date.trim(),
+      firmId: targetFirm.id,
+      mandiName: targetFirm.name,
+      mandiNamePa: targetFirm.namePa,
       farmerId: 'MANDI-DISPATCH',
       farmerName: shellerName.trim(),
       farmerNamePa: selectedSeller?.namePa || shellerName.trim(),
@@ -318,6 +334,8 @@ export const LeftingManagement: React.FC = () => {
       gatePassNo: gatePassNo.trim() || undefined,
       dispatchDate: date.trim(),
       cropType,
+      variety: selectedVariety,
+      varietyBreakdown: varietyBreakdown && varietyBreakdown.length > 0 ? varietyBreakdown : undefined,
       status,
       remarks: remarks.trim() || undefined
     });
@@ -342,6 +360,7 @@ export const LeftingManagement: React.FC = () => {
       setRemarks('');
       setNewBagsCount('');
       setOldBagsCount('');
+      setVarietyBreakdown([]);
       setShowTruckSuggestions(false);
       setActiveTab('history');
     } else {
@@ -444,6 +463,13 @@ export const LeftingManagement: React.FC = () => {
     }
     if (filterAgency !== 'ALL' && rec.sellerOrAgency !== filterAgency) return false;
     if (filterStatus !== 'ALL' && rec.status !== filterStatus) return false;
+    if (selectedMandiFilter !== 'ALL') {
+      const recFirmId = rec.firmId || (
+        (rec.mandiName || '').toLowerCase().includes('mehrajwala') ? 'FIRM-002' :
+        (rec.mandiName || '').toLowerCase().includes('kamalpur') ? 'FIRM-003' : 'FIRM-001'
+      );
+      if (recFirmId !== selectedMandiFilter) return false;
+    }
     return true;
   }).sort((a, b) => {
     const d = compareDatesChronological(a.dispatchDate || a.date, b.dispatchDate || b.date, 'ASC');
@@ -565,6 +591,41 @@ export const LeftingManagement: React.FC = () => {
           )}
 
           <form onSubmit={handleSaveLefting} className="space-y-5">
+            {/* Feature: Mandi Branch Selector for Dispatch */}
+            <div className="bg-amber-50/60 border border-amber-200 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <MapPin className="w-4 h-4 text-amber-700 shrink-0" />
+                <div>
+                  <span className="text-xs font-black text-amber-950">ਰਵਾਨਗੀ ਦਾਣਾ ਮੰਡੀ (Dispatch Mandi Branch):</span>
+                  <span className="text-[11px] text-amber-800 ml-2">ਕਿਸ ਮੰਡੀ ਵਿੱਚੋਂ ਸ਼ੈਲਰ ਲਈ ਮਾਲ ਲਿਫਟ ਹੋ ਰਿਹਾ ਹੈ</span>
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-1.5 min-w-[320px]">
+                {firms.map((f) => {
+                  const isSelected = entryMandiFirmId === f.id;
+                  const isMehraj = f.address?.includes('Mehrajwala') || f.name.includes('Mehrajwala');
+                  const isKamal = f.address?.includes('Kamalpur') || f.name.includes('Kamalpur');
+                  const isKang = f.address?.includes('Kang Khurd') || f.name.includes('Kang');
+                  const shortLabel = isMehraj ? 'ਮਹਿਰਾਜਵਾਲਾ' : isKamal ? 'ਕਮਾਲਪੁਰ' : isKang ? 'ਕੰਗ ਖੁਰਦ' : (f.namePa || f.name);
+                  return (
+                    <button
+                      key={f.id}
+                      type="button"
+                      onClick={() => setEntryMandiFirmId(f.id)}
+                      className={`py-1.5 px-2 text-xs font-bold rounded-lg border transition text-center truncate cursor-pointer ${
+                        isSelected
+                          ? 'bg-amber-600 text-white border-amber-600 shadow-xs font-black ring-2 ring-amber-400'
+                          : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                      }`}
+                      title={f.name}
+                    >
+                      📍 {shortLabel}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             {/* Top Row: Date, Crop, Agency, and Available Stock */}
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
               {/* Date */}
@@ -856,6 +917,18 @@ export const LeftingManagement: React.FC = () => {
               </div>
             </div>
 
+            {/* Paddy Variety Selector & Split Breakdown */}
+            <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
+              <VarietySelector
+                variety={selectedVariety}
+                onVarietyChange={setSelectedVariety}
+                varietyBreakdown={varietyBreakdown}
+                onBreakdownChange={setVarietyBreakdown}
+                totalBags={parseInt(bags, 10) || 0}
+                label={isEn ? 'Paddy Variety & Gate Pass Breakdown' : 'ਝੋਨੇ ਦੀ ਕਿਸਮ ਅਤੇ ਗੇਟ ਪਾਸ ਵੰਡ (Variety & Split)'}
+              />
+            </div>
+
             {/* Bags, Bardana & Weight */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
@@ -1033,6 +1106,45 @@ export const LeftingManagement: React.FC = () => {
       {/* 4. DISPATCH REGISTER / HISTORY TABLE */}
       {activeTab === 'history' && (
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden space-y-4 p-5">
+          {/* Mandi Branch Filter Bar */}
+          <div className="flex items-center gap-2 flex-wrap pb-2 border-b border-slate-100">
+            <span className="text-xs font-bold text-slate-600 flex items-center gap-1">
+              <MapPin className="w-3.5 h-3.5 text-amber-600" />
+              <span>ਮੰਡੀ ਫਿਲਟਰ:</span>
+            </span>
+            <button
+              type="button"
+              onClick={() => setSelectedMandiFilter('ALL')}
+              className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                selectedMandiFilter === 'ALL'
+                  ? 'bg-slate-900 text-white font-black shadow-xs ring-1 ring-slate-700'
+                  : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
+              }`}
+            >
+              🌟 ਸਾਰੀਆਂ ਮੰਡੀਆਂ (All Mandis)
+            </button>
+            {firms.map((f) => {
+              const isSelected = selectedMandiFilter === f.id;
+              const isMehraj = f.id === 'FIRM-002' || f.name.includes('Mehrajwala') || f.address.includes('Mehrajwala');
+              const isKamal = f.id === 'FIRM-003' || f.name.includes('Kamalpur') || f.address.includes('Kamalpur');
+              const shortLabel = isMehraj ? 'ਦਾਣਾ ਮੰਡੀ ਮਹਿਰਾਜਵਾਲਾ' : isKamal ? 'ਦਾਣਾ ਮੰਡੀ ਕਮਾਲਪੁਰ' : 'ਦਾਣਾ ਮੰਡੀ ਕੰਗ ਖੁਰਦ';
+              return (
+                <button
+                  key={f.id}
+                  type="button"
+                  onClick={() => setSelectedMandiFilter(f.id)}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                    isSelected
+                      ? 'bg-amber-600 text-white font-black shadow-xs ring-2 ring-amber-400'
+                      : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
+                  }`}
+                >
+                  📍 {shortLabel}
+                </button>
+              );
+            })}
+          </div>
+
           {/* Filter Bar */}
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 flex-wrap">
             <div className="flex items-center gap-2 flex-wrap flex-1">
@@ -1124,9 +1236,28 @@ export const LeftingManagement: React.FC = () => {
                       <td className="p-3 font-medium text-slate-900">{rec.dispatchDate}</td>
                       <td className="p-3">
                         <div className="font-mono font-bold text-slate-800">{rec.gatePassNo || rec.id}</div>
-                        <span className="inline-block mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-600">
-                          {rec.cropType === 'WHEAT' ? '🌾 ਕਣਕ (Wheat)' : rec.cropType === 'MAIZE' ? '🌽 ਮੱਕੀ (Maize)' : '🍚 ਝੋਨਾ (Paddy)'}
-                        </span>
+                        <div className="flex items-center gap-1 flex-wrap mt-0.5">
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-600">
+                            {rec.cropType === 'WHEAT' ? '🌾 ਕਣਕ' : rec.cropType === 'MAIZE' ? '🌽 ਮੱਕੀ' : '🍚 ਝੋਨਾ'}
+                          </span>
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-black bg-amber-50 text-amber-900 border border-amber-200">
+                            📍 {rec.mandiNamePa || (rec.firmId === 'FIRM-002' ? 'ਮਹਿਰਾਜਵਾਲਾ' : rec.firmId === 'FIRM-003' ? 'ਕਮਾਲਪੁਰ' : 'ਕੰਗ ਖੁਰਦ')}
+                          </span>
+                        </div>
+                        {rec.variety && (
+                          <div className="text-[10px] text-amber-900 font-bold mt-0.5">
+                            🌾 {rec.variety}
+                          </div>
+                        )}
+                        {rec.varietyBreakdown && rec.varietyBreakdown.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {rec.varietyBreakdown.map((vb, i) => (
+                              <span key={i} className="text-[9px] bg-amber-50 text-amber-900 border border-amber-200 px-1 py-0.2 rounded font-bold whitespace-nowrap">
+                                {vb.variety}: {vb.bags}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       </td>
                       <td className="p-3">
                         <div className="font-bold text-slate-900">{rec.truckNo}</div>
@@ -1289,6 +1420,24 @@ export const LeftingManagement: React.FC = () => {
                     {viewRecord.bags} Bags / ਬੋਰੇ
                   </strong>
                 </div>
+                {viewRecord.variety && (
+                  <div>
+                    <span className="text-slate-400">ਝੋਨੇ ਦੀ ਕਿਸਮ (Paddy Variety):</span>{' '}
+                    <strong className="text-amber-900 font-bold">{viewRecord.variety}</strong>
+                  </div>
+                )}
+                {viewRecord.varietyBreakdown && viewRecord.varietyBreakdown.length > 0 && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-2.5 space-y-1">
+                    <span className="text-[11px] font-black text-amber-950 block">ਕਿਸਮ ਅਨੁਸਾਰ ਬੋਰੀਆਂ ਦੀ ਵੰਡ (Breakdown):</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {viewRecord.varietyBreakdown.map((vb, i) => (
+                        <span key={i} className="text-xs font-mono font-bold bg-white text-amber-900 px-2 py-0.5 rounded border border-amber-300">
+                          {vb.variety}: {vb.bags} ਬੋਰੀਆਂ
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <div className="pt-2 flex items-center justify-between border-t border-slate-200 mt-2 bg-emerald-50 px-3 py-2 rounded-xl border border-emerald-200">
                   <span className="text-emerald-800 font-bold">Total Weight / ਕੁੱਲ ਵਜ਼ਨ:</span>{' '}
                   <strong className="text-emerald-950 font-black font-mono text-sm">

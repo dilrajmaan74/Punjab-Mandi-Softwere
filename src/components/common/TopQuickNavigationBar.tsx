@@ -14,7 +14,8 @@ import {
   Settings,
   Scale,
   CreditCard,
-  Briefcase
+  Briefcase,
+  FileText
 } from 'lucide-react';
 
 interface QuickTab {
@@ -98,6 +99,14 @@ const PRIMARY_QUICK_TABS: QuickTab[] = [
     shortPa: 'ਰਿਪੋਰਟਾਂ (Reports)',
     icon: FileSpreadsheet,
     activeBg: 'bg-rose-600'
+  },
+  {
+    id: 'letterhead',
+    titlePa: 'ਲੈਟਰ ਪੈਡ',
+    titleEn: 'Letterpad',
+    shortPa: 'ਲੈਟਰ ਪੈਡ (Pad)',
+    icon: FileText,
+    activeBg: 'bg-indigo-700'
   }
 ];
 

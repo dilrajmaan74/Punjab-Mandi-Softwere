@@ -25,7 +25,8 @@ import {
   ArrowRightLeft,
   Laptop,
   Download,
-  Smartphone
+  Smartphone,
+  MapPin
 } from 'lucide-react';
 import { FirmManagerModal } from '../firm/FirmManagerModal';
 import { FiscalYearManagerModal } from '../firm/FiscalYearManagerModal';
@@ -98,9 +99,12 @@ export const Header: React.FC = () => {
                   </span>
                 </div>
                 <div className="text-[10px] text-slate-400 flex items-center gap-1.5 flex-wrap">
-                  <span className="text-amber-400 font-semibold">{settings.mandiNameEn}</span>
+                  <span className="text-amber-400 font-bold flex items-center gap-1">
+                    <MapPin className="w-3 h-3 text-amber-400 shrink-0" />
+                    <span>{activeFirm?.addressPa?.split(',')[0]?.trim() || activeFirm?.address?.split(',')[0]?.trim() || settings.mandiNamePa || settings.mandiNameEn}</span>
+                  </span>
                   <span className="text-slate-600">•</span>
-                  <span>{settings.marketCommitteeEn}</span>
+                  <span>{activeFirm?.marketCommitteePa || settings.marketCommitteePa || settings.marketCommitteeEn}</span>
                   <span className="text-slate-600">•</span>
                   <span className="font-mono text-slate-300">Mob: {activeFirm?.mobile || settings.firmMobile || '98147-74651'}</span>
                 </div>
@@ -123,11 +127,15 @@ export const Header: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setIsFirmModalOpen(true)}
-                className="px-2 py-1 text-[11px] font-bold bg-slate-800 hover:bg-slate-700 text-amber-300 rounded-lg border border-slate-700 flex items-center gap-1 max-w-[130px] truncate"
-                title="Manage Firms & Years"
+                className="px-2 py-1 text-[11px] font-black bg-slate-800 hover:bg-slate-700 text-amber-300 rounded-lg border border-amber-500/60 flex items-center gap-1 max-w-[140px] truncate shadow-xs cursor-pointer"
+                title="ਮੰਡੀ ਸ਼ਾਖਾ ਬਦਲੋ (Switch Mandi Branch)"
               >
-                <Building2 className="w-3.5 h-3.5 shrink-0" />
-                <span className="truncate">{activeFirm.name || activeFiscalYear}</span>
+                <MapPin className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                <span className="truncate">
+                  {activeFirm.address?.includes('Mehrajwala') || activeFirm.name?.includes('Mehrajwala')
+                    ? 'ਮਹਿਰਾਜਵਾਲਾ'
+                    : 'ਕੰਗ ਖੁਰਦ'}
+                </span>
               </button>
             </div>
           </div>
@@ -171,27 +179,39 @@ export const Header: React.FC = () => {
               </button>
             </div>
 
-            {/* Firm Selector */}
-            <div className="hidden sm:flex items-center gap-1.5 bg-slate-800/90 px-2.5 py-1.5 rounded-xl border border-slate-700 shadow-2xs">
-              <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" title="Active Firm (Isolated Data)" />
-              <Building2 className="w-3.5 h-3.5 text-amber-400" />
+            {/* Mandi Branch Selector */}
+            <div className="hidden sm:flex items-center gap-1.5 bg-slate-800/90 px-2.5 py-1.5 rounded-xl border border-amber-500/40 shadow-2xs">
+              <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" title="ਚਾਲੂ ਮੰਡੀ (ਵੱਖਰਾ ਡਾਟਾਬੇਸ)" />
+              <MapPin className="w-3.5 h-3.5 text-amber-400 shrink-0" />
               <select
                 value={activeFirmId}
                 onChange={(e) => setActiveFirmId(e.target.value)}
-                className="bg-transparent text-xs font-black text-white focus:outline-none cursor-pointer pr-1 max-w-[180px] truncate"
-                title="Active Firm (Strictly Isolated Data)"
+                className="bg-transparent text-xs font-black text-white focus:outline-none cursor-pointer pr-1 max-w-[210px] truncate"
+                title="ਚਾਲੂ ਦਾਣਾ ਮੰਡੀ ਸ਼ਾਖਾ (Active Mandi Branch)"
               >
-                {firms.map((f) => (
-                  <option key={f.id} value={f.id} className="bg-slate-900 text-white">
-                    {f.name} {f.namePa ? `(${f.namePa})` : ''}
-                  </option>
-                ))}
+                {firms.map((f) => {
+                  const isMehrajwala = f.address?.includes('Mehrajwala') || f.name.includes('Mehrajwala');
+                  const isKamalpur = f.address?.includes('Kamalpur') || f.name.includes('Kamalpur');
+                  const isKangKhurd = f.address?.includes('Kang Khurd') || f.name.includes('Kang');
+                  const displayLabel = isMehrajwala
+                    ? 'ਦਾਣਾ ਮੰਡੀ ਮਹਿਰਾਜਵਾਲਾ'
+                    : isKamalpur
+                    ? 'ਦਾਣਾ ਮੰਡੀ ਕਮਾਲਪੁਰ'
+                    : isKangKhurd
+                    ? 'ਦਾਣਾ ਮੰਡੀ ਕੰਗ ਖੁਰਦ'
+                    : (f.namePa || f.name);
+                  return (
+                    <option key={f.id} value={f.id} className="bg-slate-900 text-white font-bold py-1">
+                      📍 {displayLabel}
+                    </option>
+                  );
+                })}
               </select>
               <button
                 type="button"
                 onClick={() => setIsFirmModalOpen(true)}
-                className="p-1 text-slate-400 hover:text-white rounded transition cursor-pointer"
-                title="ਫਰਮਾਂ ਦਾ ਪ੍ਰਬੰਧਨ (Manage Firms)"
+                className="p-1 text-slate-400 hover:text-amber-400 rounded transition cursor-pointer"
+                title="ਮੰਡੀਆਂ ਅਤੇ ਫਰਮਾਂ ਦਾ ਪ੍ਰਬੰਧਨ (Manage Mandis & Firms)"
               >
                 <Settings2 className="w-3.5 h-3.5" />
               </button>
