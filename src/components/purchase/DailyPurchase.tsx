@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { DailyPurchaseRecord, Farmer, FarmerPurchaseSummary, LabourAndDeductions, CropFilterType, CropType } from '../../types/mandi';
+import { DailyPurchaseRecord, Farmer, FarmerPurchaseSummary, LabourAndDeductions, CropFilterType, CropType, MandiFirm } from '../../types/mandi';
 import { useMandi } from '../../context/MandiContext';
 import { useNotification } from '../../context/NotificationContext';
 import { useFormDraft } from '../../hooks/useFormDraft';
@@ -36,7 +36,8 @@ import {
   Sparkles,
   Wheat,
   Keyboard,
-  Briefcase
+  Briefcase,
+  MapPin
 } from 'lucide-react';
 import {
   FIXED_BAG_WEIGHT_KG,

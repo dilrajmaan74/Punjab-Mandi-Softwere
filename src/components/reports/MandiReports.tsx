@@ -988,7 +988,23 @@ export const MandiReports: React.FC = () => {
                 disabled={isExporting}
                 onClick={() =>
                   runExport(async () => {
-                    await exportDailyPurchaseReportPDF(filteredPurchases, settings, 'DATE_WISE', filterDate || 'All Dates', filterAgency);
+                    const targetFirm = filterMandi !== 'ALL' ? firms.find((f) => f.id === filterMandi) || null : null;
+                    const mandiTitle = filterMandi === 'FIRM-001'
+                      ? 'DANA MANDI KANG KHURD (ਦਾਣਾ ਮੰਡੀ ਕੰਗ ਖੁਰਦ)'
+                      : filterMandi === 'FIRM-002'
+                      ? 'DANA MANDI MEHRAJWALA (ਦਾਣਾ ਮੰਡੀ ਮਹਿਰਾਜਵਾਲਾ)'
+                      : filterMandi === 'FIRM-003'
+                      ? 'DANA MANDI KAMALPUR (ਦਾਣਾ ਮੰਡੀ ਕਮਾਲਪੁਰ)'
+                      : 'ALL MANDIS (ਸਾਰੀਆਂ ਮੰਡੀਆਂ: ਕੰਗ ਖੁਰਦ • ਮਹਿਰਾਜਵਾਲਾ • ਕਮਾਲਪੁਰ)';
+                    await exportDailyPurchaseReportPDF(
+                      filteredPurchases,
+                      settings,
+                      'DATE_WISE',
+                      filterDate || 'All Dates',
+                      filterAgency,
+                      mandiTitle,
+                      targetFirm
+                    );
                   })
                 }
                 className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold shadow-sm transition-colors"
@@ -1004,7 +1020,23 @@ export const MandiReports: React.FC = () => {
                 disabled={isExporting}
                 onClick={() =>
                   runExport(async () => {
-                    await exportDailyPurchaseReportPDF(dailyPurchaseRecords, settings, 'FULL_REGISTER');
+                    const targetFirm = filterMandi !== 'ALL' ? firms.find((f) => f.id === filterMandi) || null : null;
+                    const mandiTitle = filterMandi === 'FIRM-001'
+                      ? 'DANA MANDI KANG KHURD (ਦਾਣਾ ਮੰਡੀ ਕੰਗ ਖੁਰਦ)'
+                      : filterMandi === 'FIRM-002'
+                      ? 'DANA MANDI MEHRAJWALA (ਦਾਣਾ ਮੰਡੀ ਮਹਿਰਾਜਵਾਲਾ)'
+                      : filterMandi === 'FIRM-003'
+                      ? 'DANA MANDI KAMALPUR (ਦਾਣਾ ਮੰਡੀ ਕਮਾਲਪੁਰ)'
+                      : 'ALL MANDIS (ਸਾਰੀਆਂ ਮੰਡੀਆਂ: ਕੰਗ ਖੁਰਦ • ਮਹਿਰਾਜਵਾਲਾ • ਕਮਾਲਪੁਰ)';
+                    await exportDailyPurchaseReportPDF(
+                      filteredPurchases.length > 0 ? filteredPurchases : dailyPurchaseRecords,
+                      settings,
+                      'FULL_REGISTER',
+                      undefined,
+                      filterAgency,
+                      mandiTitle,
+                      targetFirm
+                    );
                   })
                 }
                 className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-slate-900 hover:bg-black text-white text-xs font-semibold shadow-sm transition-colors"
@@ -1048,7 +1080,12 @@ export const MandiReports: React.FC = () => {
                     <tr key={p.id} className="hover:bg-slate-50 dark:hover:bg-slate-750 transition-colors">
                       <td className="py-2.5 px-3 text-center font-mono font-semibold text-slate-700 dark:text-slate-300">{p.id}</td>
                       <td className="py-2.5 px-3 text-center text-slate-600 dark:text-slate-400">{p.date}</td>
-                      <td className="py-2.5 px-3 font-semibold text-emerald-700 dark:text-emerald-400">{p.agency}</td>
+                      <td className="py-2.5 px-3">
+                        <div className="font-semibold text-emerald-700 dark:text-emerald-400">{p.agency}</div>
+                        <span className="inline-block text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-50 dark:bg-amber-950/60 text-amber-900 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                          📍 {p.mandiNamePa || (p.firmId === 'FIRM-002' ? 'ਮਹਿਰਾਜਵਾਲਾ' : p.firmId === 'FIRM-003' ? 'ਕਮਾਲਪੁਰ' : 'ਕੰਗ ਖੁਰਦ')}
+                        </span>
+                      </td>
                       <td className="py-2.5 px-3 font-medium text-slate-900 dark:text-white">{p.farmerName}</td>
                       <td className="py-2.5 px-3 text-slate-600 dark:text-slate-300">{p.village}</td>
                       <td className="py-2.5 px-3 text-right font-medium">{p.bags}</td>
@@ -1090,7 +1127,23 @@ export const MandiReports: React.FC = () => {
                 disabled={isExporting}
                 onClick={() =>
                   runExport(async () => {
-                    await exportLeftingReportPDF(filteredLeftings, settings, 'DATE_WISE', filterDate || 'All Dates', filterAgency);
+                    const targetFirm = filterMandi !== 'ALL' ? firms.find((f) => f.id === filterMandi) || null : null;
+                    const mandiTitle = filterMandi === 'FIRM-001'
+                      ? 'DANA MANDI KANG KHURD (ਦਾਣਾ ਮੰਡੀ ਕੰਗ ਖੁਰਦ)'
+                      : filterMandi === 'FIRM-002'
+                      ? 'DANA MANDI MEHRAJWALA (ਦਾਣਾ ਮੰਡੀ ਮਹਿਰਾਜਵਾਲਾ)'
+                      : filterMandi === 'FIRM-003'
+                      ? 'DANA MANDI KAMALPUR (ਦਾਣਾ ਮੰਡੀ ਕਮਾਲਪੁਰ)'
+                      : 'ALL MANDIS (ਸਾਰੀਆਂ ਮੰਡੀਆਂ: ਕੰਗ ਖੁਰਦ • ਮਹਿਰਾਜਵਾਲਾ • ਕਮਾਲਪੁਰ)';
+                    await exportLeftingReportPDF(
+                      filteredLeftings,
+                      settings,
+                      'DATE_WISE',
+                      filterDate || 'All Dates',
+                      filterAgency,
+                      mandiTitle,
+                      targetFirm
+                    );
                   })
                 }
                 className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold shadow-sm transition-colors"
@@ -1106,7 +1159,23 @@ export const MandiReports: React.FC = () => {
                 disabled={isExporting}
                 onClick={() =>
                   runExport(async () => {
-                    await exportLeftingReportPDF(leftingRecords, settings, 'FULL_REGISTER');
+                    const targetFirm = filterMandi !== 'ALL' ? firms.find((f) => f.id === filterMandi) || null : null;
+                    const mandiTitle = filterMandi === 'FIRM-001'
+                      ? 'DANA MANDI KANG KHURD (ਦਾਣਾ ਮੰਡੀ ਕੰਗ ਖੁਰਦ)'
+                      : filterMandi === 'FIRM-002'
+                      ? 'DANA MANDI MEHRAJWALA (ਦਾਣਾ ਮੰਡੀ ਮਹਿਰਾਜਵਾਲਾ)'
+                      : filterMandi === 'FIRM-003'
+                      ? 'DANA MANDI KAMALPUR (ਦਾਣਾ ਮੰਡੀ ਕਮਾਲਪੁਰ)'
+                      : 'ALL MANDIS (ਸਾਰੀਆਂ ਮੰਡੀਆਂ: ਕੰਗ ਖੁਰਦ • ਮਹਿਰਾਜਵਾਲਾ • ਕਮਾਲਪੁਰ)';
+                    await exportLeftingReportPDF(
+                      filteredLeftings.length > 0 ? filteredLeftings : leftingRecords,
+                      settings,
+                      'FULL_REGISTER',
+                      undefined,
+                      filterAgency,
+                      mandiTitle,
+                      targetFirm
+                    );
                   })
                 }
                 className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-slate-900 hover:bg-black text-white text-xs font-semibold shadow-sm transition-colors"
@@ -1153,7 +1222,12 @@ export const MandiReports: React.FC = () => {
                     <tr key={l.id} className="hover:bg-slate-50 dark:hover:bg-slate-750 transition-colors">
                       <td className="py-2.5 px-3 text-center font-mono font-semibold text-slate-700 dark:text-slate-300">{l.id}</td>
                       <td className="py-2.5 px-3 text-center text-slate-600 dark:text-slate-400">{l.date || (l as any).dispatchDate}</td>
-                      <td className="py-2.5 px-3 font-semibold text-emerald-700 dark:text-emerald-400">{l.agency || (l as any).sellerOrAgency || '-'}</td>
+                      <td className="py-2.5 px-3">
+                        <div className="font-semibold text-emerald-700 dark:text-emerald-400">{l.agency || (l as any).sellerOrAgency || '-'}</div>
+                        <span className="inline-block text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-50 dark:bg-amber-950/60 text-amber-900 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                          📍 {l.mandiNamePa || (l.firmId === 'FIRM-002' ? 'ਮਹਿਰਾਜਵਾਲਾ' : l.firmId === 'FIRM-003' ? 'ਕਮਾਲਪੁਰ' : 'ਕੰਗ ਖੁਰਦ')}
+                        </span>
+                      </td>
                       <td className="py-2.5 px-3 font-medium text-slate-900 dark:text-white">{l.sellerName || (l as any).destination || '-'}</td>
                       <td className="py-2.5 px-3 text-center font-mono font-semibold text-slate-800 dark:text-slate-200">{(l as any).truckNo || (l as any).truckNumber || '-'}</td>
                       <td className="py-2.5 px-3 text-slate-600 dark:text-slate-300">{l.driverName || '-'}</td>
