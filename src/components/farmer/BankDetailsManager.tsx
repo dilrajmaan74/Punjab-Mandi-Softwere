@@ -285,12 +285,15 @@ export const BankDetailsManager: React.FC = () => {
     setIsSaving(false);
   };
 
-  const filteredFarmers = farmers.filter(
-    (f) =>
-      f.farmerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      f.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      f.aadhaar.includes(searchQuery)
-  );
+  const filteredFarmers = farmers.filter((f) => {
+    if (!f) return false;
+    const q = (searchQuery || '').toLowerCase().trim();
+    if (!q) return true;
+    const fName = (f.farmerName || '').toLowerCase();
+    const fId = (f.id || '').toLowerCase();
+    const fAadhaar = f.aadhaar || '';
+    return fName.includes(q) || fId.includes(q) || fAadhaar.includes(q);
+  });
 
   return (
     <div className="space-y-4">

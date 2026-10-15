@@ -194,15 +194,16 @@ export const FarmerAccountStatementA4: React.FC<FarmerAccountStatementA4Props> =
   const allBagTransfers = getBagTransfers();
 
   // Filter for this farmer (by id or name match)
+  const safeFarmerName = (farmer.farmerName || '').toLowerCase().trim();
   const farmerTransfersOut = allPaymentTransfers.filter(
-    (t) => t.fromFarmerId === farmer.id || t.fromFarmerName.toLowerCase().includes(farmer.farmerName.toLowerCase())
+    (t) => t.fromFarmerId === farmer.id || (safeFarmerName && (t.fromFarmerName || '').toLowerCase().includes(safeFarmerName))
   );
   const farmerTransfersIn = allPaymentTransfers.filter(
-    (t) => t.toFarmerId === farmer.id || t.toFarmerName.toLowerCase().includes(farmer.farmerName.toLowerCase())
+    (t) => t.toFarmerId === farmer.id || (safeFarmerName && (t.toFarmerName || '').toLowerCase().includes(safeFarmerName))
   );
   const relevantPaymentTransfers: PaymentTransferRecord[] = [...farmerTransfersOut, ...farmerTransfersIn];
   const sameFarmerAdjustments: SameFarmerAdjustmentRecord[] = allSameAdjustments.filter(
-    (a) => a.farmerId === farmer.id || a.farmerName.toLowerCase().includes(farmer.farmerName.toLowerCase())
+    (a) => a.farmerId === farmer.id || (safeFarmerName && (a.farmerName || '').toLowerCase().includes(safeFarmerName))
   );
 
   // Net adjustment amount: Transfers Out are deductions (-), Transfers In are additions (+)
@@ -212,10 +213,10 @@ export const FarmerAccountStatementA4: React.FC<FarmerAccountStatementA4Props> =
 
   // 9. Bag Transfers
   const bagTransfersOut = allBagTransfers.filter(
-    (t) => t.fromFarmerId === farmer.id || t.fromFarmerName.toLowerCase().includes(farmer.farmerName.toLowerCase())
+    (t) => t.fromFarmerId === farmer.id || (safeFarmerName && (t.fromFarmerName || '').toLowerCase().includes(safeFarmerName))
   );
   const bagTransfersIn = allBagTransfers.filter(
-    (t) => t.toFarmerId === farmer.id || t.toFarmerName.toLowerCase().includes(farmer.farmerName.toLowerCase())
+    (t) => t.toFarmerId === farmer.id || (safeFarmerName && (t.toFarmerName || '').toLowerCase().includes(safeFarmerName))
   );
   const totalBagsTransferredOut = bagTransfersOut.reduce((s, t) => s + t.bags, 0);
   const totalBagsTransferredIn = bagTransfersIn.reduce((s, t) => s + t.bags, 0);

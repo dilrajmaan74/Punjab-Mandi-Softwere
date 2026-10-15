@@ -36,12 +36,12 @@ export const MainFarmerSelector: React.FC<MainFarmerSelectorProps> = ({
     const cleanNumbers = q.replace(/[^0-9]/g, '');
 
     return availableFarmers.filter((f) => {
-      const matchNameEn = f.farmerName.toLowerCase().includes(q);
+      const matchNameEn = (f.farmerName || '').toLowerCase().includes(q);
       const matchNamePa = f.farmerNamePa ? f.farmerNamePa.toLowerCase().includes(q) : false;
       const matchFatherEn = f.fatherName ? f.fatherName.toLowerCase().includes(q) : false;
       const matchFatherPa = f.fatherNamePa ? f.fatherNamePa.toLowerCase().includes(q) : false;
-      const matchId = f.id.toLowerCase().includes(q);
-      const matchVillageEn = f.village.toLowerCase().includes(q);
+      const matchId = (f.id || '').toLowerCase().includes(q);
+      const matchVillageEn = (f.village || '').toLowerCase().includes(q);
       const matchVillagePa = f.villagePa ? f.villagePa.toLowerCase().includes(q) : false;
       const matchAddress = f.address ? f.address.toLowerCase().includes(q) : false;
 
