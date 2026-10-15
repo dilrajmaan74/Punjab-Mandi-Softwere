@@ -46,6 +46,11 @@ import {
 } from '../../utils/farmerAdjustmentsStorage';
 import { StockLedgerExportOptions } from '../../utils/stockBalancePdfExport';
 import { FarmerBagBalanceReport } from './FarmerBagBalanceReport';
+import {
+  getMandiBranchDropdownLabel,
+  getMandiBranchPlainLabel,
+  ALL_MANDIS_DROPDOWN_LABEL
+} from '../../utils/mandiBranchHelper';
 
 export type ReportCategoryTab =
   | 'farmer-account'
@@ -665,26 +670,24 @@ export const MandiReports: React.FC = () => {
             </div>
           )}
 
-          {/* Mandi Branch Filter (for daily purchase, lefting, stock balance) */}
-          {(activeTab === 'daily-purchase' || activeTab === 'lefting' || activeTab === 'stock-balance') && (
-            <div className="min-w-[170px]">
+          {/* Mandi Branch Filter (for daily purchase, lefting, stock balance, mandi arrival) */}
+          {(activeTab === 'daily-purchase' || activeTab === 'lefting' || activeTab === 'stock-balance' || activeTab === 'mandi-arrival') && (
+            <div className="min-w-[280px]">
               <select
                 id="report-filter-mandi"
                 value={filterMandi}
                 onChange={(e) => setFilterMandi(e.target.value)}
-                className="w-full text-xs py-2 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-bold"
+                className="w-full text-xs py-2 px-3 rounded-lg border-2 border-amber-600 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-amber-500 font-bold cursor-pointer"
+                title="ਦਾਣਾ ਮੰਡੀ ਸ਼ਾਖਾ ਡ੍ਰੌਪਡਾਊਨ ਲਿਸਟ"
               >
-                <option value="ALL">🌟 All Mandis / ਸਾਰੀਆਂ ਮੰਡੀਆਂ</option>
-                {firms.map((f) => {
-                  const isMehraj = f.id === 'FIRM-002' || f.name.includes('Mehrajwala');
-                  const isKamal = f.id === 'FIRM-003' || f.name.includes('Kamalpur');
-                  const label = isMehraj ? 'ਦਾਣਾ ਮੰਡੀ ਮਹਿਰਾਜਵਾਲਾ' : isKamal ? 'ਦਾਣਾ ਮੰਡੀ ਕਮਾਲਪੁਰ' : 'ਦਾਣਾ ਮੰਡੀ ਕੰਗ ਖੁਰਦ';
-                  return (
-                    <option key={f.id} value={f.id}>
-                      📍 {label}
-                    </option>
-                  );
-                })}
+                <option value="ALL" className="font-bold py-1">
+                  {ALL_MANDIS_DROPDOWN_LABEL}
+                </option>
+                {firms.map((f) => (
+                  <option key={f.id} value={f.id} className="font-bold py-1">
+                    {getMandiBranchDropdownLabel(f)}
+                  </option>
+                ))}
               </select>
             </div>
           )}
@@ -989,13 +992,7 @@ export const MandiReports: React.FC = () => {
                 onClick={() =>
                   runExport(async () => {
                     const targetFirm = filterMandi !== 'ALL' ? firms.find((f) => f.id === filterMandi) || null : null;
-                    const mandiTitle = filterMandi === 'FIRM-001'
-                      ? 'DANA MANDI KANG KHURD (ਦਾਣਾ ਮੰਡੀ ਕੰਗ ਖੁਰਦ)'
-                      : filterMandi === 'FIRM-002'
-                      ? 'DANA MANDI MEHRAJWALA (ਦਾਣਾ ਮੰਡੀ ਮਹਿਰਾਜਵਾਲਾ)'
-                      : filterMandi === 'FIRM-003'
-                      ? 'DANA MANDI KAMALPUR (ਦਾਣਾ ਮੰਡੀ ਕਮਾਲਪੁਰ)'
-                      : 'ALL MANDIS (ਸਾਰੀਆਂ ਮੰਡੀਆਂ: ਕੰਗ ਖੁਰਦ • ਮਹਿਰਾਜਵਾਲਾ • ਕਮਾਲਪੁਰ)';
+                    const mandiTitle = getMandiBranchPlainLabel(targetFirm || filterMandi);
                     await exportDailyPurchaseReportPDF(
                       filteredPurchases,
                       settings,
@@ -1021,13 +1018,7 @@ export const MandiReports: React.FC = () => {
                 onClick={() =>
                   runExport(async () => {
                     const targetFirm = filterMandi !== 'ALL' ? firms.find((f) => f.id === filterMandi) || null : null;
-                    const mandiTitle = filterMandi === 'FIRM-001'
-                      ? 'DANA MANDI KANG KHURD (ਦਾਣਾ ਮੰਡੀ ਕੰਗ ਖੁਰਦ)'
-                      : filterMandi === 'FIRM-002'
-                      ? 'DANA MANDI MEHRAJWALA (ਦਾਣਾ ਮੰਡੀ ਮਹਿਰਾਜਵਾਲਾ)'
-                      : filterMandi === 'FIRM-003'
-                      ? 'DANA MANDI KAMALPUR (ਦਾਣਾ ਮੰਡੀ ਕਮਾਲਪੁਰ)'
-                      : 'ALL MANDIS (ਸਾਰੀਆਂ ਮੰਡੀਆਂ: ਕੰਗ ਖੁਰਦ • ਮਹਿਰਾਜਵਾਲਾ • ਕਮਾਲਪੁਰ)';
+                    const mandiTitle = getMandiBranchPlainLabel(targetFirm || filterMandi);
                     await exportDailyPurchaseReportPDF(
                       filteredPurchases.length > 0 ? filteredPurchases : dailyPurchaseRecords,
                       settings,
@@ -1128,13 +1119,7 @@ export const MandiReports: React.FC = () => {
                 onClick={() =>
                   runExport(async () => {
                     const targetFirm = filterMandi !== 'ALL' ? firms.find((f) => f.id === filterMandi) || null : null;
-                    const mandiTitle = filterMandi === 'FIRM-001'
-                      ? 'DANA MANDI KANG KHURD (ਦਾਣਾ ਮੰਡੀ ਕੰਗ ਖੁਰਦ)'
-                      : filterMandi === 'FIRM-002'
-                      ? 'DANA MANDI MEHRAJWALA (ਦਾਣਾ ਮੰਡੀ ਮਹਿਰਾਜਵਾਲਾ)'
-                      : filterMandi === 'FIRM-003'
-                      ? 'DANA MANDI KAMALPUR (ਦਾਣਾ ਮੰਡੀ ਕਮਾਲਪੁਰ)'
-                      : 'ALL MANDIS (ਸਾਰੀਆਂ ਮੰਡੀਆਂ: ਕੰਗ ਖੁਰਦ • ਮਹਿਰਾਜਵਾਲਾ • ਕਮਾਲਪੁਰ)';
+                    const mandiTitle = getMandiBranchPlainLabel(targetFirm || filterMandi);
                     await exportLeftingReportPDF(
                       filteredLeftings,
                       settings,
@@ -1160,13 +1145,7 @@ export const MandiReports: React.FC = () => {
                 onClick={() =>
                   runExport(async () => {
                     const targetFirm = filterMandi !== 'ALL' ? firms.find((f) => f.id === filterMandi) || null : null;
-                    const mandiTitle = filterMandi === 'FIRM-001'
-                      ? 'DANA MANDI KANG KHURD (ਦਾਣਾ ਮੰਡੀ ਕੰਗ ਖੁਰਦ)'
-                      : filterMandi === 'FIRM-002'
-                      ? 'DANA MANDI MEHRAJWALA (ਦਾਣਾ ਮੰਡੀ ਮਹਿਰਾਜਵਾਲਾ)'
-                      : filterMandi === 'FIRM-003'
-                      ? 'DANA MANDI KAMALPUR (ਦਾਣਾ ਮੰਡੀ ਕਮਾਲਪੁਰ)'
-                      : 'ALL MANDIS (ਸਾਰੀਆਂ ਮੰਡੀਆਂ: ਕੰਗ ਖੁਰਦ • ਮਹਿਰਾਜਵਾਲਾ • ਕਮਾਲਪੁਰ)';
+                    const mandiTitle = getMandiBranchPlainLabel(targetFirm || filterMandi);
                     await exportLeftingReportPDF(
                       filteredLeftings.length > 0 ? filteredLeftings : leftingRecords,
                       settings,

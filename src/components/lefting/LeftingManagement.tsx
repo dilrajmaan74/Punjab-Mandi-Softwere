@@ -37,6 +37,11 @@ import { SellerMasterModal } from '../seller/SellerMasterModal';
 import { TruckMasterModal } from '../truck/TruckMasterModal';
 import { DateInput } from '../common/DateInput';
 import { AgencyLiftingReport } from './AgencyLiftingReport';
+import {
+  getMandiBranchDropdownLabel,
+  getMandiBranchPlainLabel,
+  ALL_MANDIS_DROPDOWN_LABEL
+} from '../../utils/mandiBranchHelper';
 
 const STANDARD_AGENCIES = [
   'Punjab Mandi Board Agency',
@@ -591,38 +596,28 @@ export const LeftingManagement: React.FC = () => {
           )}
 
           <form onSubmit={handleSaveLefting} className="space-y-5">
-            {/* Feature: Mandi Branch Selector for Dispatch */}
+            {/* Feature: Mandi Branch Drop Down List for Dispatch */}
             <div className="bg-amber-50/60 border border-amber-200 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <MapPin className="w-4 h-4 text-amber-700 shrink-0" />
                 <div>
-                  <span className="text-xs font-black text-amber-950">ਰਵਾਨਗੀ ਦਾਣਾ ਮੰਡੀ (Dispatch Mandi Branch):</span>
+                  <span className="text-xs font-black text-amber-950">ਰਵਾਨਗੀ ਦਾਣਾ ਮੰਡੀ ਸ਼ਾਖਾ (Dispatch Mandi Branch):</span>
                   <span className="text-[11px] text-amber-800 ml-2">ਕਿਸ ਮੰਡੀ ਵਿੱਚੋਂ ਸ਼ੈਲਰ ਲਈ ਮਾਲ ਲਿਫਟ ਹੋ ਰਿਹਾ ਹੈ</span>
                 </div>
               </div>
-              <div className="grid grid-cols-3 gap-1.5 min-w-[320px]">
-                {firms.map((f) => {
-                  const isSelected = entryMandiFirmId === f.id;
-                  const isMehraj = f.address?.includes('Mehrajwala') || f.name.includes('Mehrajwala');
-                  const isKamal = f.address?.includes('Kamalpur') || f.name.includes('Kamalpur');
-                  const isKang = f.address?.includes('Kang Khurd') || f.name.includes('Kang');
-                  const shortLabel = isMehraj ? 'ਮਹਿਰਾਜਵਾਲਾ' : isKamal ? 'ਕਮਾਲਪੁਰ' : isKang ? 'ਕੰਗ ਖੁਰਦ' : (f.namePa || f.name);
-                  return (
-                    <button
-                      key={f.id}
-                      type="button"
-                      onClick={() => setEntryMandiFirmId(f.id)}
-                      className={`py-1.5 px-2 text-xs font-bold rounded-lg border transition text-center truncate cursor-pointer ${
-                        isSelected
-                          ? 'bg-amber-600 text-white border-amber-600 shadow-xs font-black ring-2 ring-amber-400'
-                          : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
-                      }`}
-                      title={f.name}
-                    >
-                      📍 {shortLabel}
-                    </button>
-                  );
-                })}
+              <div className="w-full sm:w-auto min-w-[340px]">
+                <select
+                  value={entryMandiFirmId}
+                  onChange={(e) => setEntryMandiFirmId(e.target.value)}
+                  className="w-full text-xs font-black py-2.5 px-3 rounded-lg border-2 border-amber-500 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500 cursor-pointer shadow-2xs"
+                  title="ਰਵਾਨਗੀ ਦਾਣਾ ਮੰਡੀ ਸ਼ਾਖਾ ਚੁਣੋ"
+                >
+                  {firms.map((f) => (
+                    <option key={f.id} value={f.id} className="font-bold py-1 bg-white text-slate-900">
+                      {getMandiBranchDropdownLabel(f)}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
 
@@ -1106,34 +1101,59 @@ export const LeftingManagement: React.FC = () => {
       {/* 4. DISPATCH REGISTER / HISTORY TABLE */}
       {activeTab === 'history' && (
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden space-y-4 p-5">
-          {/* Mandi Branch Filter Bar */}
+          {/* Mandi Branch Filter Bar with Primary Drop Down List */}
           <div className="flex items-center gap-2 flex-wrap pb-2 border-b border-slate-100">
-            <span className="text-xs font-bold text-slate-600 flex items-center gap-1">
+            <span className="text-xs font-black text-slate-700 flex items-center gap-1">
               <MapPin className="w-3.5 h-3.5 text-amber-600" />
-              <span>ਮੰਡੀ ਫਿਲਟਰ:</span>
+              <span>ਮੰਡੀ ਫਿਲਟਰ (Mandi Filter):</span>
             </span>
+
+            {/* Feature: Mandi Branch Drop Down List */}
+            <div className="min-w-[340px]">
+              <select
+                id="lefting-mandi-filter-dropdown"
+                value={selectedMandiFilter}
+                onChange={(e) => setSelectedMandiFilter(e.target.value)}
+                className="w-full text-xs font-black py-2 px-3 rounded-lg border-2 border-amber-600 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500 cursor-pointer shadow-xs"
+                title="ਦਾਣਾ ਮੰਡੀ ਫਿਲਟਰ ਡ੍ਰੌਪਡਾਊਨ ਲਿਸਟ"
+              >
+                <option value="ALL" className="font-bold py-1">
+                  {ALL_MANDIS_DROPDOWN_LABEL} ({leftingRecords.length} ਬਿਲਟੀਆਂ)
+                </option>
+                {firms.map((f) => {
+                  const count = leftingRecords.filter((r) => (r.firmId || 'FIRM-001') === f.id).length;
+                  return (
+                    <option key={f.id} value={f.id} className="font-bold py-1">
+                      {getMandiBranchDropdownLabel(f)} ({count} ਬਿਲਟੀਆਂ)
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+
+            {/* Quick buttons */}
             <button
               type="button"
               onClick={() => setSelectedMandiFilter('ALL')}
-              className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
                 selectedMandiFilter === 'ALL'
                   ? 'bg-slate-900 text-white font-black shadow-xs ring-1 ring-slate-700'
                   : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
               }`}
             >
-              🌟 ਸਾਰੀਆਂ ਮੰਡੀਆਂ (All Mandis)
+              🌟 ਸਾਰੀਆਂ ਮੰਡੀਆਂ
             </button>
             {firms.map((f) => {
               const isSelected = selectedMandiFilter === f.id;
               const isMehraj = f.id === 'FIRM-002' || f.name.includes('Mehrajwala') || f.address.includes('Mehrajwala');
               const isKamal = f.id === 'FIRM-003' || f.name.includes('Kamalpur') || f.address.includes('Kamalpur');
-              const shortLabel = isMehraj ? 'ਦਾਣਾ ਮੰਡੀ ਮਹਿਰਾਜਵਾਲਾ' : isKamal ? 'ਦਾਣਾ ਮੰਡੀ ਕਮਾਲਪੁਰ' : 'ਦਾਣਾ ਮੰਡੀ ਕੰਗ ਖੁਰਦ';
+              const shortLabel = isMehraj ? 'ਮਹਿਰਾਜਵਾਲਾ' : isKamal ? 'ਕਮਾਲਪੁਰ' : 'ਕੰਗ ਖੁਰਦ';
               return (
                 <button
                   key={f.id}
                   type="button"
                   onClick={() => setSelectedMandiFilter(f.id)}
-                  className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
                     isSelected
                       ? 'bg-amber-600 text-white font-black shadow-xs ring-2 ring-amber-400'
                       : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'

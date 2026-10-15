@@ -60,6 +60,11 @@ import { generateDailyPurchaseWhatsAppMessage, openWhatsApp } from '../../utils/
 import { exportDailyPurchaseRegisterExcel } from '../../utils/purchaseExcelExport';
 import { AgencyProcurementModal } from './AgencyProcurementModal';
 import { AiVoiceBoliModal } from './AiVoiceBoliModal';
+import {
+  getMandiBranchDropdownLabel,
+  getMandiBranchPlainLabel,
+  ALL_MANDIS_DROPDOWN_LABEL
+} from '../../utils/mandiBranchHelper';
 
 interface MultiFarmerPurchaseRow {
   rowId: string;
@@ -1024,13 +1029,9 @@ export const DailyPurchase: React.FC = () => {
       ? firms.find((f) => f.id === selectedMandiFilter) || null
       : null;
 
-    const mandiTitle = selectedMandiFilter === 'FIRM-001'
-      ? 'DANA MANDI KANG KHURD (ਦਾਣਾ ਮੰਡੀ ਕੰਗ ਖੁਰਦ)'
-      : selectedMandiFilter === 'FIRM-002'
-      ? 'DANA MANDI MEHRAJWALA (ਦਾਣਾ ਮੰਡੀ ਮਹਿਰਾਜਵਾਲਾ)'
-      : selectedMandiFilter === 'FIRM-003'
-      ? 'DANA MANDI KAMALPUR (ਦਾਣਾ ਮੰਡੀ ਕਮਾਲਪੁਰ)'
-      : 'ALL MANDIS (ਦਾਣਾ ਮੰਡੀ ਕੰਗ ਖੁਰਦ / ਮਹਿਰਾਜਵਾਲਾ / ਕਮਾਲਪੁਰ)';
+    const mandiTitle = selectedMandiFilter !== 'ALL'
+      ? getMandiBranchPlainLabel(targetFirm || selectedMandiFilter)
+      : 'ALL MANDIS (ਸਾਰੀਆਂ ਮੰਡੀਆਂ: ਕਾਂਗ ਖੁਰਦ • ਮਹਿਰਾਜਵਾਲਾ • ਕਮਾਲਪੁਰ)';
 
     exportDailyPurchaseRegisterPDF(
       recordsToExport,
@@ -1424,40 +1425,30 @@ export const DailyPurchase: React.FC = () => {
 
         {/* Mandi Branch, Agency and Date Selectors */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          {/* Feature: Mandi Branch Selector for Purchase Batch */}
+          {/* Feature: Mandi Branch Drop Down List for Purchase Batch */}
           <div className="space-y-1">
             <label className="text-xs font-bold text-slate-700 flex items-center justify-between">
               <span className="flex items-center gap-1.5">
                 <MapPin className="w-3.5 h-3.5 text-amber-600" />
-                <span>ਖਰੀਦ ਮੰਡੀ (Purchase Mandi):</span>
+                <span>ਖਰੀਦ ਮੰਡੀ ਸ਼ਾਖਾ (Mandi Branch):</span>
               </span>
               <span className="text-[10px] text-amber-900 font-bold bg-amber-100 px-1 rounded">
-                ਸ਼ਾਖਾ
+                ਡ੍ਰੌਪਡਾਊਨ ਲਿਸਟ
               </span>
             </label>
-            <div className="grid grid-cols-3 gap-1">
-              {firms.map((f) => {
-                const isSelected = entryMandiFirmId === f.id;
-                const isMehraj = f.address?.includes('Mehrajwala') || f.name.includes('Mehrajwala');
-                const isKamal = f.address?.includes('Kamalpur') || f.name.includes('Kamalpur');
-                const isKang = f.address?.includes('Kang Khurd') || f.name.includes('Kang');
-                const shortLabel = isMehraj ? 'ਮਹਿਰਾਜਵਾਲਾ' : isKamal ? 'ਕਮਾਲਪੁਰ' : isKang ? 'ਕੰਗ ਖੁਰਦ' : (f.namePa || f.name);
-                return (
-                  <button
-                    key={f.id}
-                    type="button"
-                    onClick={() => setEntryMandiFirmId(f.id)}
-                    className={`py-2 px-1 text-[11px] font-bold rounded-lg border transition text-center truncate cursor-pointer ${
-                      isSelected
-                        ? 'bg-amber-600 text-white border-amber-600 shadow-2xs font-black ring-2 ring-amber-400'
-                        : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
-                    }`}
-                    title={f.name}
-                  >
-                    📍 {shortLabel}
-                  </button>
-                );
-              })}
+            <div className="relative">
+              <select
+                value={entryMandiFirmId}
+                onChange={(e) => setEntryMandiFirmId(e.target.value)}
+                className="w-full text-xs font-black py-2.5 px-3 rounded-lg border-2 border-amber-500 bg-amber-50/70 text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500 cursor-pointer shadow-2xs"
+                title="ਖਰੀਦ ਦਾਣਾ ਮੰਡੀ ਸ਼ਾਖਾ ਚੁਣੋ"
+              >
+                {firms.map((f) => (
+                  <option key={f.id} value={f.id} className="font-bold py-1 bg-white text-slate-900">
+                    {getMandiBranchDropdownLabel(f)}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
 
@@ -2102,13 +2093,38 @@ export const DailyPurchase: React.FC = () => {
 
         {/* MANDI BRANCH FILTER STRIP & LIVE BREAKDOWN METRIC CARDS */}
         <div className="space-y-2.5">
-          {/* Mandi Branch Filter Strip */}
-          <div className="flex items-center gap-1.5 p-2 bg-gradient-to-r from-amber-50/90 via-slate-50 to-indigo-50/70 border border-amber-200/80 rounded-xl flex-wrap">
-            <span className="text-xs font-black text-slate-800 flex items-center gap-1 shrink-0 mr-1">
+          {/* Mandi Branch Filter Strip with Primary Drop Down List */}
+          <div className="flex items-center gap-2 p-2.5 bg-gradient-to-r from-amber-50/90 via-slate-50 to-indigo-50/70 border border-amber-200/80 rounded-xl flex-wrap">
+            <span className="text-xs font-black text-slate-800 flex items-center gap-1 shrink-0">
               <MapPin className="w-3.5 h-3.5 text-amber-600" />
               <span>ਮੰਡੀ ਫਿਲਟਰ (Mandi Filter):</span>
             </span>
 
+            {/* Feature: Mandi Branch Drop Down List */}
+            <div className="flex-1 min-w-[340px]">
+              <select
+                id="daily-purchase-mandi-filter-dropdown"
+                value={selectedMandiFilter}
+                onChange={(e) => setSelectedMandiFilter(e.target.value)}
+                className="w-full text-xs font-black py-2 px-3 rounded-lg border-2 border-amber-600 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500 cursor-pointer shadow-xs"
+                title="ਦਾਣਾ ਮੰਡੀ ਫਿਲਟਰ ਡ੍ਰੌਪਡਾਊਨ ਲਿਸਟ"
+              >
+                <option value="ALL" className="font-bold py-1">
+                  {ALL_MANDIS_DROPDOWN_LABEL} ({dailyPurchaseRecords.length} ਐਂਟਰੀਆਂ)
+                </option>
+                {firms.map((f) => {
+                  const fStat = mandiBranchStats[f.id];
+                  const count = fStat ? fStat.count : 0;
+                  return (
+                    <option key={f.id} value={f.id} className="font-bold py-1">
+                      {getMandiBranchDropdownLabel(f)} ({count} ਐਂਟਰੀਆਂ)
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+
+            {/* Quick Filter Buttons */}
             <button
               type="button"
               onClick={() => setSelectedMandiFilter('ALL')}
@@ -2118,7 +2134,7 @@ export const DailyPurchase: React.FC = () => {
                   : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
               }`}
             >
-              <span>🌟 ਸਾਰੀਆਂ ਮੰਡੀਆਂ (All Mandis)</span>
+              <span>🌟 ਸਾਰੀਆਂ ਮੰਡੀਆਂ</span>
               <span className="text-[10px] px-1.5 py-0.2 rounded-full font-mono bg-slate-700 text-slate-200">
                 {dailyPurchaseRecords.length}
               </span>
@@ -2128,7 +2144,7 @@ export const DailyPurchase: React.FC = () => {
               const isKang = f.id === 'FIRM-001' || f.name.includes('Kang') || f.address.includes('Kang');
               const isMehraj = f.id === 'FIRM-002' || f.name.includes('Mehrajwala') || f.address.includes('Mehrajwala');
               const isKamal = f.id === 'FIRM-003' || f.name.includes('Kamalpur') || f.address.includes('Kamalpur');
-              const shortLabel = isMehraj ? 'ਦਾਣਾ ਮੰਡੀ ਮਹਿਰਾਜਵਾਲਾ' : isKamal ? 'ਦਾਣਾ ਮੰਡੀ ਕਮਾਲਪੁਰ' : isKang ? 'ਦਾਣਾ ਮੰਡੀ ਕੰਗ ਖੁਰਦ' : (f.namePa || f.name);
+              const shortLabel = isMehraj ? 'ਮਹਿਰਾਜਵਾਲਾ' : isKamal ? 'ਕਮਾਲਪੁਰ' : isKang ? 'ਕੰਗ ਖੁਰਦ' : (f.namePa || f.name);
               const fStat = mandiBranchStats[f.id];
               const count = fStat ? fStat.count : 0;
               const isSelected = selectedMandiFilter === f.id;

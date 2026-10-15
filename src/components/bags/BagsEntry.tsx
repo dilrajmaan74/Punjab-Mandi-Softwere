@@ -22,7 +22,8 @@ import {
   Edit,
   Trash2,
   MessageSquare,
-  Send
+  Send,
+  MapPin
 } from 'lucide-react';
 import {
   FIXED_BAG_WEIGHT_KG,
@@ -45,6 +46,10 @@ import { generateBagsWeighmentWhatsAppMessage, openWhatsApp } from '../../utils/
 import { VoiceWeighmentAssistant, ParsedVoiceData } from '../common/VoiceWeighmentAssistant';
 import { BardanaLowStockAlertBanner } from '../bardana/BardanaLowStockAlertBanner';
 import { VarietySelector } from '../common/VarietySelector';
+import {
+  getMandiBranchDropdownLabel,
+  ALL_MANDIS_DROPDOWN_LABEL
+} from '../../utils/mandiBranchHelper';
 
 interface BagsEntryDraft {
   dateInput: string;
@@ -76,6 +81,7 @@ export const BagsEntry: React.FC = () => {
     getBardanaSummary,
     settings,
     activeFirm,
+    activeFirmId,
     firms,
     language,
     activeCrop,
@@ -145,6 +151,13 @@ export const BagsEntry: React.FC = () => {
   const [farmerSearchTerm, setFarmerSearchTerm] = useState('');
   const [selectedVariety, setSelectedVariety] = useState<string>('PR-126');
   const [varietyBreakdown, setVarietyBreakdown] = useState<VarietyBreakdownItem[]>([]);
+  const [entryMandiFirmId, setEntryMandiFirmId] = useState<string>(activeFirmId || firms[0]?.id || 'FIRM-001');
+
+  useEffect(() => {
+    if (activeFirmId) {
+      setEntryMandiFirmId(activeFirmId);
+    }
+  }, [activeFirmId]);
 
   // Auto-save draft on every change
   useEffect(() => {
@@ -297,10 +310,14 @@ export const BagsEntry: React.FC = () => {
   const [savedCropFilter, setSavedCropFilter] = useState<CropFilterType>('ALL');
   const [savedConditionFilter, setSavedConditionFilter] = useState<'ALL' | 'PAKKI' | 'DOUBLE' | 'SUKKI' | 'CLEAN'>('ALL');
   const [savedDateFilter, setSavedDateFilter] = useState<string>('');
+  const [savedMandiFilter, setSavedMandiFilter] = useState<string>('ALL');
 
   // Filtered saved entries for quick search, crop filter, condition filter, date filter, active fiscal year, and editing
   const filteredSavedEntries = useMemo(() => {
     let list = bagsEntries.filter((b) => isRecordInFiscalYear(b.date, b.fiscalYear, activeFiscalYear));
+    if (savedMandiFilter !== 'ALL') {
+      list = list.filter((b) => (b.firmId || 'FIRM-001') === savedMandiFilter);
+    }
     if (savedCropFilter !== 'ALL') {
       list = list.filter((b) => (b.cropType || 'PADDY') === savedCropFilter);
     }
@@ -345,7 +362,7 @@ export const BagsEntry: React.FC = () => {
       if (d !== 0) return d;
       return a.entryNumber.localeCompare(b.entryNumber);
     });
-  }, [bagsEntries, savedSearchQuery, savedCropFilter, savedConditionFilter, savedDateFilter, activeFiscalYear, settings.defaultPakkiLabourRate, settings.defaultPakkaDoubleLabourRate, settings.defaultSukhiLabourRate]);
+  }, [bagsEntries, savedSearchQuery, savedCropFilter, savedConditionFilter, savedDateFilter, savedMandiFilter, activeFiscalYear, settings.defaultPakkiLabourRate, settings.defaultPakkaDoubleLabourRate, settings.defaultSukhiLabourRate]);
 
   // Aggregate totals for filtered saved entries (Pakki, Double Pakha, Sukki breakdown)
   const savedEntriesTotals = useMemo(() => {
@@ -479,6 +496,7 @@ export const BagsEntry: React.FC = () => {
     setIsSaving(true);
 
     const newRecord = addBagsEntry({
+      firmId: entryMandiFirmId,
       date: dateInput || getTodayFormatted(),
       farmerId: selectedFarmer.id,
       farmerName: selectedFarmer.farmerName,
@@ -709,6 +727,32 @@ export const BagsEntry: React.FC = () => {
                 <span className="text-[11px] font-mono font-bold bg-slate-100 text-slate-700 px-2 py-0.5 rounded border border-slate-200">
                   FY: {activeFiscalYear}
                 </span>
+              </div>
+
+              {/* Feature: Mandi Branch Drop Down List for Farmer Bags Entry */}
+              <div className="bg-amber-50/70 border border-amber-200 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <MapPin className="w-4 h-4 text-amber-700 shrink-0" />
+                  <div>
+                    <span className="text-xs font-black text-amber-950">ਦਾਣਾ ਮੰਡੀ ਸ਼ਾਖਾ (Mandi Branch):</span>
+                    <span className="text-[11px] text-amber-800 ml-2">ਕਿਸ ਮੰਡੀ ਵਿੱਚ ਕਿਸਾਨ ਦੀ ਢੇਰੀ / ਬੋਰੀਆਂ ਆਈਆਂ ਹਨ</span>
+                  </div>
+                </div>
+                <div className="w-full sm:w-auto min-w-[320px]">
+                  <select
+                    id="bags-entry-mandi-select"
+                    value={entryMandiFirmId}
+                    onChange={(e) => setEntryMandiFirmId(e.target.value)}
+                    className="w-full text-xs font-black py-2 px-3 rounded-lg border-2 border-amber-500 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500 cursor-pointer shadow-2xs"
+                    title="ਦਾਣਾ ਮੰਡੀ ਸ਼ਾਖਾ ਚੁਣੋ"
+                  >
+                    {firms.map((f) => (
+                      <option key={f.id} value={f.id} className="font-bold py-1 bg-white text-slate-900">
+                        {getMandiBranchDropdownLabel(f)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
               {/* Date Input with Auto-Formatting & Calendar Picker */}
@@ -1500,7 +1544,77 @@ export const BagsEntry: React.FC = () => {
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+        {/* Mandi Branch Filter Bar with Primary Drop Down List */}
+        <div className="flex items-center gap-2 flex-wrap pb-2 border-b border-slate-100">
+          <span className="text-xs font-black text-slate-700 flex items-center gap-1">
+            <MapPin className="w-3.5 h-3.5 text-amber-600" />
+            <span>ਮੰਡੀ ਫਿਲਟਰ (Mandi Filter):</span>
+          </span>
+
+          {/* Feature: Mandi Branch Drop Down List */}
+          <div className="min-w-[340px]">
+            <select
+              id="bags-saved-mandi-filter-dropdown"
+              value={savedMandiFilter}
+              onChange={(e) => setSavedMandiFilter(e.target.value)}
+              className="w-full text-xs font-black py-2 px-3 rounded-lg border-2 border-amber-600 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500 cursor-pointer shadow-xs"
+              title="ਦਾਣਾ ਮੰਡੀ ਫਿਲਟਰ ਡ੍ਰੌਪਡਾਊਨ ਲਿਸਟ"
+            >
+              <option value="ALL" className="font-bold py-1">
+                {ALL_MANDIS_DROPDOWN_LABEL} ({bagsEntries.length} ਪਰਚੀਆਂ)
+              </option>
+              {firms.map((f) => {
+                const count = bagsEntries.filter((r) => (r.firmId || 'FIRM-001') === f.id).length;
+                return (
+                  <option key={f.id} value={f.id} className="font-bold py-1">
+                    {getMandiBranchDropdownLabel(f)} ({count} ਪਰਚੀਆਂ)
+                  </option>
+                );
+              })}
+            </select>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setSavedMandiFilter('ALL')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+              savedMandiFilter === 'ALL'
+                ? 'bg-slate-900 text-white font-black shadow-xs ring-1 ring-slate-700'
+                : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
+            }`}
+          >
+            🌟 ਸਾਰੀਆਂ ਮੰਡੀਆਂ
+          </button>
+          {firms.map((f) => {
+            const isSelected = savedMandiFilter === f.id;
+            const isMehraj = f.id === 'FIRM-002' || f.name.includes('Mehrajwala') || f.address.includes('Mehrajwala');
+            const isKamal = f.id === 'FIRM-003' || f.name.includes('Kamalpur') || f.address.includes('Kamalpur');
+            const shortLabel = isMehraj ? 'ਮਹਿਰਾਜਵਾਲਾ' : isKamal ? 'ਕਮਾਲਪੁਰ' : 'ਕੰਗ ਖੁਰਦ';
+            const count = bagsEntries.filter((r) => (r.firmId || 'FIRM-001') === f.id).length;
+            return (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => setSavedMandiFilter(f.id)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                  isSelected
+                    ? 'bg-amber-600 text-white font-black shadow-xs ring-1 ring-amber-500'
+                    : 'bg-white text-slate-700 border border-amber-200 hover:bg-amber-50'
+                }`}
+              >
+                <span>📍</span>
+                <span>{shortLabel}</span>
+                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+                  isSelected ? 'bg-amber-800 text-amber-100' : 'bg-amber-100 text-amber-900'
+                }`}>
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
             {/* Crop Filter Pill Buttons */}
             <div className="inline-flex items-center bg-slate-100 p-1 rounded-lg border border-slate-200 text-xs">
               {(

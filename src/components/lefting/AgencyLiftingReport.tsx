@@ -17,6 +17,11 @@ import {
   MapPin
 } from 'lucide-react';
 import { formatCurrency, formatLeftingWeightQtlKg } from '../../utils/calculations';
+import {
+  getMandiBranchDropdownLabel,
+  getMandiBranchPlainLabel,
+  ALL_MANDIS_DROPDOWN_LABEL
+} from '../../utils/mandiBranchHelper';
 
 interface AgencySummaryItem {
   agencyName: string;
@@ -376,34 +381,55 @@ export const AgencyLiftingReport: React.FC = () => {
           </div>
         </div>
 
-        {/* Mandi Branch Filter Bar */}
+        {/* Mandi Branch Filter Bar with Primary Drop Down List */}
         <div className="flex items-center gap-2 flex-wrap pt-2 pb-1 border-t border-slate-100 print:hidden">
-          <span className="text-xs font-bold text-slate-600 flex items-center gap-1">
+          <span className="text-xs font-black text-slate-700 flex items-center gap-1">
             <MapPin className="w-3.5 h-3.5 text-amber-600" />
-            <span>ਮੰਡੀ ਸ਼ਾਖਾ:</span>
+            <span>ਮੰਡੀ ਫਿਲਟਰ (Mandi Filter):</span>
           </span>
+
+          {/* Feature: Mandi Branch Drop Down List */}
+          <div className="min-w-[340px]">
+            <select
+              id="agency-lifting-mandi-filter-dropdown"
+              value={selectedMandiFilter}
+              onChange={(e) => setSelectedMandiFilter(e.target.value)}
+              className="w-full text-xs font-black py-2 px-3 rounded-lg border-2 border-amber-600 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500 cursor-pointer shadow-xs"
+              title="ਦਾਣਾ ਮੰਡੀ ਫਿਲਟਰ ਡ੍ਰੌਪਡਾਊਨ ਲਿਸਟ"
+            >
+              <option value="ALL" className="font-bold py-1">
+                {ALL_MANDIS_DROPDOWN_LABEL}
+              </option>
+              {firms.map((f) => (
+                <option key={f.id} value={f.id} className="font-bold py-1">
+                  {getMandiBranchDropdownLabel(f)}
+                </option>
+              ))}
+            </select>
+          </div>
+
           <button
             type="button"
             onClick={() => setSelectedMandiFilter('ALL')}
-            className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
               selectedMandiFilter === 'ALL'
                 ? 'bg-slate-900 text-white font-black shadow-xs ring-1 ring-slate-700'
                 : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
             }`}
           >
-            🌟 ਸਾਰੀਆਂ ਮੰਡੀਆਂ (All Mandis)
+            🌟 ਸਾਰੀਆਂ ਮੰਡੀਆਂ
           </button>
           {firms.map((f) => {
             const isSelected = selectedMandiFilter === f.id;
             const isMehraj = f.id === 'FIRM-002' || f.name.includes('Mehrajwala') || f.address.includes('Mehrajwala');
             const isKamal = f.id === 'FIRM-003' || f.name.includes('Kamalpur') || f.address.includes('Kamalpur');
-            const shortLabel = isMehraj ? 'ਦਾਣਾ ਮੰਡੀ ਮਹਿਰਾਜਵਾਲਾ' : isKamal ? 'ਦਾਣਾ ਮੰਡੀ ਕਮਾਲਪੁਰ' : 'ਦਾਣਾ ਮੰਡੀ ਕੰਗ ਖੁਰਦ';
+            const shortLabel = isMehraj ? 'ਮਹਿਰਾਜਵਾਲਾ' : isKamal ? 'ਕਮਾਲਪੁਰ' : 'ਕੰਗ ਖੁਰਦ';
             return (
               <button
                 key={f.id}
                 type="button"
                 onClick={() => setSelectedMandiFilter(f.id)}
-                className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
                   isSelected
                     ? 'bg-amber-600 text-white font-black shadow-xs ring-2 ring-amber-400'
                     : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'

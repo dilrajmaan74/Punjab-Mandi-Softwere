@@ -33,6 +33,7 @@ import { FiscalYearManagerModal } from '../firm/FiscalYearManagerModal';
 import { SellerMasterModal } from '../seller/SellerMasterModal';
 import { SupabaseSyncModal } from '../supabase/SupabaseSyncModal';
 import { GoogleSheetsSyncModal } from '../farmer/GoogleSheetsSyncModal';
+import { getMandiBranchDropdownLabel } from '../../utils/mandiBranchHelper';
 import { AiMunimSummaryModal } from '../reports/AiMunimSummaryModal';
 import { DesktopAppInstallModal } from './DesktopAppInstallModal';
 import { AndroidAppInstallModal } from './AndroidAppInstallModal';
@@ -180,32 +181,21 @@ export const Header: React.FC = () => {
             </div>
 
             {/* Mandi Branch Selector */}
-            <div className="hidden sm:flex items-center gap-1.5 bg-slate-800/90 px-2.5 py-1.5 rounded-xl border border-amber-500/40 shadow-2xs">
+            <div className="flex items-center gap-1.5 bg-slate-800/90 px-2 sm:px-2.5 py-1.5 rounded-xl border border-amber-500/40 shadow-2xs">
               <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" title="ਚਾਲੂ ਮੰਡੀ (ਵੱਖਰਾ ਡਾਟਾਬੇਸ)" />
               <MapPin className="w-3.5 h-3.5 text-amber-400 shrink-0" />
               <select
+                id="header-active-mandi-branch-select"
                 value={activeFirmId}
                 onChange={(e) => setActiveFirmId(e.target.value)}
-                className="bg-transparent text-xs font-black text-white focus:outline-none cursor-pointer pr-1 max-w-[210px] truncate"
+                className="bg-transparent text-xs font-black text-amber-200 focus:outline-none cursor-pointer pr-1 max-w-[190px] xs:max-w-[260px] sm:max-w-[340px] md:max-w-[420px] truncate"
                 title="ਚਾਲੂ ਦਾਣਾ ਮੰਡੀ ਸ਼ਾਖਾ (Active Mandi Branch)"
               >
-                {firms.map((f) => {
-                  const isMehrajwala = f.address?.includes('Mehrajwala') || f.name.includes('Mehrajwala');
-                  const isKamalpur = f.address?.includes('Kamalpur') || f.name.includes('Kamalpur');
-                  const isKangKhurd = f.address?.includes('Kang Khurd') || f.name.includes('Kang');
-                  const displayLabel = isMehrajwala
-                    ? 'ਦਾਣਾ ਮੰਡੀ ਮਹਿਰਾਜਵਾਲਾ'
-                    : isKamalpur
-                    ? 'ਦਾਣਾ ਮੰਡੀ ਕਮਾਲਪੁਰ'
-                    : isKangKhurd
-                    ? 'ਦਾਣਾ ਮੰਡੀ ਕੰਗ ਖੁਰਦ'
-                    : (f.namePa || f.name);
-                  return (
-                    <option key={f.id} value={f.id} className="bg-slate-900 text-white font-bold py-1">
-                      📍 {displayLabel}
-                    </option>
-                  );
-                })}
+                {firms.map((f) => (
+                  <option key={f.id} value={f.id} className="bg-slate-900 text-white font-bold py-1">
+                    {getMandiBranchDropdownLabel(f)}
+                  </option>
+                ))}
               </select>
               <button
                 type="button"
@@ -491,6 +481,27 @@ export const Header: React.FC = () => {
                           <span>ਫਰਮਾਂ ਦਾ ਪ੍ਰਬੰਧਨ (Manage Firms)</span>
                           <Building2 className="w-3.5 h-3.5" />
                         </button>
+
+                        <div className="pt-2 border-t border-slate-800">
+                          <label className="text-[10px] font-black text-amber-300 block mb-1">
+                            ਚਾਲੂ ਦਾਣਾ ਮੰਡੀ ਸ਼ਾਖਾ:
+                          </label>
+                          <select
+                            value={activeFirmId}
+                            onChange={(e) => {
+                              setActiveFirmId(e.target.value);
+                              setIsProfileMenuOpen(false);
+                            }}
+                            className="w-full bg-slate-800 text-[11px] font-bold text-amber-200 border border-amber-500/40 rounded-lg p-1.5 focus:outline-none"
+                            title="Mandi Branch Dropdown"
+                          >
+                            {firms.map((f) => (
+                              <option key={f.id} value={f.id} className="bg-slate-900 text-white font-bold py-1">
+                                {getMandiBranchDropdownLabel(f)}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
                       </div>
 
                       <div className="pt-2 border-t border-slate-800">

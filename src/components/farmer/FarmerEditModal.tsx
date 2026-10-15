@@ -22,6 +22,7 @@ import { transliterateEnglishToPunjabi } from '../../utils/translations';
 import { CameraCaptureModal } from '../common/CameraCaptureModal';
 import { PinVillageSelector } from './PinVillageSelector';
 import { MainFarmerSelector } from './MainFarmerSelector';
+import { compressImage } from '../../utils/imageCompressor';
 
 interface FarmerEditModalProps {
   farmer: Farmer | null;
@@ -126,34 +127,46 @@ export const FarmerEditModal: React.FC<FarmerEditModalProps> = ({
     }));
   };
 
-  const handleFileUpload = (
+  const handleFileUpload = async (
     e: React.ChangeEvent<HTMLInputElement>,
     type: 'farmer' | 'aadhaarFront' | 'aadhaarBack'
   ) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const dataUrl = event.target?.result as string;
+    try {
+      const compressedDataUrl = await compressImage(file, 480, 480, 0.65);
       if (type === 'farmer') {
-        setFormData((prev) => ({ ...prev, photoUrl: dataUrl }));
+        setFormData((prev) => ({ ...prev, photoUrl: compressedDataUrl }));
       } else if (type === 'aadhaarFront') {
-        setFormData((prev) => ({ ...prev, aadhaarFrontUrl: dataUrl }));
+        setFormData((prev) => ({ ...prev, aadhaarFrontUrl: compressedDataUrl }));
       } else if (type === 'aadhaarBack') {
-        setFormData((prev) => ({ ...prev, aadhaarBackUrl: dataUrl }));
+        setFormData((prev) => ({ ...prev, aadhaarBackUrl: compressedDataUrl }));
       }
-    };
-    reader.readAsDataURL(file);
+    } catch {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const dataUrl = event.target?.result as string;
+        if (type === 'farmer') {
+          setFormData((prev) => ({ ...prev, photoUrl: dataUrl }));
+        } else if (type === 'aadhaarFront') {
+          setFormData((prev) => ({ ...prev, aadhaarFrontUrl: dataUrl }));
+        } else if (type === 'aadhaarBack') {
+          setFormData((prev) => ({ ...prev, aadhaarBackUrl: dataUrl }));
+        }
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
-  const handleCameraCapture = (dataUrl: string) => {
+  const handleCameraCapture = async (dataUrl: string) => {
+    const compressed = await compressImage(dataUrl, 480, 480, 0.65);
     if (cameraModal.type === 'farmer') {
-      setFormData((prev) => ({ ...prev, photoUrl: dataUrl }));
+      setFormData((prev) => ({ ...prev, photoUrl: compressed }));
     } else if (cameraModal.type === 'aadhaarFront') {
-      setFormData((prev) => ({ ...prev, aadhaarFrontUrl: dataUrl }));
+      setFormData((prev) => ({ ...prev, aadhaarFrontUrl: compressed }));
     } else if (cameraModal.type === 'aadhaarBack') {
-      setFormData((prev) => ({ ...prev, aadhaarBackUrl: dataUrl }));
+      setFormData((prev) => ({ ...prev, aadhaarBackUrl: compressed }));
     }
   };
 

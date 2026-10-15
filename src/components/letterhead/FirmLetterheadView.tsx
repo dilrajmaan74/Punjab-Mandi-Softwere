@@ -22,6 +22,10 @@ import {
   Loader2,
   Scissors
 } from 'lucide-react';
+import {
+  getMandiBranchDropdownLabel,
+  ALL_MANDIS_DROPDOWN_LABEL
+} from '../../utils/mandiBranchHelper';
 
 export type LetterpadPageMode = 'blank' | 'lined' | 'typed';
 export type MandiScopeType = 'kang-khurd' | 'mehrajwala' | 'kamalpur' | 'both';
@@ -574,6 +578,30 @@ export const FirmLetterheadView: React.FC = () => {
               <MapPin className="w-3.5 h-3.5 text-amber-700" />
               <span>ਮੰਡੀ ਫਰਮ ਐਡਰੈੱਸ:</span>
             </span>
+            {/* Feature: Mandi Branch Drop Down List */}
+            <div className="min-w-[340px]">
+              <select
+                id="letterhead-mandi-scope-dropdown"
+                value={mandiScope}
+                onChange={(e) => setMandiScope(e.target.value as MandiScopeType)}
+                className="w-full text-xs font-black py-2 px-3 rounded-lg border-2 border-amber-600 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500 cursor-pointer shadow-xs"
+                title="ਲੈਟਰਪੈਡ ਦਾਣਾ ਮੰਡੀ ਸ਼ਾਖਾ ਡ੍ਰੌਪਡਾਊਨ ਲਿਸਟ"
+              >
+                <option value="both" className="font-bold py-1">
+                  {ALL_MANDIS_DROPDOWN_LABEL}
+                </option>
+                <option value="kang-khurd" className="font-bold py-1">
+                  [ MANDI BRANCH: DANA MANDI KANG KHURD (ਦਾਣਾ ਮੰਡੀ ਕਾਂਗ ਖੁਰਦ) ]
+                </option>
+                <option value="mehrajwala" className="font-bold py-1">
+                  [ MANDI BRANCH: DANA MANDI MEHRAJWALA (ਦਾਣਾ ਮੰਡੀ ਮਹਿਰਾਜਵਾਲਾ) ]
+                </option>
+                <option value="kamalpur" className="font-bold py-1">
+                  [ MANDI BRANCH: DANA MANDI KAMALPUR (ਦਾਣਾ ਮੰਡੀ ਕਮਾਲਪੁਰ) ]
+                </option>
+              </select>
+            </div>
+
             <div className="flex items-center gap-1.5">
               <button
                 type="button"
@@ -584,7 +612,7 @@ export const FirmLetterheadView: React.FC = () => {
                     : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
                 }`}
               >
-                ਦਾਣਾ ਮੰਡੀ ਕੰਗ ਖੁਰਦ
+                ਕਾਂਗ ਖੁਰਦ
               </button>
               <button
                 type="button"
@@ -595,7 +623,7 @@ export const FirmLetterheadView: React.FC = () => {
                     : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
                 }`}
               >
-                ਦਾਣਾ ਮੰਡੀ ਮਹਿਰਾਜਵਾਲਾ
+                ਮਹਿਰਾਜਵਾਲਾ
               </button>
               <button
                 type="button"
@@ -606,7 +634,7 @@ export const FirmLetterheadView: React.FC = () => {
                     : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
                 }`}
               >
-                ਦਾਣਾ ਮੰਡੀ ਕਮਾਲਪੁਰ
+                ਕਮਾਲਪੁਰ
               </button>
               <button
                 type="button"
@@ -617,7 +645,7 @@ export const FirmLetterheadView: React.FC = () => {
                     : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
                 }`}
               >
-                ਸਾਰੀਆਂ ਮੰਡੀਆਂ (ਕੰਗ ਖੁਰਦ / ਮਹਿਰਾਜਵਾਲਾ / ਕਮਾਲਪੁਰ)
+                ਸਾਰੀਆਂ ਮੰਡੀਆਂ
               </button>
             </div>
           </div>

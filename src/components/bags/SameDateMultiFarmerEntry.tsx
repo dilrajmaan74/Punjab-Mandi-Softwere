@@ -50,6 +50,7 @@ import {
 import { BardanaType, LabourAndDeductions, BagsEntryRecord } from '../../types/mandi';
 import { LabourDeductionsSection } from '../common/LabourDeductionsSection';
 import { BatchPrintAndWhatsAppModal } from './BatchPrintAndWhatsAppModal';
+import { getMandiBranchDropdownLabel } from '../../utils/mandiBranchHelper';
 
 interface BatchRow {
   rowId: string;
@@ -78,6 +79,8 @@ export const SameDateMultiFarmerEntry: React.FC = () => {
     getBardanaSummary,
     getCompleteFarmerAccount,
     activeFirm,
+    activeFirmId,
+    firms,
     activeCrop,
     activeCropConfig,
     settings,
@@ -87,6 +90,14 @@ export const SameDateMultiFarmerEntry: React.FC = () => {
   const isEn = language === 'en';
   const { notifySaveSuccess, notifyError } = useNotification();
   const [isSaving, setIsSaving] = useState(false);
+
+  const [batchMandiFirmId, setBatchMandiFirmId] = useState<string>(activeFirmId || firms[0]?.id || 'FIRM-001');
+
+  useEffect(() => {
+    if (activeFirmId) {
+      setBatchMandiFirmId(activeFirmId);
+    }
+  }, [activeFirmId]);
 
   const effectiveBagWeight = activeCropConfig?.defaultBagWeightKg || FIXED_BAG_WEIGHT_KG;
   const defaultRate = activeCropConfig?.defaultRatePerQtl || FIXED_RATE_PER_QTL;
@@ -512,6 +523,7 @@ export const SameDateMultiFarmerEntry: React.FC = () => {
       const netAmt = hasActive ? r.labourDeductions.netPayableAmount : grossAmount;
 
       const entry = addBagsEntry({
+        firmId: batchMandiFirmId,
         date: batchDate || getTodayFormatted(),
         farmerId: farmer.id,
         farmerName: farmer.farmerName,
@@ -632,6 +644,25 @@ export const SameDateMultiFarmerEntry: React.FC = () => {
             <span className="bg-amber-100 text-amber-900 px-1.5 py-0.5 rounded font-mono font-black text-[10px]">
               {isEn ? 'Old:' : 'ਪੁਰਾਣਾ:'} {bardanaSummary.oldBagsRemaining.toLocaleString('en-IN')}
             </span>
+          </div>
+
+          <div className="min-w-[280px]">
+            <label className="text-[10px] font-bold text-slate-600 block mb-1">
+              ਦਾਣਾ ਮੰਡੀ ਸ਼ਾਖਾ (Mandi Branch):
+            </label>
+            <select
+              id="same-date-mandi-select"
+              value={batchMandiFirmId}
+              onChange={(e) => setBatchMandiFirmId(e.target.value)}
+              className="w-full text-xs font-black py-2 px-3 rounded-lg border-2 border-amber-500 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500 cursor-pointer shadow-xs"
+              title="ਦਾਣਾ ਮੰਡੀ ਸ਼ਾਖਾ ਚੁਣੋ"
+            >
+              {firms.map((f) => (
+                <option key={f.id} value={f.id} className="font-bold py-1 bg-white text-slate-900">
+                  {getMandiBranchDropdownLabel(f)}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="w-40">

@@ -43,6 +43,7 @@ import {
 import { extractAadhaarData, ExtractedAadhaarInfo } from '../../utils/aadhaarOcr';
 import { exportFarmerProfilePDF, openFarmerPrintWindow } from '../../utils/farmerPdfExport';
 import { CameraCaptureModal } from '../common/CameraCaptureModal';
+import { compressImage } from '../../utils/imageCompressor';
 import { MainFarmerSelector } from './MainFarmerSelector';
 import { FarmerProfileViewModal } from './FarmerProfileViewModal';
 import { FarmerEditModal } from './FarmerEditModal';
@@ -352,42 +353,55 @@ export const FarmerRegistration: React.FC = () => {
     }
   };
 
-  // Handle Photo File Upload
-  const handleFileUpload = (
+  // Handle Photo File Upload with compression
+  const handleFileUpload = async (
     e: React.ChangeEvent<HTMLInputElement>,
     type: 'farmer' | 'aadhaarFront' | 'aadhaarBack'
   ) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const dataUrl = event.target?.result as string;
+    try {
+      const compressedDataUrl = await compressImage(file, 480, 480, 0.65);
       if (type === 'farmer') {
-        setFormData((prev) => ({ ...prev, photoUrl: dataUrl }));
+        setFormData((prev) => ({ ...prev, photoUrl: compressedDataUrl }));
       } else if (type === 'aadhaarFront') {
-        const nextFront = dataUrl;
-        setFormData((prev) => ({ ...prev, aadhaarFrontUrl: nextFront }));
-        triggerAutoOCR(nextFront, formData.aadhaarBackUrl);
+        setFormData((prev) => ({ ...prev, aadhaarFrontUrl: compressedDataUrl }));
+        triggerAutoOCR(compressedDataUrl, formData.aadhaarBackUrl);
       } else if (type === 'aadhaarBack') {
-        const nextBack = dataUrl;
-        setFormData((prev) => ({ ...prev, aadhaarBackUrl: nextBack }));
-        triggerAutoOCR(formData.aadhaarFrontUrl, nextBack);
+        setFormData((prev) => ({ ...prev, aadhaarBackUrl: compressedDataUrl }));
+        triggerAutoOCR(formData.aadhaarFrontUrl, compressedDataUrl);
       }
-    };
-    reader.readAsDataURL(file);
+    } catch {
+      // Fallback with regular FileReader if compression fails
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const dataUrl = event.target?.result as string;
+        if (type === 'farmer') {
+          setFormData((prev) => ({ ...prev, photoUrl: dataUrl }));
+        } else if (type === 'aadhaarFront') {
+          setFormData((prev) => ({ ...prev, aadhaarFrontUrl: dataUrl }));
+          triggerAutoOCR(dataUrl, formData.aadhaarBackUrl);
+        } else if (type === 'aadhaarBack') {
+          setFormData((prev) => ({ ...prev, aadhaarBackUrl: dataUrl }));
+          triggerAutoOCR(formData.aadhaarFrontUrl, dataUrl);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
-  // Handle Camera Capture
-  const handleCameraCapture = (dataUrl: string) => {
+  // Handle Camera Capture with compression
+  const handleCameraCapture = async (dataUrl: string) => {
+    const compressed = await compressImage(dataUrl, 480, 480, 0.65);
     if (cameraModal.type === 'farmer') {
-      setFormData((prev) => ({ ...prev, photoUrl: dataUrl }));
+      setFormData((prev) => ({ ...prev, photoUrl: compressed }));
     } else if (cameraModal.type === 'aadhaarFront') {
-      setFormData((prev) => ({ ...prev, aadhaarFrontUrl: dataUrl }));
-      triggerAutoOCR(dataUrl, formData.aadhaarBackUrl);
+      setFormData((prev) => ({ ...prev, aadhaarFrontUrl: compressed }));
+      triggerAutoOCR(compressed, formData.aadhaarBackUrl);
     } else if (cameraModal.type === 'aadhaarBack') {
-      setFormData((prev) => ({ ...prev, aadhaarBackUrl: dataUrl }));
-      triggerAutoOCR(formData.aadhaarFrontUrl, dataUrl);
+      setFormData((prev) => ({ ...prev, aadhaarBackUrl: compressed }));
+      triggerAutoOCR(formData.aadhaarFrontUrl, compressed);
     }
   };
 
@@ -498,16 +512,25 @@ export const FarmerRegistration: React.FC = () => {
 
   // Filtered farmers for list below
   const filteredFarmers = farmers.filter((f) => {
-    const q = searchTerm.toLowerCase().trim();
+    if (!f) return false;
+    const q = (searchTerm || '').toLowerCase().trim();
     if (!q) return true;
+    const fName = (f.farmerName || '').toLowerCase();
+    const fNamePa = (f.farmerNamePa || '').toLowerCase();
+    const fId = (f.id || '').toLowerCase();
+    const fVillage = (f.village || '').toLowerCase();
+    const fVillagePa = (f.villagePa || '').toLowerCase();
+    const fAadhaar = (f.aadhaar || '').replace(/\s+/g, '');
+    const cleanQ = q.replace(/\s+/g, '');
+    const fMobile = (f.mobile || '');
     return (
-      f.farmerName.toLowerCase().includes(q) ||
-      f.farmerNamePa.toLowerCase().includes(q) ||
-      f.id.toLowerCase().includes(q) ||
-      f.village.toLowerCase().includes(q) ||
-      f.villagePa.toLowerCase().includes(q) ||
-      f.aadhaar.replace(/\s+/g, '').includes(q.replace(/\s+/g, '')) ||
-      f.mobile.includes(q)
+      fName.includes(q) ||
+      fNamePa.includes(q) ||
+      fId.includes(q) ||
+      fVillage.includes(q) ||
+      fVillagePa.includes(q) ||
+      (cleanQ.length > 0 && fAadhaar.includes(cleanQ)) ||
+      fMobile.includes(q)
     );
   });
 

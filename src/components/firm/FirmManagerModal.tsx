@@ -21,6 +21,7 @@ import {
   UserCheck,
   Key
 } from 'lucide-react';
+import { getMandiBranchDropdownLabel } from '../../utils/mandiBranchHelper';
 
 interface FirmManagerModalProps {
   isOpen: boolean;
@@ -594,6 +595,10 @@ export const FirmManagerModal: React.FC<FirmManagerModalProps> = ({ isOpen, onCl
                                 {firm.namePa}
                               </p>
                             )}
+                            <div className="mt-1.5 inline-flex items-center gap-1 px-2 py-0.5 bg-amber-500/10 border border-amber-500/30 text-amber-800 text-[10px] font-black rounded-md">
+                              <MapPin className="w-3 h-3 text-amber-600 shrink-0" />
+                              <span>{getMandiBranchDropdownLabel(firm)}</span>
+                            </div>
                           </div>
 
                           <div className="flex items-center gap-1">

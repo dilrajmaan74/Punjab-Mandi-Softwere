@@ -109,6 +109,7 @@ import {
   getMaxFarmerSequence,
   recordFarmerSequence
 } from '../utils/farmerAuditLog';
+import { sanitizeRecordForStorage } from '../utils/imageCompressor';
 
 interface DuplicateCheckResult {
   isDuplicate: boolean;
@@ -650,18 +651,45 @@ export const loadFirmData = <T,>(baseKey: string, firmId: string, defaultValue: 
   }
 };
 
-// Save data strictly for specified firm
+// Save data strictly for specified firm with resilient QuotaExceededError recovery
 export const saveFirmData = <T,>(baseKey: string, firmId: string, data: T) => {
   try {
     if (!firmId) return;
     const firmKey = getFirmStorageKey(baseKey, firmId);
-    localStorage.setItem(firmKey, JSON.stringify(data));
-    // For default firm, keep legacy key in sync for backwards compatibility
+    try {
+      localStorage.setItem(firmKey, JSON.stringify(data));
+    } catch (err: any) {
+      const isQuota = err?.name === 'QuotaExceededError' ||
+        (err?.message && String(err.message).toLowerCase().includes('quota'));
+      if (isQuota) {
+        // 1. Purge redundant non-isolated legacy keys and recycle bin to free bytes immediately
+        try {
+          if (firmId !== 'FIRM-001' && firmId !== DEFAULT_FIRM.id) {
+            localStorage.removeItem(baseKey);
+          }
+          localStorage.removeItem(LOCAL_STORAGE_KEYS.RECYCLE_BIN);
+        } catch {}
+
+        // 2. Sanitize heavy base64 strings and retry
+        try {
+          const sanitized = sanitizeRecordForStorage(data);
+          localStorage.setItem(firmKey, JSON.stringify(sanitized));
+        } catch {
+          // If still constrained, keep in memory without throwing uncaught exceptions
+        }
+      }
+    }
+
+    // For default firm, keep legacy key in sync for backwards compatibility ONLY if quota permits
     if (firmId === 'FIRM-001' || firmId === DEFAULT_FIRM.id) {
-      localStorage.setItem(baseKey, JSON.stringify(data));
+      try {
+        localStorage.setItem(baseKey, JSON.stringify(data));
+      } catch {
+        // Silently omit duplicate legacy write if quota is constrained
+      }
     }
   } catch (err) {
-    console.error(`Error saving firm data for ${baseKey}_${firmId}:`, err);
+    // Safely swallow to prevent React render or switchFirm from crashing
   }
 };
 
@@ -3118,6 +3146,7 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const nextEntryNumber = `BAG-${nextParchi.toString().padStart(5, '0')}`;
     const newRecord: BagsEntryRecord = {
       ...entryData,
+      firmId: entryData.firmId || activeFirmId,
       fiscalYear: entryData.fiscalYear || activeFiscalYear,
       id: `be_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       parchiNo: nextParchi,
@@ -3139,6 +3168,7 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const rowParchi = data.parchiNo || currentParchi;
       return {
         ...data,
+        firmId: data.firmId || activeFirmId,
         fiscalYear: data.fiscalYear || activeFiscalYear,
         id: `be_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 7)}`,
         parchiNo: rowParchi,
