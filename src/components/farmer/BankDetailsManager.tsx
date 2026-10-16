@@ -31,7 +31,10 @@ import {
   X,
   Languages,
   BadgeCheck,
-  ImageIcon
+  ImageIcon,
+  ArrowDownAZ,
+  ArrowDownZA,
+  ArrowUpDown
 } from 'lucide-react';
 import { lookupIFSC, validateIfscFormat, IfscLookupResult } from '../../utils/ifscService';
 import { CameraCaptureModal } from '../common/CameraCaptureModal';
@@ -113,6 +116,10 @@ export const BankDetailsManager: React.FC = () => {
   const [tableSearch, setTableSearch] = useState('');
   const [filterMode, setFilterMode] = useState<'all' | 'linked' | 'pending'>('all');
   const [copiedCell, setCopiedCell] = useState<string | null>(null);
+
+  // A to Z Alphabetical Sort & Jump
+  const [sortOrder, setSortOrder] = useState<'a_z' | 'z_a' | 'id_asc'>('a_z');
+  const [letterFilter, setLetterFilter] = useState<string>('ALL');
 
   // SAME-SCREEN QUICK EDIT MODAL STATE
   const [editingFarmer, setEditingFarmer] = useState<QuickEditFarmerState | null>(null);
@@ -535,13 +542,43 @@ export const BankDetailsManager: React.FC = () => {
     setTimeout(() => setCopiedCell(null), 2000);
   };
 
-  // Filtered farmers for master list
+  // Helper to extract clean sort name
+  const getFarmerSortName = (f: Farmer): string => {
+    const en = getEnglishName(f.farmerName, f.farmerNamePa).trim();
+    if (en && en !== '—') return en;
+    const pa = (f.farmerNamePa || f.farmerName || '').trim();
+    return pa || '';
+  };
+
+  // Pre-calculate which alphabet letters (A-Z) have at least one farmer
+  const availableLettersSet = React.useMemo(() => {
+    const set = new Set<string>();
+    farmers.forEach((f) => {
+      const name = getFarmerSortName(f);
+      if (name) {
+        const first = name.charAt(0).toUpperCase();
+        if (/^[A-Z]$/.test(first)) {
+          set.add(first);
+        }
+      }
+    });
+    return set;
+  }, [farmers]);
+
+  // Filtered farmers for master list (Bank status + A-Z letter filter + Search query)
   const filteredMasterFarmers = farmers.filter((f) => {
     if (!f) return false;
     // Bank status filter
     const hasBank = !!f.bankDetails?.accountNumber?.trim();
     if (filterMode === 'linked' && !hasBank) return false;
     if (filterMode === 'pending' && hasBank) return false;
+
+    // A to Z Alphabet quick jump filter
+    if (letterFilter !== 'ALL') {
+      const sortName = getFarmerSortName(f);
+      const first = sortName.charAt(0).toUpperCase();
+      if (first !== letterFilter) return false;
+    }
 
     // Search query filter
     const q = (tableSearch || '').toLowerCase().trim();
@@ -571,6 +608,26 @@ export const BankDetailsManager: React.FC = () => {
       village.includes(q)
     );
   });
+
+  // A to Z Sorted farmers (Default is A to Z wise)
+  const sortedMasterFarmers = React.useMemo(() => {
+    return [...filteredMasterFarmers].sort((a, b) => {
+      if (sortOrder === 'a_z') {
+        const nameA = getFarmerSortName(a);
+        const nameB = getFarmerSortName(b);
+        return nameA.localeCompare(nameB, undefined, { sensitivity: 'base', numeric: true });
+      }
+      if (sortOrder === 'z_a') {
+        const nameA = getFarmerSortName(a);
+        const nameB = getFarmerSortName(b);
+        return nameB.localeCompare(nameA, undefined, { sensitivity: 'base', numeric: true });
+      }
+      if (sortOrder === 'id_asc') {
+        return (a.id || '').localeCompare(b.id || '', undefined, { numeric: true });
+      }
+      return 0;
+    });
+  }, [filteredMasterFarmers, sortOrder]);
 
   // Filtered farmers for form selection dropdown (Tab 2)
   const filteredFormFarmers = farmers.filter((f) => {
@@ -608,7 +665,7 @@ export const BankDetailsManager: React.FC = () => {
       'Village'
     ];
 
-    const rows = filteredMasterFarmers.map((f, idx) => [
+    const rows = sortedMasterFarmers.map((f, idx) => [
       idx + 1,
       f.id,
       `"${getEnglishName(f.farmerName, f.farmerNamePa).replace(/"/g, '""')}"`,
@@ -640,13 +697,13 @@ export const BankDetailsManager: React.FC = () => {
 
   // Copy full table as Tab-Separated Values (can paste directly into Excel / WhatsApp)
   const handleCopyTable = () => {
-    if (filteredMasterFarmers.length === 0) return;
+    if (sortedMasterFarmers.length === 0) return;
 
     const lines = [
       ['ਲੜੀ ਨੰ.', 'ਕਿਸਾਨ ਦਾ ਨਾਂ', 'ਪਿਤਾ/ਪਤੀ ਦਾ ਨਾਂ', 'ਮੋਬਾਈਲ ਨੰਬਰ', 'ਆਧਾਰ ਨੰਬਰ', 'ਖਾਤਾ ਨੰਬਰ', 'IFSC ਕੋਡ', 'ਬੈਂਕ ਦਾ ਨਾਂ'].join('\t')
     ];
 
-    filteredMasterFarmers.forEach((f, idx) => {
+    sortedMasterFarmers.forEach((f, idx) => {
       const fName = `${getEnglishName(f.farmerName, f.farmerNamePa)} ${getPunjabiName(f.farmerNamePa, f.farmerName) ? `(${getPunjabiName(f.farmerNamePa, f.farmerName)})` : ''}`.trim();
       const father = `${getEnglishName(f.fatherName, f.fatherNamePa)} ${getPunjabiName(f.fatherNamePa, f.fatherName) ? `(${getPunjabiName(f.fatherNamePa, f.fatherName)})` : ''}`.trim();
       const mobile = f.mobile || '—';
@@ -678,7 +735,7 @@ export const BankDetailsManager: React.FC = () => {
       year: 'numeric'
     });
 
-    const rowsHtml = filteredMasterFarmers
+    const rowsHtml = sortedMasterFarmers
       .map((f, idx) => {
         const enName = getEnglishName(f.farmerName, f.farmerNamePa);
         const paName = getPunjabiName(f.farmerNamePa, f.farmerName);
@@ -822,9 +879,8 @@ export const BankDetailsManager: React.FC = () => {
             <div class="firm-title">${firmTitleEn} (${firmTitlePa})</div>
             <div class="firm-sub">${mandiLocation} ${licenceNo ? `• ਲਾਇਸੰਸ ਨੰ: ${licenceNo}` : ''}</div>
           </div>
-          <div class="meta-box">
-            <div class="report-badge">ਕਿਸਾਨ ਬੈਂਕ ਖਾਤਾ, ਆਧਾਰ ਤੇ ਮੋਬਾਈਲ ਸੂਚੀ</div>
-            <div>ਮਿਤੀ: <strong>${printDate}</strong> • ਕੁੱਲ ਕਿਸਾਨ: <strong>${filteredMasterFarmers.length}</strong></div>
+            <div class="report-badge">ਕਿਸਾਨ ਬੈਂਕ ਖਾਤਾ, ਆਧਾਰ ਤੇ ਮੋਬਾਈਲ ਸੂਚੀ (A to Z)</div>
+            <div>ਮਿਤੀ: <strong>${printDate}</strong> • ਕੁੱਲ ਕਿਸਾਨ: <strong>${sortedMasterFarmers.length}</strong></div>
           </div>
         </div>
 
@@ -886,9 +942,13 @@ export const BankDetailsManager: React.FC = () => {
               <span className="bg-purple-100 text-purple-900 border border-purple-200 text-[10px] font-black px-2 py-0.5 rounded-full">
                 {activeFirm?.name || 'Jammu Trading Co'}
               </span>
+              <span className="bg-emerald-50 text-emerald-800 border border-emerald-300 text-[10px] font-black px-2 py-0.5 rounded-full flex items-center gap-1">
+                <ArrowDownAZ className="w-3 h-3 text-emerald-600" />
+                <span>A to Z ਕ੍ਰਮਬੱਧ</span>
+              </span>
             </div>
             <p className="text-[11px] text-slate-500 mt-0.5">
-              ਕਿਸਾਨ ਦਾ ਨਾਂ • ਪਿਤਾ/ਪਤੀ ਦਾ ਨਾਂ • ਮੋਬਾਈਲ • ਆਧਾਰ ਨੰਬਰ • ਬੈਂਕ ਖਾਤਾ ਨੰਬਰ • IFSC ਕੋਡ • ਬੈਂਕ ਦਾ ਨਾਂ • ਫੋਟੋ
+              ਕਿਸਾਨ ਦਾ ਨਾਂ (A to Z) • ਪਿਤਾ/ਪਤੀ ਦਾ ਨਾਂ • ਮੋਬਾਈਲ • ਆਧਾਰ ਨੰਬਰ • ਬੈਂਕ ਖਾਤਾ ਨੰਬਰ • IFSC ਕੋਡ • ਬੈਂਕ ਦਾ ਨਾਂ • ਫੋਟੋ
             </p>
           </div>
         </div>
@@ -1055,6 +1115,115 @@ export const BankDetailsManager: React.FC = () => {
             </div>
           </div>
 
+          {/* Alphabetical A to Z Quick Jump Bar & Sorting Controls */}
+          <div className="bg-white border border-slate-200 rounded-xl p-3 shadow-2xs space-y-2">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <div className="p-1 bg-purple-100 rounded text-purple-800">
+                  <ArrowDownAZ className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="text-xs font-black text-slate-900">
+                    A to Z ਅੱਖਰ ਅਨੁਸਾਰ ਛਾਲ ਮਾਰੋ (Alphabet Jump)
+                  </span>
+                  <span className="ml-2 text-[10px] text-purple-700 bg-purple-50 px-2 py-0.5 rounded-full border border-purple-200 font-bold">
+                    {letterFilter === 'ALL'
+                      ? `ਸਾਰੇ ਅੱਖਰ (${sortedMasterFarmers.length} ਕਿਸਾਨ)`
+                      : `'${letterFilter}' ਅੱਖਰ ਵਾਲੇ (${sortedMasterFarmers.length} ਕਿਸਾਨ)`}
+                  </span>
+                </div>
+              </div>
+
+              {/* Sorting Mode Buttons */}
+              <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200 text-xs font-bold self-start sm:self-auto">
+                <span className="text-[10px] text-slate-500 uppercase px-1">ਤਰਤੀਬ:</span>
+                <button
+                  type="button"
+                  onClick={() => setSortOrder('a_z')}
+                  className={`px-2.5 py-1 rounded-md transition flex items-center gap-1 cursor-pointer ${
+                    sortOrder === 'a_z'
+                      ? 'bg-purple-700 text-white font-black shadow-2xs'
+                      : 'text-slate-700 hover:text-slate-900 hover:bg-slate-200'
+                  }`}
+                  title="Sort A to Z alphabetically by Farmer Name"
+                >
+                  <ArrowDownAZ className="w-3.5 h-3.5" />
+                  <span>A → Z (ਕ੍ਰਮਵਾਰ)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setSortOrder('z_a')}
+                  className={`px-2.5 py-1 rounded-md transition flex items-center gap-1 cursor-pointer ${
+                    sortOrder === 'z_a'
+                      ? 'bg-purple-700 text-white font-black shadow-2xs'
+                      : 'text-slate-700 hover:text-slate-900 hover:bg-slate-200'
+                  }`}
+                  title="Sort Z to A"
+                >
+                  <ArrowDownZA className="w-3.5 h-3.5" />
+                  <span>Z → A</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setSortOrder('id_asc')}
+                  className={`px-2.5 py-1 rounded-md transition cursor-pointer flex items-center gap-1 ${
+                    sortOrder === 'id_asc'
+                      ? 'bg-purple-700 text-white font-black shadow-2xs'
+                      : 'text-slate-700 hover:text-slate-900 hover:bg-slate-200'
+                  }`}
+                  title="Sort by Farmer ID"
+                >
+                  <ArrowUpDown className="w-3 h-3" />
+                  <span>ID ਵਾਈਜ਼</span>
+                </button>
+              </div>
+            </div>
+
+            {/* A B C D ... Z Pills Row */}
+            <div className="flex flex-wrap items-center gap-1 pt-1 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setLetterFilter('ALL')}
+                className={`px-2.5 py-1 rounded-lg text-xs font-black transition cursor-pointer ${
+                  letterFilter === 'ALL'
+                    ? 'bg-purple-700 text-white shadow-2xs ring-1 ring-purple-800'
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200'
+                }`}
+              >
+                ਸਾਰੇ (ALL)
+              </button>
+
+              {'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map((letter) => {
+                const hasFarmers = availableLettersSet.has(letter);
+                const isSelected = letterFilter === letter;
+
+                return (
+                  <button
+                    key={letter}
+                    type="button"
+                    onClick={() => setLetterFilter(letter)}
+                    className={`w-7 h-7 rounded-lg text-xs font-black transition cursor-pointer flex items-center justify-center ${
+                      isSelected
+                        ? 'bg-purple-700 text-white shadow-xs ring-2 ring-purple-300 font-black'
+                        : hasFarmers
+                        ? 'bg-purple-50 text-purple-950 hover:bg-purple-100 border border-purple-200'
+                        : 'bg-slate-50 text-slate-300 hover:text-slate-500 border border-slate-100'
+                    }`}
+                    title={
+                      hasFarmers
+                        ? `'${letter}' ਨਾਲ ਸ਼ੁਰੂ ਹੋਣ ਵਾਲੇ ਕਿਸਾਨ ਵੇਖੋ`
+                        : `'${letter}' ਅੱਖਰ ਨਾਲ ਕੋਈ ਕਿਸਾਨ ਨਹੀਂ ਹੈ`
+                    }
+                  >
+                    {letter}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           {/* Master Table with Farmer Photo and Same-Screen Edit */}
           <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
             {farmers.length === 0 ? (
@@ -1065,9 +1234,25 @@ export const BankDetailsManager: React.FC = () => {
                   ਪਹਿਲਾਂ 'ਕਿਸਾਨ ਰਜਿਸਟ੍ਰੇਸ਼ਨ' ਰਾਹੀਂ ਕਿਸਾਨਾਂ ਨੂੰ ਸਿਸਟਮ ਵਿੱਚ ਦਰਜ ਕਰੋ।
                 </p>
               </div>
-            ) : filteredMasterFarmers.length === 0 ? (
-              <div className="p-8 text-center text-slate-400 text-xs">
-                ਕੋਈ ਮੇਲ ਖਾਂਦਾ ਕਿਸਾਨ ਨਹੀਂ ਮਿਲਿਆ। ਖੋਜ ਸ਼ਬਦ ਬਦਲ ਕੇ ਵੇਖੋ।
+            ) : sortedMasterFarmers.length === 0 ? (
+              <div className="p-8 text-center text-slate-500 text-xs space-y-2">
+                <p className="font-bold">
+                  {letterFilter !== 'ALL'
+                    ? `'${letterFilter}' ਅੱਖਰ ਨਾਲ ਕੋਈ ਮੇਲ ਖਾਂਦਾ ਕਿਸਾਨ ਨਹੀਂ ਮਿਲਿਆ।`
+                    : 'ਕੋਈ ਮੇਲ ਖਾਂਦਾ ਕਿਸਾਨ ਨਹੀਂ ਮਿਲਿਆ।'}
+                </p>
+                {(letterFilter !== 'ALL' || tableSearch) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLetterFilter('ALL');
+                      setTableSearch('');
+                    }}
+                    className="px-3 py-1 bg-purple-100 hover:bg-purple-200 text-purple-900 border border-purple-300 rounded-lg text-xs font-bold transition cursor-pointer"
+                  >
+                    ਸਾਰੇ ਕਿਸਾਨ ਵੇਖੋ (Show All Farmers)
+                  </button>
+                )}
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -1076,7 +1261,34 @@ export const BankDetailsManager: React.FC = () => {
                     <tr>
                       <th className="py-2.5 px-3 text-center w-8">#</th>
                       <th className="py-2.5 px-3 text-center w-14">ਫੋਟੋ (Photo)</th>
-                      <th className="py-2.5 px-3">ਕਿਸਾਨ ਦਾ ਨਾਂ (Farmer Name)</th>
+                      <th className="py-2.5 px-3">
+                        <button
+                          type="button"
+                          onClick={() => setSortOrder(sortOrder === 'a_z' ? 'z_a' : 'a_z')}
+                          className="flex items-center gap-1.5 hover:text-purple-700 transition cursor-pointer group text-left font-black"
+                          title="A-Z ਜਾਂ Z-A ਤਰਤੀਬ ਬਦਲਣ ਲਈ ਕਲਿੱਕ ਕਰੋ"
+                        >
+                          <span>ਕਿਸਾਨ ਦਾ ਨਾਂ (Farmer Name)</span>
+                          <span className="p-0.5 bg-purple-100 rounded text-purple-900 text-[10px] inline-flex items-center gap-0.5 px-1.5 font-black border border-purple-200">
+                            {sortOrder === 'a_z' ? (
+                              <>
+                                <ArrowDownAZ className="w-3.5 h-3.5 text-purple-700" />
+                                <span>A → Z</span>
+                              </>
+                            ) : sortOrder === 'z_a' ? (
+                              <>
+                                <ArrowDownZA className="w-3.5 h-3.5 text-purple-700" />
+                                <span>Z → A</span>
+                              </>
+                            ) : (
+                              <>
+                                <ArrowUpDown className="w-3 h-3 text-purple-700" />
+                                <span>ID</span>
+                              </>
+                            )}
+                          </span>
+                        </button>
+                      </th>
                       <th className="py-2.5 px-3">ਪਿਤਾ / ਪਤੀ ਦਾ ਨਾਂ (Father / Husband)</th>
                       <th className="py-2.5 px-3">ਮੋਬਾਈਲ (Mobile)</th>
                       <th className="py-2.5 px-3">ਆਧਾਰ ਨੰਬਰ (Aadhaar Number)</th>
@@ -1087,7 +1299,7 @@ export const BankDetailsManager: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 font-sans">
-                    {filteredMasterFarmers.map((f, idx) => {
+                    {sortedMasterFarmers.map((f, idx) => {
                       const enName = getEnglishName(f.farmerName, f.farmerNamePa);
                       const paName = getPunjabiName(f.farmerNamePa, f.farmerName);
                       const fatherEn = getEnglishName(f.fatherName, f.fatherNamePa);
