@@ -510,6 +510,8 @@ export const FarmerRegistration: React.FC = () => {
     setIsSaving(false);
   };
 
+  const [directoryTab, setDirectoryTab] = useState<'bank_kyc' | 'standard'>('bank_kyc');
+
   // Filtered farmers for list below
   const filteredFarmers = farmers.filter((f) => {
     if (!f) return false;
@@ -523,6 +525,9 @@ export const FarmerRegistration: React.FC = () => {
     const fAadhaar = (f.aadhaar || '').replace(/\s+/g, '');
     const cleanQ = q.replace(/\s+/g, '');
     const fMobile = (f.mobile || '');
+    const fAcc = (f.bankDetails?.accountNumber || '').toLowerCase();
+    const fIfsc = (f.bankDetails?.ifscCode || '').toLowerCase();
+    const fBank = (f.bankDetails?.bankName || '').toLowerCase();
     return (
       fName.includes(q) ||
       fNamePa.includes(q) ||
@@ -530,7 +535,10 @@ export const FarmerRegistration: React.FC = () => {
       fVillage.includes(q) ||
       fVillagePa.includes(q) ||
       (cleanQ.length > 0 && fAadhaar.includes(cleanQ)) ||
-      fMobile.includes(q)
+      fMobile.includes(q) ||
+      fAcc.includes(q) ||
+      fIfsc.includes(q) ||
+      fBank.includes(q)
     );
   });
 
@@ -1181,6 +1189,50 @@ export const FarmerRegistration: React.FC = () => {
           </div>
         </div>
 
+        {/* Directory View Toggle Bar */}
+        <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-50 p-2 rounded-xl border border-slate-200">
+          <div className="flex items-center gap-1.5 bg-white p-1 rounded-lg border border-slate-200 shadow-2xs">
+            <button
+              type="button"
+              onClick={() => setDirectoryTab('bank_kyc')}
+              className={`px-3 py-1.5 rounded-md text-xs font-black transition flex items-center gap-1.5 cursor-pointer ${
+                directoryTab === 'bank_kyc'
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+              }`}
+            >
+              <CreditCard className="w-3.5 h-3.5" />
+              <span>🏦 ਬੈਂਕ ਤੇ ਕੇਵਾਈਸੀ ਸੂਚੀ (Bank & KYC Directory)</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setDirectoryTab('standard')}
+              className={`px-3 py-1.5 rounded-md text-xs font-black transition flex items-center gap-1.5 cursor-pointer ${
+                directoryTab === 'standard'
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+              }`}
+            >
+              <User className="w-3.5 h-3.5" />
+              <span>📋 ਸਧਾਰਨ ਸੂਚੀ (Standard Profile)</span>
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] text-slate-500 font-bold">
+              ਕੁੱਲ ਕਿਸਾਨ: <strong className="text-slate-900 font-mono">{filteredFarmers.length}</strong>
+            </span>
+            <button
+              type="button"
+              onClick={() => window.print()}
+              className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-2xs transition active:scale-95 cursor-pointer"
+            >
+              <Printer className="w-3.5 h-3.5 text-amber-300" />
+              <span>ਪ੍ਰਿੰਟ ਕਰੋ (Print)</span>
+            </button>
+          </div>
+        </div>
+
         {farmers.length === 0 ? (
           <div className="text-center py-8 text-slate-400 space-y-1">
             <User className="w-8 h-8 mx-auto text-slate-300" />
@@ -1195,68 +1247,146 @@ export const FarmerRegistration: React.FC = () => {
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
-                <tr>
-                  <th className="py-2.5 px-3">ਕਿਸਾਨ ਆਈ.ਡੀ / ਫੋਟੋ</th>
-                  <th className="py-2.5 px-3">ਕਿਸਾਨ ਦਾ ਨਾਂ (Farmer Name)</th>
-                  <th className="py-2.5 px-3">ਪਿਤਾ ਦਾ ਨਾਂ (Father Name)</th>
-                  <th className="py-2.5 px-3">ਪਿੰਡ / ਪਿੰਨ ਕੋਡ</th>
-                  <th className="py-2.5 px-3">ਮੋਬਾਈਲ</th>
-                  <th className="py-2.5 px-3">ਆਧਾਰ ਨੰਬਰ</th>
-                  <th className="py-2.5 px-3 text-right">ਐਕਸ਼ਨ (Actions)</th>
-                </tr>
+                {directoryTab === 'bank_kyc' ? (
+                  <tr>
+                    <th className="py-2.5 px-3">ਕਿਸਾਨ ਆਈ.ਡੀ</th>
+                    <th className="py-2.5 px-3">ਕਿਸਾਨ ਦਾ ਨਾਂ (Farmer Name)</th>
+                    <th className="py-2.5 px-3">ਪਿਤਾ / ਪਤੀ ਦਾ ਨਾਂ (Father / Husband)</th>
+                    <th className="py-2.5 px-3">ਮੋਬਾਈਲ (Mobile)</th>
+                    <th className="py-2.5 px-3">ਆਧਾਰ ਨੰਬਰ (Aadhaar)</th>
+                    <th className="py-2.5 px-3">ਬੈਂਕ ਦਾ ਨਾਂ (Bank Name)</th>
+                    <th className="py-2.5 px-3">ਖਾਤਾ ਨੰਬਰ (Account No)</th>
+                    <th className="py-2.5 px-3">IFSC ਕੋਡ</th>
+                    <th className="py-2.5 px-3 text-right">ਐਕਸ਼ਨ (Actions)</th>
+                  </tr>
+                ) : (
+                  <tr>
+                    <th className="py-2.5 px-3">ਕਿਸਾਨ ਆਈ.ਡੀ / ਫੋਟੋ</th>
+                    <th className="py-2.5 px-3">ਕਿਸਾਨ ਦਾ ਨਾਂ (Farmer Name)</th>
+                    <th className="py-2.5 px-3">ਪਿਤਾ ਦਾ ਨਾਂ (Father Name)</th>
+                    <th className="py-2.5 px-3">ਪਿੰਡ / ਪਿੰਨ ਕੋਡ</th>
+                    <th className="py-2.5 px-3">ਮੋਬਾਈਲ</th>
+                    <th className="py-2.5 px-3">ਆਧਾਰ ਨੰਬਰ</th>
+                    <th className="py-2.5 px-3 text-right">ਐਕਸ਼ਨ (Actions)</th>
+                  </tr>
+                )}
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filteredFarmers.map((f) => (
                   <tr key={f.id} className="hover:bg-slate-50 transition">
-                    <td className="py-2.5 px-3">
-                      <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-md bg-slate-100 border border-slate-200 overflow-hidden shrink-0 flex items-center justify-center">
-                          {f.photoUrl ? (
-                            <img src={f.photoUrl} alt="Farmer" className="w-full h-full object-cover" />
-                          ) : (
-                            <User className="w-4 h-4 text-slate-400" />
+                    {directoryTab === 'bank_kyc' ? (
+                      <>
+                        <td className="py-2.5 px-3 font-mono font-bold text-emerald-800">
+                          <span className="bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                            {f.id}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3">
+                          <div className="font-bold text-slate-900 leading-tight text-xs sm:text-[13px]">
+                            {getEnglishNameDisplay(f.farmerName, f.farmerNamePa)}
+                          </div>
+                          {getPunjabiNameDisplay(f.farmerNamePa, f.farmerName) && (
+                            <div className="text-[11px] text-slate-500 font-medium leading-tight mt-0.5 font-sans">
+                              {getPunjabiNameDisplay(f.farmerNamePa, f.farmerName)}
+                            </div>
                           )}
-                        </div>
-                        <span className="font-mono font-black text-emerald-800 text-xs bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
-                          {f.id}
-                        </span>
-                      </div>
-                    </td>
+                        </td>
+                        <td className="py-2.5 px-3 text-slate-800">
+                          <div className="font-bold leading-tight text-xs sm:text-[13px]">
+                            {getEnglishNameDisplay(f.fatherName, f.fatherNamePa) || '—'}
+                          </div>
+                          {getPunjabiNameDisplay(f.fatherNamePa, f.fatherName) && (
+                            <div className="text-[11px] text-slate-500 font-medium leading-tight mt-0.5 font-sans">
+                              {getPunjabiNameDisplay(f.fatherNamePa, f.fatherName)}
+                            </div>
+                          )}
+                        </td>
+                        <td className="py-2.5 px-3 font-mono font-bold text-slate-800">
+                          +91 {f.mobile}
+                        </td>
+                        <td className="py-2.5 px-3 font-mono font-bold text-slate-800">
+                          {f.aadhaar ? (f.aadhaar.length > 8 ? `${f.aadhaar.slice(0, 4)} ${f.aadhaar.slice(4, 8)} ${f.aadhaar.slice(8)}` : f.aadhaar) : '—'}
+                        </td>
+                        <td className="py-2.5 px-3 font-semibold text-slate-800">
+                          {f.bankDetails?.bankName ? (
+                            <div>
+                              <div className="font-bold text-indigo-950">{f.bankDetails.bankName}</div>
+                              {f.bankDetails.branchName && (
+                                <div className="text-[10px] text-slate-500">{f.bankDetails.branchName}</div>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-slate-400 italic">ਦਰਜ ਨਹੀਂ (Not Set)</span>
+                          )}
+                        </td>
+                        <td className="py-2.5 px-3 font-mono font-black text-slate-950">
+                          {f.bankDetails?.accountNumber || (
+                            <span className="text-slate-400 font-normal italic">ਦਰਜ ਨਹੀਂ</span>
+                          )}
+                        </td>
+                        <td className="py-2.5 px-3 font-mono font-bold text-emerald-800 uppercase">
+                          {f.bankDetails?.ifscCode ? (
+                            <span className="bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                              {f.bankDetails.ifscCode}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 font-normal italic">ਦਰਜ ਨਹੀਂ</span>
+                          )}
+                        </td>
+                      </>
+                    ) : (
+                      <>
+                        <td className="py-2.5 px-3">
+                          <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-md bg-slate-100 border border-slate-200 overflow-hidden shrink-0 flex items-center justify-center">
+                              {f.photoUrl ? (
+                                <img src={f.photoUrl} alt="Farmer" className="w-full h-full object-cover" />
+                              ) : (
+                                <User className="w-4 h-4 text-slate-400" />
+                              )}
+                            </div>
+                            <span className="font-mono font-black text-emerald-800 text-xs bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                              {f.id}
+                            </span>
+                          </div>
+                        </td>
 
-                    <td className="py-2.5 px-3">
-                      <div className="font-bold text-slate-900 leading-tight text-xs sm:text-[13px]">
-                        {getEnglishNameDisplay(f.farmerName, f.farmerNamePa)}
-                      </div>
-                      {getPunjabiNameDisplay(f.farmerNamePa, f.farmerName) && (
-                        <div className="text-[11px] text-slate-500 font-medium leading-tight mt-0.5 font-sans">
-                          {getPunjabiNameDisplay(f.farmerNamePa, f.farmerName)}
-                        </div>
-                      )}
-                    </td>
+                        <td className="py-2.5 px-3">
+                          <div className="font-bold text-slate-900 leading-tight text-xs sm:text-[13px]">
+                            {getEnglishNameDisplay(f.farmerName, f.farmerNamePa)}
+                          </div>
+                          {getPunjabiNameDisplay(f.farmerNamePa, f.farmerName) && (
+                            <div className="text-[11px] text-slate-500 font-medium leading-tight mt-0.5 font-sans">
+                              {getPunjabiNameDisplay(f.farmerNamePa, f.farmerName)}
+                            </div>
+                          )}
+                        </td>
 
-                    <td className="py-2.5 px-3 text-slate-700">
-                      <div className="font-bold text-slate-800 leading-tight text-xs sm:text-[13px]">
-                        {getEnglishNameDisplay(f.fatherName, f.fatherNamePa)}
-                      </div>
-                      {getPunjabiNameDisplay(f.fatherNamePa, f.fatherName) && (
-                        <div className="text-[11px] text-slate-500 font-medium leading-tight mt-0.5 font-sans">
-                          {getPunjabiNameDisplay(f.fatherNamePa, f.fatherName)}
-                        </div>
-                      )}
-                    </td>
+                        <td className="py-2.5 px-3 text-slate-700">
+                          <div className="font-bold text-slate-800 leading-tight text-xs sm:text-[13px]">
+                            {getEnglishNameDisplay(f.fatherName, f.fatherNamePa)}
+                          </div>
+                          {getPunjabiNameDisplay(f.fatherNamePa, f.fatherName) && (
+                            <div className="text-[11px] text-slate-500 font-medium leading-tight mt-0.5 font-sans">
+                              {getPunjabiNameDisplay(f.fatherNamePa, f.fatherName)}
+                            </div>
+                          )}
+                        </td>
 
-                    <td className="py-2.5 px-3 text-slate-700">
-                      <div className="font-bold">{getEnglishVillageDisplay(f.village, f.villagePa, pinCodes)}</div>
-                      <div className="text-[10px] text-slate-500 font-mono">{f.pinCode}</div>
-                    </td>
+                        <td className="py-2.5 px-3 text-slate-700">
+                          <div className="font-bold">{getEnglishVillageDisplay(f.village, f.villagePa, pinCodes)}</div>
+                          <div className="text-[10px] text-slate-500 font-mono">{f.pinCode}</div>
+                        </td>
 
-                    <td className="py-2.5 px-3 font-mono text-slate-700">
-                      +91 {f.mobile}
-                    </td>
+                        <td className="py-2.5 px-3 font-mono text-slate-700">
+                          +91 {f.mobile}
+                        </td>
 
-                    <td className="py-2.5 px-3 font-mono font-bold text-slate-800">
-                      {maskAadhaarNumber(f.aadhaar)}
-                    </td>
+                        <td className="py-2.5 px-3 font-mono font-bold text-slate-800">
+                          {maskAadhaarNumber(f.aadhaar)}
+                        </td>
+                      </>
+                    )}
 
                     <td className="py-2.5 px-3 text-right">
                       <div className="flex items-center justify-end gap-1.5">

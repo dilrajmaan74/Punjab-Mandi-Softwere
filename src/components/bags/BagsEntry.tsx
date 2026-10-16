@@ -23,7 +23,8 @@ import {
   Trash2,
   MessageSquare,
   Send,
-  MapPin
+  MapPin,
+  Sparkles
 } from 'lucide-react';
 import {
   FIXED_BAG_WEIGHT_KG,
@@ -307,6 +308,16 @@ export const BagsEntry: React.FC = () => {
   const labourDeductions = labourSummary.labourDeductions;
   const conditionBreakdown = labourSummary.conditionBreakdown;
   const hasActiveDeductions = totalLabourDeduction > 0;
+
+  // One-click manual/programmatic re-apply of ₹8 Pakki Labour across all 37.5kg entries
+  const handleApplyPakkiLabour8 = () => {
+    const res = applyPakkiLabour8ToAll37_5KgEntries('all');
+    notifySaveSuccess({
+      titlePa: 'ਪੱਕੀ ਲੇਬਰ ₹8 ਲਾਗੂ ਹੋ ਗਈ',
+      titleEn: 'Pakki Labour ₹8 Applied',
+      messagePa: `ਸਾਰੀਆਂ 37.5 KG ਬੋਰੀਆਂ ਦੀਆਂ ${res.updatedCount} ਐਂਟਰੀਆਂ ਵਿੱਚ ਪੱਕੀ ਲੇਬਰ ₹8 ਪ੍ਰਤੀ ਬੋਰੀ ਅਪਡੇਟ ਹੋ ਗਈ ਹੈ।`
+    });
+  };
 
   const [savedCropFilter, setSavedCropFilter] = useState<CropFilterType>('ALL');
   const [savedConditionFilter, setSavedConditionFilter] = useState<'ALL' | 'PAKKI' | 'DOUBLE' | 'SUKKI' | 'CLEAN'>('ALL');
@@ -1688,6 +1699,17 @@ export const BagsEntry: React.FC = () => {
                 </button>
               )}
             </div>
+
+            {/* Quick Action: Apply ₹8 Pakki Labour to all 37.5kg bag entries */}
+            <button
+              type="button"
+              onClick={handleApplyPakkiLabour8}
+              className="px-3 py-1.5 rounded-lg text-xs font-black bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs transition flex items-center gap-1.5 cursor-pointer active:scale-95 shrink-0"
+              title={isEn ? "Apply ₹8 Pakki Labour to all 37.5kg entries" : "37.5 KG ਬੋਰੀਆਂ: ਸਾਰੀਆਂ ਐਂਟਰੀਆਂ ਵਿੱਚ ਪੱਕੀ ਲੇਬਰ ₹8 ਲਾਗੂ ਕਰੋ"}
+            >
+              <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+              <span>{isEn ? "Apply ₹8 Pakki Labour (37.5kg)" : "37.5 KG: ਪੱਕੀ ਲੇਬਰ ₹8 ਲਾਗੂ ਕਰੋ"}</span>
+            </button>
 
             <div className="w-full sm:w-56 relative">
               <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
