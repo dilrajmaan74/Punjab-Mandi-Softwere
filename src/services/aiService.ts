@@ -232,3 +232,81 @@ export function playPunjabiSpeech(
     }
   };
 }
+
+export interface AiLetterDraftResult {
+  refNo: string;
+  recipient: string;
+  subject: string;
+  body: string;
+  enclosure?: string;
+  language: 'pa' | 'en' | 'bilingual';
+}
+
+/**
+ * 7. Draft Official Mandi Letterpad via Google Gemini AI
+ */
+export async function draftLetterWithGemini(params: {
+  instruction: string;
+  firmName?: string;
+  firmNamePa?: string;
+  licenceNo?: string;
+  marketCommittee?: string;
+  marketCommitteePa?: string;
+  mandiBranch?: string;
+  proprietorName?: string;
+  proprietorNamePa?: string;
+  language?: 'pa' | 'en' | 'bilingual';
+}): Promise<{
+  success: boolean;
+  data: AiLetterDraftResult;
+  engine: string;
+}> {
+  try {
+    const res = await fetch('/api/ai/draft-letter', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params)
+    });
+    if (!res.ok) throw new Error('Failed to draft letter with Gemini');
+    const json = await res.json();
+    return json;
+  } catch (err) {
+    console.warn('AI Letter drafting failed, generating high-grade client fallback:', err);
+    const isEn = params.language === 'en';
+    const isBilingual = params.language === 'bilingual';
+    const firmName = params.firmName || 'New Jammu Trading Co';
+    const firmNamePa = params.firmNamePa || 'ਨਿਊ ਜੰਮੂ ਟਰੇਡਿੰਗ ਕੰਪਨੀ';
+    const licenceNo = params.licenceNo || 'JAL/LKH/239';
+    const propName = params.proprietorName || 'Arpanreet Singh';
+    const propNamePa = params.proprietorNamePa || 'ਅਰਪਨਰੀਤ ਸਿੰਘ';
+    const mandi = params.mandiBranch || 'ਦਾਣਾ ਮੰਡੀ ਕੰਗ ਖੁਰਦ / ਮਹਿਰਾਜਵਾਲਾ / ਕਮਾਲਪੁਰ';
+
+    const fallback: AiLetterDraftResult = {
+      refNo: `NJTC/MK/${new Date().getFullYear()}/${Math.floor(100 + Math.random() * 900)}`,
+      recipient: isEn
+        ? `The Secretary / In-charge,\nMarket Committee Lohian Khas,\nTehsil Shahkot, Distt. Jalandhar (Punjab).`
+        : `ਸਕੱਤਰ ਸਾਹਿਬ (The Secretary),\nਮਾਰਕੀਟ ਕਮੇਟੀ ਲੋਹੀਆਂ ਖਾਸ,\nਤਹਿਸੀਲ ਸ਼ਾਹਕੋਟ, ਜ਼ਿਲ੍ਹਾ ਜਲੰਧਰ (ਪੰਜਾਬ)।`,
+      subject: isEn
+        ? `Subject: Regarding Mandi Operations and Official Request - ${firmName}`
+        : isBilingual
+        ? `ਵਿਸ਼ਾ: ਮੰਡੀ ਕਾਰਜ ਸੰਬੰਧੀ ਸਰਕਾਰੀ ਬੇਨਤੀ ਪੱਤਰ / Sub: Mandi Operations Official Application - ${firmName}`
+        : `ਵਿਸ਼ਾ: ਦਾਣਾ ਮੰਡੀ ਕਾਰੋਬਾਰ ਅਤੇ ਸਰਕਾਰੀ ਕਾਰਵਾਈ ਸੰਬੰਧੀ ਜ਼ਰੂਰੀ ਬੇਨਤੀ ਪੱਤਰ — ${firmNamePa}`,
+      body: isEn
+        ? `Respected Sir,\n\nWith utmost respect, we submit that our firm M/s ${firmName} (Licence No. ${licenceNo}) has been functioning smoothly as a licensed commission agent at ${mandi}.\n\nIn connection with your office instructions regarding: "${params.instruction}", we hereby formally state that all weighment, farmer procurement, and crop handling are conducted strictly as per statutory regulations.\n\nKindly acknowledge this communication and initiate the necessary administrative action at your earliest convenience.\n\nThanking you,\nYours faithfully,\nFor ${firmName}\nProprietor: ${propName}`
+        : isBilingual
+        ? `ਸਤਿਕਾਰਯੋਗ ਜੀ (Respected Sir),\n\nਸਨਿਮਰ ਬੇਨਤੀ ਹੈ ਕਿ ਸਾਡੀ ਫਰਮ ਮੈਸ. ${firmNamePa} (M/s ${firmName}, Licence No. ${licenceNo}) ਵੱਲੋਂ ${mandi} ਵਿਖੇ ਆੜ੍ਹਤ ਦਾ ਕੰਮ ਨਿਰਵਿਘਨ ਚਲਾਇਆ ਜਾ ਰਿਹਾ ਹੈ।\n(With utmost respect, we submit that our licensed firm is functioning smoothly as per Punjab Mandi Board rules).\n\nਵੇਰਵਾ: "${params.instruction}"। ਸਾਡੇ ਵੱਲੋਂ ਸਮੂਹ ਤੁਲਾਈ, ਸਰਕਾਰੀ ਖਰੀਦ, ਬਾਰਦਾਨਾ ਅਤੇ ਕਿਸਾਨ ਅਦਾਇਗੀਆਂ ਦਾ ਰਿਕਾਰਡ ਪੂਰੀ ਤਰ੍ਹਾਂ ਦਰੁਸਤ ਰੱਖਿਆ ਗਿਆ ਹੈ।\n\nਕਿਰਪਾ ਕਰਕੇ ਇਸ ਪੱਤਰ ਅਨੁਸਾਰ ਅਗਲੇਰੀ ਲੋੜੀਂਦੀ ਕਾਰਵਾਈ ਤੁਰੰਤ ਅਮਲ ਵਿੱਚ ਲਿਆਂਦੀ ਜਾਵੇ ਜੀ।\n\nਧੰਨਵਾਦ ਸਹਿਤ (Thanking You),\nਵਾਸਤੇ: ਮੈਸ. ${firmNamePa} (For ${firmName})\nਪ੍ਰੋਪਰਾਈਟਰ: ${propNamePa} (${propName})`
+        : `ਸਤਿਕਾਰਯੋਗ ਜੀ,\n\nਸਨਿਮਰ ਬੇਨਤੀ ਹੈ ਕਿ ਸਾਡੀ ਫਰਮ ਮੈਸ. ${firmNamePa} (ਲਾਇਸੰਸ ਨੰ. ${licenceNo}) ਵੱਲੋਂ ${mandi} ਵਿਖੇ ਪੰਜਾਬ ਮੰਡੀ ਬੋਰਡ ਦੇ ਨਿਯਮਾਂ ਅਨੁਸਾਰ ਆੜ੍ਹਤ ਦਾ ਕੰਮ ਨਿਰਵਿਘਨ ਚਲਾਇਆ ਜਾ ਰਿਹਾ ਹੈ।\n\nਤੁਹਾਡੇ ਧਿਆਨ ਹਿੱਤ ਬੇਨਤੀ ਹੈ: "${params.instruction}"। ਸਾਡੇ ਵੱਲੋਂ ਸਮੂਹ ਤੁਲਾਈ, ਸਰਕਾਰੀ ਖਰੀਦ, ਬਾਰਦਾਨਾ ਅਤੇ ਕਿਸਾਨ ਅਦਾਇਗੀਆਂ ਦਾ ਰਿਕਾਰਡ ਪੂਰੀ ਤਰ੍ਹਾਂ ਦਰੁਸਤ ਰੱਖਿਆ ਗਿਆ ਹੈ।\n\nਕਿਰਪਾ ਕਰਕੇ ਇਸ ਪੱਤਰ ਅਨੁਸਾਰ ਅਗਲੇਰੀ ਲੋੜੀਂਦੀ ਕਾਰਵਾਈ ਤੁਰੰਤ ਅਮਲ ਵਿੱਚ ਲਿਆਂਦੀ ਜਾਵੇ ਜੀ।\n\nਧੰਨਵਾਦ ਸਹਿਤ,\nਵਾਸਤੇ: ਮੈਸ. ${firmNamePa}\nਪ੍ਰੋਪਰਾਈਟਰ: ${params.proprietorNamePa || propNamePa}`,
+      enclosure: isEn
+        ? 'Enclosure: Weighment & Daily Mandi Summary Record'
+        : 'ਨੱਥੀ: ਕੱਚੀ ਤੋਲ ਪਰਚੀ / ਰੋਜ਼ਾਨਾ ਖਰੀਦ ਰਜਿਸਟਰ ਕਾਪੀ',
+      language: params.language || 'pa'
+    };
+
+    return {
+      success: true,
+      data: fallback,
+      engine: 'client-offline-fallback'
+    };
+  }
+}
+

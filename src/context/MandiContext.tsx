@@ -66,7 +66,8 @@ import {
   validateDateInFiscalYear,
   isRecordInFiscalYear,
   compareDatesChronological,
-  transferDateTo2026_27
+  transferDateTo2026_27,
+  migrate37_5KgEntriesToPakkiLabour8
 } from '../utils/calculations';
 import { isSupabaseConfigured } from '../lib/supabase';
 import {
@@ -156,8 +157,10 @@ export const DEFAULT_FIRM: MandiFirm = {
   marketCommitteePa: 'ਲੋਹੀਆਂ ਖਾਸ',
   mobile: '98147-74651',
   licenceNo: 'JAL/LKH/133',
+  proprietorName: 'Himmat Singh',
+  proprietorNamePa: 'ਹਿੰਮਤ ਸਿੰਘ',
   pan: 'AAACJ1234F',
-  gstin: '03AAACJ1234F1Z5',
+  gstin: '', // Without GST number
   isDefault: true,
   createdAt: '01/04/2024'
 };
@@ -172,8 +175,10 @@ export const DEFAULT_FIRM_MEHRAJWALA: MandiFirm = {
   marketCommitteePa: 'ਲੋਹੀਆਂ ਖਾਸ',
   mobile: '98147-74651',
   licenceNo: 'JAL/LKH/133/M',
+  proprietorName: 'Himmat Singh',
+  proprietorNamePa: 'ਹਿੰਮਤ ਸਿੰਘ',
   pan: 'AAACJ1234F',
-  gstin: '03AAACJ1234F1Z5',
+  gstin: '', // Without GST number
   isDefault: false,
   createdAt: '01/04/2026'
 };
@@ -188,14 +193,35 @@ export const DEFAULT_FIRM_KAMALPUR: MandiFirm = {
   marketCommitteePa: 'ਲੋਹੀਆਂ ਖਾਸ',
   mobile: '98147-74651',
   licenceNo: 'JAL/LKH/133/K',
+  proprietorName: 'Himmat Singh',
+  proprietorNamePa: 'ਹਿੰਮਤ ਸਿੰਘ',
   pan: 'AAACJ1234F',
-  gstin: '03AAACJ1234F1Z5',
+  gstin: '', // Without GST number
+  isDefault: false,
+  createdAt: '01/04/2026'
+};
+
+export const DEFAULT_FIRM_NEW_JAMMU: MandiFirm = {
+  id: 'FIRM-004',
+  name: 'New Jammu Trading Co',
+  namePa: 'ਨਿਊ ਜੰਮੂ ਟਰੇਡਿੰਗ ਕੰਪਨੀ',
+  address: 'Dana Mandi Kang Khurd / Mehrajwala / Kamalpur, Teh. Shahkot, Distt. Jalandhar, Punjab - 144629',
+  addressPa: 'ਦਾਣਾ ਮੰਡੀ ਕੰਗ ਖੁਰਦ / ਮਹਿਰਾਜਵਾਲਾ / ਕਮਾਲਪੁਰ, ਤਹਿ. ਸ਼ਾਹਕੋਟ, ਜ਼ਿਲ੍ਹਾ ਜਲੰਧਰ, ਪੰਜਾਬ - 144629',
+  marketCommittee: 'Lohian Khas',
+  marketCommitteePa: 'ਲੋਹੀਆਂ ਖਾਸ',
+  mobile: '98147-74651',
+  licenceNo: 'JAL/LKH/239',
+  proprietorName: 'Arpanreet Singh',
+  proprietorNamePa: 'ਅਰਪਨਰੀਤ ਸਿੰਘ',
+  pan: '',
+  gstin: '', // Without GST number
   isDefault: false,
   createdAt: '01/04/2026'
 };
 
 export const INITIAL_DEFAULT_FIRMS: MandiFirm[] = [
   DEFAULT_FIRM,
+  DEFAULT_FIRM_NEW_JAMMU,
   DEFAULT_FIRM_MEHRAJWALA,
   DEFAULT_FIRM_KAMALPUR
 ];
@@ -406,6 +432,12 @@ interface MandiContextType {
   addMultipleBagsEntries: (entries: Omit<BagsEntryRecord, 'id' | 'entryNumber' | 'createdAt'>[]) => BagsEntryRecord[];
   updateBagsEntry: (id: string, updates: Partial<BagsEntryRecord>) => boolean;
   deleteBagsEntry: (id: string) => boolean;
+  applyPakkiLabour8ToAll37_5KgEntries: (firmScope?: 'current' | 'all') => {
+    success: boolean;
+    updatedCount: number;
+    messagePa: string;
+    messageEn: string;
+  };
 
   // Bardana Operations
   generateNextBardanaId: () => string;
@@ -887,6 +919,20 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
               localStorage.setItem(LOCAL_STORAGE_KEYS.FIRMS, JSON.stringify(list));
             } catch {}
           }
+
+          // Ensure New Jammu Trading Co (Licence JAL/LKH/239) is present in the list
+          const hasNewJammu = list.some(
+            (f) =>
+              f.id === 'FIRM-004' ||
+              f.name.toLowerCase().includes('new jammu') ||
+              f.licenceNo === 'JAL/LKH/239'
+          );
+          if (!hasNewJammu) {
+            list.push(DEFAULT_FIRM_NEW_JAMMU);
+            try {
+              localStorage.setItem(LOCAL_STORAGE_KEYS.FIRMS, JSON.stringify(list));
+            } catch {}
+          }
           return list;
         }
       }
@@ -920,48 +966,11 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [bagsEntries, setBagsEntries] = useState<BagsEntryRecord[]>(() => {
     const list = loadFirmData<BagsEntryRecord[]>(LOCAL_STORAGE_KEYS.BAGS_ENTRIES, activeFirmId, []);
     if (!Array.isArray(list)) return [];
-    // Auto-repair any entries where Pakha or Sukhi was calculated, but fixed Pakki labour was omitted
-    const repaired = list.map((entry) => {
-      const totalBags = entry.bags || ((entry.newBags || 0) + (entry.oldBags || 0));
-      const hasDoubleOrSukki = 
-        (entry.conditionBreakdown?.doubleBags !== undefined && entry.conditionBreakdown.doubleBags > 0) ||
-        (entry.conditionBreakdown?.sukkiBags !== undefined && entry.conditionBreakdown.sukkiBags > 0) ||
-        (entry.labourDeductions?.pakkaDoubleLabourAmount !== undefined && entry.labourDeductions.pakkaDoubleLabourAmount > 0) ||
-        (entry.labourDeductions?.sukhiLabourAmount !== undefined && entry.labourDeductions.sukhiLabourAmount > 0);
+    
+    // Automatically edit and set Pakki Labour = ₹8 for all 37.5kg bag entries
+    const { updatedList } = migrate37_5KgEntriesToPakkiLabour8(list);
 
-      const pakkiAmount = entry.conditionBreakdown?.pakkiAmount ?? entry.labourDeductions?.pakkiLabourAmount ?? 0;
-      const pakkiBags = entry.conditionBreakdown?.pakkiBags ?? entry.labourDeductions?.pakkiBagsCount ?? 0;
-
-      if (totalBags > 0 && hasDoubleOrSukki && (pakkiAmount === 0 || pakkiBags === 0)) {
-        const doubleBags = entry.conditionBreakdown?.doubleBags ?? entry.labourDeductions?.doubleBagsCount ?? 0;
-        const doubleRate = entry.conditionBreakdown?.doubleRate ?? entry.labourDeductions?.pakkaDoubleLabourRate ?? 14;
-        const sukkiBags = entry.conditionBreakdown?.sukkiBags ?? entry.labourDeductions?.sukkiBagsCount ?? 0;
-        const sukkiRate = entry.conditionBreakdown?.sukkiRate ?? entry.labourDeductions?.sukhiLabourRate ?? 5;
-        const pakkiRate = 8;
-
-        const recalc = calculateAutomaticLabour(
-          entry.newBags || 0,
-          entry.oldBags || 0,
-          doubleBags,
-          sukkiBags,
-          entry.totalAmount,
-          undefined,
-          { pakkiRate, doubleRate, sukkiRate },
-          totalBags,
-          { totalBagsOverride: totalBags }
-        );
-
-        return {
-          ...entry,
-          labourDeductions: recalc.labourDeductions,
-          conditionBreakdown: recalc.conditionBreakdown,
-          netAmount: recalc.netAmount
-        };
-      }
-      return entry;
-    });
-
-    const transferred = transferRecordArrayTo2026_27(repaired, 'date');
+    const transferred = transferRecordArrayTo2026_27(updatedList, 'date');
     saveFirmData(LOCAL_STORAGE_KEYS.BAGS_ENTRIES, activeFirmId, transferred);
     return transferred;
   });
@@ -1462,6 +1471,26 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       console.warn('Initial FY 2026-27 storage transfer check error:', e);
     }
   }, []);
+
+  // Automatically edit all saved 37.5kg bag entries to have Pakki Labour = ₹8 across all firms on software load
+  useEffect(() => {
+    try {
+      firms.forEach((f) => {
+        const firmBags = loadFirmData<BagsEntryRecord[]>(LOCAL_STORAGE_KEYS.BAGS_ENTRIES, f.id, []);
+        if (Array.isArray(firmBags) && firmBags.length > 0) {
+          const { updatedList, modifiedCount } = migrate37_5KgEntriesToPakkiLabour8(firmBags, settings);
+          if (modifiedCount > 0) {
+            saveFirmData(LOCAL_STORAGE_KEYS.BAGS_ENTRIES, f.id, updatedList);
+            if (f.id === activeFirmIdRef.current) {
+              setBagsEntries(updatedList);
+            }
+          }
+        }
+      });
+    } catch (e) {
+      console.warn('Auto-migration of 37.5kg bag entries to ₹8 Pakki Labour:', e);
+    }
+  }, [firms, settings]);
 
   // Sync to LocalStorage (strictly isolated per activeFirmId)
   useEffect(() => {
@@ -3248,6 +3277,33 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   /**
+   * One-click manual/programmatic migration to set Pakki Labour = ₹8 across all 37.5kg bag entries
+   */
+  const applyPakkiLabour8ToAll37_5KgEntries = (firmScope: 'current' | 'all' = 'all') => {
+    let totalModified = 0;
+    const targetFirms = firmScope === 'all' ? firms : firms.filter((f) => f.id === activeFirmIdRef.current);
+
+    targetFirms.forEach((f) => {
+      const firmBags = loadFirmData<BagsEntryRecord[]>(LOCAL_STORAGE_KEYS.BAGS_ENTRIES, f.id, []);
+      if (Array.isArray(firmBags) && firmBags.length > 0) {
+        const { updatedList, modifiedCount } = migrate37_5KgEntriesToPakkiLabour8(firmBags, settings);
+        totalModified += modifiedCount;
+        saveFirmData(LOCAL_STORAGE_KEYS.BAGS_ENTRIES, f.id, updatedList);
+        if (f.id === activeFirmIdRef.current) {
+          setBagsEntries(updatedList);
+        }
+      }
+    });
+
+    return {
+      success: true,
+      updatedCount: totalModified,
+      messagePa: `ਸਾਰੀਆਂ 37.5 KG ਬੋਰੀਆਂ ਦੀਆਂ ${totalModified} ਐਂਟਰੀਆਂ ਵਿੱਚ ਪੱਕੀ ਲੇਬਰ ₹8 ਪ੍ਰਤੀ ਬੋਰੀ ਸਫਲਤਾਪੂਰਵਕ ਲਾਗੂ ਹੋ ਗਈ ਹੈ।`,
+      messageEn: `Successfully applied ₹8 Pakki Labour to ${totalModified} 37.5kg bag entries.`
+    };
+  };
+
+  /**
    * Generates next sequential Bardana Receiving ID
    */
   const generateNextBardanaId = (): string => {
@@ -4561,7 +4617,8 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     // 2. Load target firm's isolated data
     const newFarmers = loadFirmData<Farmer[]>(LOCAL_STORAGE_KEYS.FARMERS, newFirmId, []);
-    const newBags = loadFirmData<BagsEntryRecord[]>(LOCAL_STORAGE_KEYS.BAGS_ENTRIES, newFirmId, []);
+    const rawBags = loadFirmData<BagsEntryRecord[]>(LOCAL_STORAGE_KEYS.BAGS_ENTRIES, newFirmId, []);
+    const { updatedList: newBags } = migrate37_5KgEntriesToPakkiLabour8(rawBags, settings);
     const newBardana = loadFirmData<BardanaReceivedRecord[]>(LOCAL_STORAGE_KEYS.BARDANA, newFirmId, []);
     const newPurchases = loadFirmData<DailyPurchaseRecord[]>(LOCAL_STORAGE_KEYS.DAILY_PURCHASES, newFirmId, []);
     const newPayments = loadFirmData<FarmerPaymentRecord[]>(LOCAL_STORAGE_KEYS.FARMER_PAYMENTS, newFirmId, []);
@@ -5490,6 +5547,7 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         addMultipleBagsEntries,
         updateBagsEntry,
         deleteBagsEntry,
+        applyPakkiLabour8ToAll37_5KgEntries,
         generateNextBardanaId,
         addBardanaRecord,
         updateBardanaRecord,

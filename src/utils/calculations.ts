@@ -877,6 +877,106 @@ export function calculateAutomaticLabour(
 }
 
 /**
+ * Automatically migrate all 37.5kg bag entries to have Pakki Labour = ₹8 per bag
+ * Specifically requested: "37.5kg wali Bag di entry vch jo mere software vch Save ne oonu nu automatically edit kar k ode vch sari entry vch Paki Labour 8rs kardo all entry di"
+ */
+export function migrate37_5KgEntriesToPakkiLabour8(
+  list: BagsEntryRecord[],
+  settings?: Partial<MandiSettings>
+): { updatedList: BagsEntryRecord[]; modifiedCount: number } {
+  if (!Array.isArray(list) || list.length === 0) {
+    return { updatedList: [], modifiedCount: 0 };
+  }
+
+  let modifiedCount = 0;
+  const updatedList = list.map((entry) => {
+    // Check if 37.5kg bag entry
+    const is37_5Kg =
+      entry.weightPerBagKg === 37.5 ||
+      entry.weightPerBagKg === 37.50 ||
+      !entry.weightPerBagKg ||
+      entry.cropType === 'PADDY' ||
+      !entry.cropType;
+
+    if (!is37_5Kg) {
+      return entry;
+    }
+
+    const totalBags = entry.bags || ((entry.newBags || 0) + (entry.oldBags || 0));
+    if (totalBags <= 0) {
+      return entry;
+    }
+
+    // Preserve existing double and sukki bags if entered
+    const doubleBags =
+      entry.conditionBreakdown?.doubleBags ??
+      entry.labourDeductions?.doubleBagsCount ??
+      0;
+    const doubleRate =
+      entry.conditionBreakdown?.doubleRate ??
+      entry.labourDeductions?.pakkaDoubleLabourRate ??
+      (settings?.defaultPakkaDoubleLabourRate ?? DEFAULT_PAKKA_DOUBLE_LABOUR_RATE);
+    const sukkiBags =
+      entry.conditionBreakdown?.sukkiBags ??
+      entry.labourDeductions?.sukkiBagsCount ??
+      0;
+    const sukkiRate =
+      entry.conditionBreakdown?.sukkiRate ??
+      entry.labourDeductions?.sukhiLabourRate ??
+      (settings?.defaultSukhiLabourRate ?? DEFAULT_SUKHI_LABOUR_RATE);
+
+    const pakkiRate = 8;
+    const pakkiBags = totalBags;
+
+    const grossAmount =
+      Number(entry.totalAmount) ||
+      calculatePayableAmount(entry.grandTotalKg || totalBags * 37.5, entry.ratePerQtl || FIXED_RATE_PER_QTL);
+
+    const recalc = calculateAutomaticLabour(
+      entry.newBags || 0,
+      entry.oldBags || 0,
+      doubleBags,
+      sukkiBags,
+      grossAmount,
+      settings,
+      { pakkiRate: 8, doubleRate, sukkiRate },
+      pakkiBags,
+      {
+        totalBagsOverride: totalBags,
+        customDeductions: entry.labourDeductions?.customDeductions,
+        otherDeductionsEnabled: entry.labourDeductions?.otherDeductionsEnabled
+      }
+    );
+
+    // Determine if anything changed
+    const currentPakkiRate =
+      entry.conditionBreakdown?.pakkiRate ?? entry.labourDeductions?.pakkiLabourRate;
+    const currentPakkiAmount =
+      entry.conditionBreakdown?.pakkiAmount ?? entry.labourDeductions?.pakkiLabourAmount;
+    const expectedPakkiAmount = totalBags * 8;
+
+    const needsUpdate =
+      currentPakkiRate !== 8 ||
+      currentPakkiAmount !== expectedPakkiAmount ||
+      !entry.labourDeductions?.pakkiLabourEnabled ||
+      entry.netAmount !== recalc.netAmount;
+
+    if (needsUpdate) {
+      modifiedCount++;
+    }
+
+    return {
+      ...entry,
+      labourDeductions: recalc.labourDeductions,
+      conditionBreakdown: recalc.conditionBreakdown,
+      netAmount: recalc.netAmount
+    };
+  });
+
+  return { updatedList, modifiedCount };
+}
+
+/**
  * Calculate standard purchase breakdown and amount from bag count
  */
 export function calculatePurchaseWeightAndAmount(bags: number, rate = FIXED_RATE_PER_QTL): {

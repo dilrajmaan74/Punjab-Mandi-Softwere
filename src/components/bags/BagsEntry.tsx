@@ -89,7 +89,8 @@ export const BagsEntry: React.FC = () => {
     activeCropConfig,
     activeFiscalYear,
     isYearLocked,
-    validateDateInFiscalYear
+    validateDateInFiscalYear,
+    applyPakkiLabour8ToAll37_5KgEntries
   } = useMandi();
   const isEn = language === 'en';
   const { notifySaveSuccess, notifyDeleteSuccess, confirmDelete, notifyError } = useNotification();
@@ -329,7 +330,7 @@ export const BagsEntry: React.FC = () => {
       list = list.filter((b) => {
         const brk = getBagsEntryLabourBreakdown(
           b,
-          settings.defaultPakkiLabourRate ?? 7,
+          settings.defaultPakkiLabourRate ?? 8,
           settings.defaultPakkaDoubleLabourRate ?? 14,
           settings.defaultSukhiLabourRate ?? 5
         );

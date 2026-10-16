@@ -4,7 +4,8 @@ import fs from "fs";
 import {
   parseMandiVoiceTranscript,
   generateWhatsAppVoiceScript,
-  generateDailyMunimSummary
+  generateDailyMunimSummary,
+  draftLetterWithGemini
 } from "./server/aiService.ts";
 
 async function startServer() {
@@ -67,6 +68,21 @@ async function startServer() {
       return res.status(200).json(result);
     } catch (err: any) {
       console.error("AI daily-munim-summary error:", err);
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Feature 7: Gemini AI Official Mandi Letterpad Drafter (100% Google Gemini in Punjabi & English)
+  app.post("/api/ai/draft-letter", async (req, res) => {
+    try {
+      const params = req.body;
+      if (!params || !params.instruction) {
+        return res.status(400).json({ success: false, error: "Missing instruction" });
+      }
+      const result = await draftLetterWithGemini(params);
+      return res.status(200).json(result);
+    } catch (err: any) {
+      console.error("AI draft-letter error:", err);
       return res.status(500).json({ success: false, error: err.message });
     }
   });

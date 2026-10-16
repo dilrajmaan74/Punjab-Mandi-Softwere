@@ -239,6 +239,8 @@ export interface MandiFirm {
   username?: string; // Firm specific username/munim
   password?: string; // Firm specific password
   pin?: string; // Quick 4-digit PIN
+  proprietorName?: string; // e.g. "Himmat Singh" or "Arpanreet Singh"
+  proprietorNamePa?: string; // e.g. "ਹਿੰਮਤ ਸਿੰਘ" or "ਅਰਪਨਰੀਤ ਸਿੰਘ"
 }
 
 export interface AppUserAccount {
