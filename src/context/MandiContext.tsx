@@ -69,7 +69,7 @@ import {
   transferDateTo2026_27,
   migrate37_5KgEntriesToPakkiLabour8
 } from '../utils/calculations';
-import { isSupabaseConfigured } from '../lib/supabase';
+import { isSupabaseConfigured, getSupabaseClient } from '../lib/supabase';
 import {
   loadAllDataFromSupabase,
   migrateAllDataToSupabase,
@@ -103,8 +103,18 @@ import {
   supabaseSavePinCodes,
   supabaseUpsertRecycleItem,
   supabaseDeleteRecycleItem,
-  supabaseClearRecycleBin
+  supabaseClearRecycleBin,
+  drainPendingCloudDeletions
 } from '../services/supabaseService';
+import {
+  recordDeletedId,
+  recordDeletedIds,
+  removeDeletedId,
+  isRecordDeleted,
+  getAllDeletedIds,
+  syncTombstonesFromRecycleBin,
+  queuePendingCloudDeletion
+} from '../utils/tombstoneStorage';
 import {
   addFarmerAuditLog,
   getMaxFarmerSequence,
@@ -957,7 +967,9 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   // 2. Farmers list - strictly isolated per active firm
   const [farmers, setFarmers] = useState<Farmer[]>(() => {
     const list = loadFirmData<Farmer[]>(LOCAL_STORAGE_KEYS.FARMERS, activeFirmId, []);
-    const transferred = transferFarmersTo2026_27(Array.isArray(list) ? list : []);
+    const deleted = getAllDeletedIds(activeFirmId);
+    const filtered = (Array.isArray(list) ? list : []).filter((f) => !f.isDeleted && !deleted.has(f.id));
+    const transferred = transferFarmersTo2026_27(filtered);
     saveFirmData(LOCAL_STORAGE_KEYS.FARMERS, activeFirmId, transferred);
     return transferred;
   });
@@ -966,9 +978,11 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [bagsEntries, setBagsEntries] = useState<BagsEntryRecord[]>(() => {
     const list = loadFirmData<BagsEntryRecord[]>(LOCAL_STORAGE_KEYS.BAGS_ENTRIES, activeFirmId, []);
     if (!Array.isArray(list)) return [];
+    const deleted = getAllDeletedIds(activeFirmId);
+    const filtered = list.filter((b) => !deleted.has(b.id) && !deleted.has((b as any).entryNumber));
     
     // Automatically edit and set Pakki Labour = ₹8 for all 37.5kg bag entries
-    const { updatedList } = migrate37_5KgEntriesToPakkiLabour8(list);
+    const { updatedList } = migrate37_5KgEntriesToPakkiLabour8(filtered);
 
     const transferred = transferRecordArrayTo2026_27(updatedList, 'date');
     saveFirmData(LOCAL_STORAGE_KEYS.BAGS_ENTRIES, activeFirmId, transferred);
@@ -978,7 +992,9 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   // 4. Bardana Received Records - strictly isolated per active firm
   const [bardanaRecords, setBardanaRecords] = useState<BardanaReceivedRecord[]>(() => {
     const list = loadFirmData<BardanaReceivedRecord[]>(LOCAL_STORAGE_KEYS.BARDANA, activeFirmId, []);
-    const transferred = transferRecordArrayTo2026_27(Array.isArray(list) ? list : [], 'date');
+    const deleted = getAllDeletedIds(activeFirmId);
+    const filtered = (Array.isArray(list) ? list : []).filter((b) => !deleted.has(b.id));
+    const transferred = transferRecordArrayTo2026_27(filtered, 'date');
     saveFirmData(LOCAL_STORAGE_KEYS.BARDANA, activeFirmId, transferred);
     return transferred;
   });
@@ -988,14 +1004,16 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [dailyPurchaseRecords, setDailyPurchaseRecords] = useState<DailyPurchaseRecord[]>(() => {
     const list = loadFirmData<DailyPurchaseRecord[]>(LOCAL_STORAGE_KEYS.DAILY_PURCHASES, activeFirmId, []);
     if (!Array.isArray(list)) return [];
+    const deleted = getAllDeletedIds(activeFirmId);
+    const nonDeleted = list.filter((p) => !deleted.has(p.id));
     const seen = new Set<string>();
     let max = 0;
-    list.forEach((r) => {
+    nonDeleted.forEach((r) => {
       const num = parseInt(r.id?.replace(/\D/g, '') || '0', 10);
       if (!isNaN(num) && num > max) max = num;
     });
     if (purchaseIdCounterRef) purchaseIdCounterRef.current = max;
-    const sanitized = list.map((r) => {
+    const sanitized = nonDeleted.map((r) => {
       if (!r.id || seen.has(r.id)) {
         max++;
         const newId = `PUR-${String(max).padStart(5, '0')}`;
@@ -1013,7 +1031,9 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   // 6. Farmer Payment Records - strictly isolated per active firm
   const [farmerPayments, setFarmerPayments] = useState<FarmerPaymentRecord[]>(() => {
     const list = loadFirmData<FarmerPaymentRecord[]>(LOCAL_STORAGE_KEYS.FARMER_PAYMENTS, activeFirmId, []);
-    const transferred = transferRecordArrayTo2026_27(Array.isArray(list) ? list : [], 'date');
+    const deleted = getAllDeletedIds(activeFirmId);
+    const filtered = (Array.isArray(list) ? list : []).filter((p) => !deleted.has(p.id));
+    const transferred = transferRecordArrayTo2026_27(filtered, 'date');
     saveFirmData(LOCAL_STORAGE_KEYS.FARMER_PAYMENTS, activeFirmId, transferred);
     return transferred;
   });
@@ -1021,7 +1041,9 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   // 7. Farmer Advance Records - strictly isolated per active firm
   const [farmerAdvances, setFarmerAdvances] = useState<FarmerAdvanceRecord[]>(() => {
     const list = loadFirmData<FarmerAdvanceRecord[]>(LOCAL_STORAGE_KEYS.ADVANCES, activeFirmId, []);
-    const transferred = transferRecordArrayTo2026_27(Array.isArray(list) ? list : [], 'date');
+    const deleted = getAllDeletedIds(activeFirmId);
+    const filtered = (Array.isArray(list) ? list : []).filter((a) => !deleted.has(a.id));
+    const transferred = transferRecordArrayTo2026_27(filtered, 'date');
     saveFirmData(LOCAL_STORAGE_KEYS.ADVANCES, activeFirmId, transferred);
     return transferred;
   });
@@ -1029,7 +1051,9 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   // 8. Boli Records - strictly isolated per active firm
   const [boliRecords, setBoliRecords] = useState<BoliRecord[]>(() => {
     const list = loadFirmData<BoliRecord[]>(LOCAL_STORAGE_KEYS.BOLI_RECORDS, activeFirmId, []);
-    const transferred = transferRecordArrayTo2026_27(Array.isArray(list) ? list : [], 'date');
+    const deleted = getAllDeletedIds(activeFirmId);
+    const filtered = (Array.isArray(list) ? list : []).filter((b) => !deleted.has(b.id));
+    const transferred = transferRecordArrayTo2026_27(filtered, 'date');
     saveFirmData(LOCAL_STORAGE_KEYS.BOLI_RECORDS, activeFirmId, transferred);
     return transferred;
   });
@@ -1382,15 +1406,33 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           d.trucks.length > 0;
 
         if (hasSupabaseData) {
-          // Supabase is the PRIMARY source of truth - Ensure 100% data belongs to FY 2026-27
-          const cleanFarmers = transferFarmersTo2026_27(d.farmers || []);
-          const cleanBags = transferRecordArrayTo2026_27(d.bagsEntries || [], 'date');
-          const cleanBardana = transferRecordArrayTo2026_27(d.bardanaRecords || [], 'date');
-          const cleanPurchases = transferRecordArrayTo2026_27(d.dailyPurchaseRecords || [], 'date');
-          const cleanPayments = transferRecordArrayTo2026_27(d.farmerPayments || [], 'date');
-          const cleanAdvances = transferRecordArrayTo2026_27(d.farmerAdvances || [], 'date');
-          const cleanBolis = transferRecordArrayTo2026_27(d.boliRecords || [], 'date');
-          const cleanLefting = transferRecordArrayTo2026_27(d.leftingRecords || [], 'dispatchDate');
+          // 100% Reliable Tombstone Sync: Never resurrect deleted entries on any device
+          syncTombstonesFromRecycleBin(d.recycleBinItems || [], activeFirmId);
+          const allDeleted = getAllDeletedIds(activeFirmId);
+          (d.recycleBinItems || []).forEach((r) => {
+            if (r.originalId) allDeleted.add(r.originalId.trim());
+            if (r.recordData?.id) allDeleted.add(String(r.recordData.id).trim());
+            if (r.recordData?.entryNumber) allDeleted.add(String(r.recordData.entryNumber).trim());
+          });
+
+          // Supabase is the PRIMARY source of truth - Ensure 100% data belongs to FY 2026-27 & exclude any deleted records
+          const rawFarmers = (d.farmers || []).filter((f) => !f.isDeleted && !allDeleted.has(f.id));
+          const rawBags = (d.bagsEntries || []).filter((b) => !allDeleted.has(b.id) && !allDeleted.has((b as any).entryNumber));
+          const rawBardana = (d.bardanaRecords || []).filter((b) => !allDeleted.has(b.id));
+          const rawPurchases = (d.dailyPurchaseRecords || []).filter((p) => !allDeleted.has(p.id));
+          const rawPayments = (d.farmerPayments || []).filter((p) => !allDeleted.has(p.id));
+          const rawAdvances = (d.farmerAdvances || []).filter((a) => !allDeleted.has(a.id));
+          const rawBolis = (d.boliRecords || []).filter((b) => !allDeleted.has(b.id));
+          const rawLefting = (d.leftingRecords || []).filter((l) => !allDeleted.has(l.id));
+
+          const cleanFarmers = transferFarmersTo2026_27(rawFarmers);
+          const cleanBags = transferRecordArrayTo2026_27(rawBags, 'date');
+          const cleanBardana = transferRecordArrayTo2026_27(rawBardana, 'date');
+          const cleanPurchases = transferRecordArrayTo2026_27(rawPurchases, 'date');
+          const cleanPayments = transferRecordArrayTo2026_27(rawPayments, 'date');
+          const cleanAdvances = transferRecordArrayTo2026_27(rawAdvances, 'date');
+          const cleanBolis = transferRecordArrayTo2026_27(rawBolis, 'date');
+          const cleanLefting = transferRecordArrayTo2026_27(rawLefting, 'dispatchDate');
 
           if (d.farmers) setFarmers(cleanFarmers);
           if (d.bagsEntries) setBagsEntries(cleanBags);
@@ -1427,12 +1469,8 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           saveFirmData(LOCAL_STORAGE_KEYS.BOLI_RECORDS, activeFirmId, cleanBolis);
           saveFirmData(LOCAL_STORAGE_KEYS.LEFTING, activeFirmId, cleanLefting);
 
-          // Background sync migrated records to Supabase with FY 2026-27
-          cleanBags.forEach((b) => supabaseUpsertBagsEntry(b, activeFirmId, DEFAULT_ACTIVE_YEAR).catch(console.error));
-          cleanPurchases.forEach((p) => supabaseUpsertDailyPurchase(p, activeFirmId, DEFAULT_ACTIVE_YEAR).catch(console.error));
-          cleanAdvances.forEach((a) => supabaseUpsertAdvance(a, activeFirmId, DEFAULT_ACTIVE_YEAR).catch(console.error));
-          cleanPayments.forEach((py) => supabaseUpsertPayment(py, activeFirmId, DEFAULT_ACTIVE_YEAR).catch(console.error));
-          cleanFarmers.forEach((f) => supabaseUpsertFarmer(f, activeFirmId).catch(console.error));
+          // Drain any pending deletions to Supabase to guarantee permanent cloud deletion
+          drainPendingCloudDeletions().catch(console.error);
         } else {
           // Supabase is empty or newly created: Do NOT auto-migrate until security audit & explicit user migration
           console.info('Supabase database connected. Ready for manual migration after security audit.');
@@ -1454,11 +1492,251 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   };
 
-  // Connect to Supabase on mount
+  // Connect to Supabase & Listen to Auth State
   useEffect(() => {
-    if (isSupabaseConfigured()) {
-      syncWithSupabase();
-    }
+    const client = getSupabaseClient();
+    if (!client || !isSupabaseConfigured()) return;
+
+    // Check if user is already authenticated
+    client.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        syncWithSupabase();
+      }
+    });
+
+    // Listen to login and logout events
+    const { data: { subscription } } = client.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_OUT' || !session) {
+        // Strict Login: When logged out, clear all operational in-memory data
+        setFarmers([]);
+        setBagsEntries([]);
+        setDailyPurchaseRecords([]);
+        setBardanaRecords([]);
+        setFarmerPayments([]);
+        setFarmerAdvances([]);
+        setBoliRecords([]);
+        setLeftingRecords([]);
+        setRecycleBinItems([]);
+      } else if (event === 'SIGNED_IN' || (event === 'TOKEN_REFRESHED' && session?.user)) {
+        // On Supabase login, immediately sync live cloud data
+        syncWithSupabase();
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  // Multi-Device Realtime Cloud Deletion Sync:
+  // When an entry is deleted on Phone A, Phone B automatically receives the event
+  // and deletes it from in-memory state & storage instantly without needing manual refresh!
+  useEffect(() => {
+    const client = getSupabaseClient();
+    if (!client || !isSupabaseConfigured()) return;
+
+    const channel = client
+      .channel('mandi-multi-device-realtime-sync')
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'bags_entries' },
+        (payload) => {
+          const deletedId = (payload.old as any)?.id;
+          if (deletedId) {
+            recordDeletedId(deletedId, activeFirmIdRef.current);
+            setBagsEntries((prev) => {
+              const updated = prev.filter((b) => b.id !== deletedId && (b as any).entryNumber !== deletedId);
+              saveFirmData(LOCAL_STORAGE_KEYS.BAGS_ENTRIES, activeFirmIdRef.current, updated);
+              return updated;
+            });
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'farmers' },
+        (payload) => {
+          const deletedId = (payload.old as any)?.id;
+          if (deletedId) {
+            recordDeletedId(deletedId, activeFirmIdRef.current);
+            setFarmers((prev) => {
+              const updated = prev.filter((f) => f.id !== deletedId);
+              saveFirmData(LOCAL_STORAGE_KEYS.FARMERS, activeFirmIdRef.current, updated);
+              return updated;
+            });
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'daily_purchases' },
+        (payload) => {
+          const deletedId = (payload.old as any)?.id;
+          if (deletedId) {
+            recordDeletedId(deletedId, activeFirmIdRef.current);
+            setDailyPurchaseRecords((prev) => {
+              const updated = prev.filter((p) => p.id !== deletedId);
+              saveFirmData(LOCAL_STORAGE_KEYS.DAILY_PURCHASES, activeFirmIdRef.current, updated);
+              return updated;
+            });
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'bardana_records' },
+        (payload) => {
+          const deletedId = (payload.old as any)?.id;
+          if (deletedId) {
+            recordDeletedId(deletedId, activeFirmIdRef.current);
+            setBardanaRecords((prev) => {
+              const updated = prev.filter((b) => b.id !== deletedId);
+              saveFirmData(LOCAL_STORAGE_KEYS.BARDANA, activeFirmIdRef.current, updated);
+              return updated;
+            });
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'farmer_advances' },
+        (payload) => {
+          const deletedId = (payload.old as any)?.id;
+          if (deletedId) {
+            recordDeletedId(deletedId, activeFirmIdRef.current);
+            setFarmerAdvances((prev) => {
+              const updated = prev.filter((a) => a.id !== deletedId);
+              saveFirmData(LOCAL_STORAGE_KEYS.ADVANCES, activeFirmIdRef.current, updated);
+              return updated;
+            });
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'farmer_payments' },
+        (payload) => {
+          const deletedId = (payload.old as any)?.id;
+          if (deletedId) {
+            recordDeletedId(deletedId, activeFirmIdRef.current);
+            setFarmerPayments((prev) => {
+              const updated = prev.filter((p) => p.id !== deletedId);
+              saveFirmData(LOCAL_STORAGE_KEYS.FARMER_PAYMENTS, activeFirmIdRef.current, updated);
+              return updated;
+            });
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'boli_records' },
+        (payload) => {
+          const deletedId = (payload.old as any)?.id;
+          if (deletedId) {
+            recordDeletedId(deletedId, activeFirmIdRef.current);
+            setBoliRecords((prev) => {
+              const updated = prev.filter((b) => b.id !== deletedId);
+              saveFirmData(LOCAL_STORAGE_KEYS.BOLI_RECORDS, activeFirmIdRef.current, updated);
+              return updated;
+            });
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'lefting_records' },
+        (payload) => {
+          const deletedId = (payload.old as any)?.id;
+          if (deletedId) {
+            recordDeletedId(deletedId, activeFirmIdRef.current);
+            setLeftingRecords((prev) => {
+              const updated = prev.filter((l) => l.id !== deletedId);
+              saveFirmData(LOCAL_STORAGE_KEYS.LEFTING, activeFirmIdRef.current, updated);
+              return updated;
+            });
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'recycle_bin' },
+        (payload) => {
+          // When Phone A deletes any entry, a record is added to recycle_bin
+          const rawItem = (payload.new as any)?.data as RecycleBinItem;
+          if (rawItem && rawItem.originalId) {
+            const delId = rawItem.originalId;
+            recordDeletedId(delId, activeFirmIdRef.current);
+            setBagsEntries((prev) => {
+              const updated = prev.filter((b) => b.id !== delId && (b as any).entryNumber !== delId);
+              saveFirmData(LOCAL_STORAGE_KEYS.BAGS_ENTRIES, activeFirmIdRef.current, updated);
+              return updated;
+            });
+            setFarmers((prev) => {
+              const updated = prev.filter((f) => f.id !== delId);
+              saveFirmData(LOCAL_STORAGE_KEYS.FARMERS, activeFirmIdRef.current, updated);
+              return updated;
+            });
+            setDailyPurchaseRecords((prev) => {
+              const updated = prev.filter((p) => p.id !== delId);
+              saveFirmData(LOCAL_STORAGE_KEYS.DAILY_PURCHASES, activeFirmIdRef.current, updated);
+              return updated;
+            });
+            setBardanaRecords((prev) => {
+              const updated = prev.filter((b) => b.id !== delId);
+              saveFirmData(LOCAL_STORAGE_KEYS.BARDANA, activeFirmIdRef.current, updated);
+              return updated;
+            });
+            setFarmerAdvances((prev) => {
+              const updated = prev.filter((a) => a.id !== delId);
+              saveFirmData(LOCAL_STORAGE_KEYS.ADVANCES, activeFirmIdRef.current, updated);
+              return updated;
+            });
+            setFarmerPayments((prev) => {
+              const updated = prev.filter((p) => p.id !== delId);
+              saveFirmData(LOCAL_STORAGE_KEYS.FARMER_PAYMENTS, activeFirmIdRef.current, updated);
+              return updated;
+            });
+            setBoliRecords((prev) => {
+              const updated = prev.filter((b) => b.id !== delId);
+              saveFirmData(LOCAL_STORAGE_KEYS.BOLI_RECORDS, activeFirmIdRef.current, updated);
+              return updated;
+            });
+            setLeftingRecords((prev) => {
+              const updated = prev.filter((l) => l.id !== delId);
+              saveFirmData(LOCAL_STORAGE_KEYS.LEFTING, activeFirmIdRef.current, updated);
+              return updated;
+            });
+            setRecycleBinItems((prev) => [rawItem, ...prev.filter((r) => r.id !== rawItem.id)]);
+          }
+        }
+      )
+      .subscribe();
+
+    // Auto-reconcile on mobile tab focus, phone unlock, or reconnection
+    const handleReconcile = () => {
+      if (document.visibilityState === 'visible' && isSupabaseConfigured()) {
+        syncWithSupabase();
+      }
+    };
+
+    window.addEventListener('visibilitychange', handleReconcile);
+    window.addEventListener('focus', handleReconcile);
+    window.addEventListener('online', handleReconcile);
+
+    // Periodic 30-second background sync
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible' && isSupabaseConfigured()) {
+        syncWithSupabase();
+      }
+    }, 30000);
+
+    return () => {
+      client.removeChannel(channel);
+      window.removeEventListener('visibilitychange', handleReconcile);
+      window.removeEventListener('focus', handleReconcile);
+      window.removeEventListener('online', handleReconcile);
+      clearInterval(interval);
+    };
   }, []);
 
   // 100% Data Transfer to FY 2026-27 across all firms & keys on software load
@@ -1857,6 +2135,8 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     // Remove from active farmers list (disappears from active Farmer Register and new dropdowns)
     setFarmers((prev) => prev.filter((f) => f.id !== id));
+    recordDeletedId(id, activeFirmId);
+    queuePendingCloudDeletion({ id, type: 'FARMER', firmId: activeFirmId, deletedAt: new Date().toISOString() });
     supabaseDeleteFarmer(id).catch(console.error);
 
     // CRITICAL: NEVER delete historical transactions (arrivals, purchases, advances, payments, boli)
@@ -1928,6 +2208,8 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       supabaseUpsertRecycleItem(binItem, activeFirmId).catch(console.error);
     }
     setFarmerPayments((prev) => prev.filter((p) => p.id !== id));
+    recordDeletedId(id, activeFirmId);
+    queuePendingCloudDeletion({ id, type: 'PAYMENT', firmId: activeFirmId, deletedAt: new Date().toISOString() });
     supabaseDeletePayment(id).catch(console.error);
     return true;
   };
@@ -2385,6 +2667,8 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       supabaseUpsertRecycleItem(binItem, activeFirmId).catch(console.error);
     }
     setFarmerAdvances((prev) => prev.filter((a) => a.id !== id));
+    recordDeletedId(id, activeFirmId);
+    queuePendingCloudDeletion({ id, type: 'ADVANCE', firmId: activeFirmId, deletedAt: new Date().toISOString() });
     supabaseDeleteAdvance(id).catch(console.error);
     return true;
   };
@@ -2423,6 +2707,8 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       supabaseUpsertRecycleItem(binItem, activeFirmId).catch(console.error);
     }
     setBoliRecords((prev) => prev.filter((b) => b.id !== id));
+    recordDeletedId(id, activeFirmId);
+    queuePendingCloudDeletion({ id, type: 'BOLI', firmId: activeFirmId, deletedAt: new Date().toISOString() });
     supabaseDeleteBoli(id).catch(console.error);
     return true;
   };
@@ -3272,7 +3558,15 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       return finalResult;
     });
 
-    supabaseDeleteBagsEntry(id).catch(console.error);
+    recordDeletedId(id, activeFirmId, entry?.entryNumber);
+    queuePendingCloudDeletion({
+      id,
+      type: 'BAGS_ENTRY',
+      firmId: activeFirmId,
+      deletedAt: new Date().toISOString(),
+      altId: entry?.entryNumber
+    });
+    supabaseDeleteBagsEntry(id, entry?.entryNumber).catch(console.error);
     return true;
   };
 
@@ -3447,6 +3741,8 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       supabaseUpsertRecycleItem(binItem, activeFirmId).catch(console.error);
     }
     setBardanaRecords((prev) => prev.filter((r) => r.id !== id));
+    recordDeletedId(id, activeFirmId);
+    queuePendingCloudDeletion({ id, type: 'BARDANA', firmId: activeFirmId, deletedAt: new Date().toISOString() });
     supabaseDeleteBardana(id).catch(console.error);
     return true;
   };
@@ -4163,6 +4459,8 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       supabaseUpsertRecycleItem(binItem, activeFirmId).catch(console.error);
     }
     setDailyPurchaseRecords((prev) => prev.filter((p) => p.id !== id));
+    recordDeletedId(id, activeFirmId);
+    queuePendingCloudDeletion({ id, type: 'DAILY_PURCHASE', firmId: activeFirmId, deletedAt: new Date().toISOString() });
     supabaseDeleteDailyPurchase(id).catch(console.error);
     return true;
   };
@@ -4299,6 +4597,8 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       supabaseUpsertRecycleItem(binItem, activeFirmId).catch(console.error);
     }
     setLeftingRecords((prev) => prev.filter((l) => l.id !== id));
+    recordDeletedId(id, activeFirmId);
+    queuePendingCloudDeletion({ id, type: 'LEFTING', firmId: activeFirmId, deletedAt: new Date().toISOString() });
     supabaseDeleteLefting(id).catch(console.error);
     return true;
   };
@@ -4404,6 +4704,8 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const deleteTruck = (id: string): boolean => {
     setTrucks((prev) => prev.filter((t) => t.id !== id));
+    recordDeletedId(id, activeFirmId);
+    queuePendingCloudDeletion({ id, type: 'TRUCK', firmId: activeFirmId, deletedAt: new Date().toISOString() });
     supabaseDeleteTruck(id).catch(console.error);
     return true;
   };
@@ -4425,6 +4727,9 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const restoreRecycleBinItem = (id: string, restoredBy?: string): boolean => {
     const item = recycleBinItems.find((i) => i.id === id);
     if (!item) return false;
+
+    // Remove from tombstone blacklist
+    removeDeletedId(item.originalId, activeFirmId, item.recordData?.entryNumber);
 
     if (item.type === 'FARMER') {
       const restoredFarmer: Farmer = {
@@ -4477,25 +4782,74 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const permanentlyDeleteRecycleBinItem = (id: string, deletedBy?: string): boolean => {
     const item = recycleBinItems.find((i) => i.id === id);
-    if (item && item.type === 'FARMER') {
-      const operator = deletedBy || `Admin / Software Owner (${settings.firmNameEn || 'Jammu Trading Co'})`;
-      addFarmerAuditLog({
-        action: 'FARMER_PERMANENTLY_DELETED',
-        farmerId: item.originalId,
-        farmerName: item.recordData?.farmerName || item.titleEn,
-        farmerNamePa: item.recordData?.farmerNamePa || item.titlePa,
-        village: item.recordData?.village,
-        mobile: item.recordData?.mobile,
-        performedBy: operator,
-        details: `Farmer permanently deleted from Recycle Bin. Historical transaction records remain safely archived.`
+    if (item) {
+      // 1. Purge from underlying Supabase table
+      if (item.type === 'BAGS_ENTRY') {
+        supabaseDeleteBagsEntry(item.originalId, item.recordData?.entryNumber).catch(console.error);
+      } else if (item.type === 'FARMER') {
+        supabaseDeleteFarmer(item.originalId).catch(console.error);
+        const operator = deletedBy || `Admin / Software Owner (${settings.firmNameEn || 'Jammu Trading Co'})`;
+        addFarmerAuditLog({
+          action: 'FARMER_PERMANENTLY_DELETED',
+          farmerId: item.originalId,
+          farmerName: item.recordData?.farmerName || item.titleEn,
+          farmerNamePa: item.recordData?.farmerNamePa || item.titlePa,
+          village: item.recordData?.village,
+          mobile: item.recordData?.mobile,
+          performedBy: operator,
+          details: `Farmer permanently deleted from Recycle Bin. Historical transaction records remain safely archived.`
+        });
+      } else if (item.type === 'DAILY_PURCHASE') {
+        supabaseDeleteDailyPurchase(item.originalId).catch(console.error);
+      } else if (item.type === 'BARDANA') {
+        supabaseDeleteBardana(item.originalId).catch(console.error);
+      } else if (item.type === 'ADVANCE') {
+        supabaseDeleteAdvance(item.originalId).catch(console.error);
+      } else if (item.type === 'PAYMENT') {
+        supabaseDeletePayment(item.originalId).catch(console.error);
+      } else if (item.type === 'BOLI') {
+        supabaseDeleteBoli(item.originalId).catch(console.error);
+      } else if (item.type === 'LEFTING') {
+        supabaseDeleteLefting(item.originalId).catch(console.error);
+      }
+
+      // 2. Permanently record in tombstones
+      recordDeletedId(item.originalId, activeFirmId, item.recordData?.entryNumber);
+      queuePendingCloudDeletion({
+        id: item.originalId,
+        type: item.type as any,
+        firmId: activeFirmId,
+        deletedAt: new Date().toISOString(),
+        altId: item.recordData?.entryNumber
       });
     }
+
     setRecycleBinItems((prev) => prev.filter((i) => i.id !== id));
     supabaseDeleteRecycleItem(id).catch(console.error);
     return true;
   };
 
   const emptyRecycleBin = () => {
+    recycleBinItems.forEach((item) => {
+      recordDeletedId(item.originalId, activeFirmId, item.recordData?.entryNumber);
+      if (item.type === 'BAGS_ENTRY') {
+        supabaseDeleteBagsEntry(item.originalId, item.recordData?.entryNumber).catch(console.error);
+      } else if (item.type === 'FARMER') {
+        supabaseDeleteFarmer(item.originalId).catch(console.error);
+      } else if (item.type === 'DAILY_PURCHASE') {
+        supabaseDeleteDailyPurchase(item.originalId).catch(console.error);
+      } else if (item.type === 'BARDANA') {
+        supabaseDeleteBardana(item.originalId).catch(console.error);
+      } else if (item.type === 'ADVANCE') {
+        supabaseDeleteAdvance(item.originalId).catch(console.error);
+      } else if (item.type === 'PAYMENT') {
+        supabaseDeletePayment(item.originalId).catch(console.error);
+      } else if (item.type === 'BOLI') {
+        supabaseDeleteBoli(item.originalId).catch(console.error);
+      } else if (item.type === 'LEFTING') {
+        supabaseDeleteLefting(item.originalId).catch(console.error);
+      }
+    });
     setRecycleBinItems([]);
     supabaseClearRecycleBin().catch(console.error);
   };
@@ -4941,15 +5295,10 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     // 12. Run full storage key migration across all firms
     migrateAllStorageKeysTo2026_27();
 
-    // 13. Sync active firm's transferred records to Supabase in background
+    // 13. Sync active firm's active fiscal year to Supabase in background
     if (isSupabaseConfigured()) {
       try {
         supabaseSaveActiveFiscalYearContext(DEFAULT_ACTIVE_YEAR).catch(console.error);
-        bagsEntries.forEach((b) => supabaseUpsertBagsEntry({ ...b, fiscalYear: '2026-27', date: transferDateTo2026_27(b.date) }, activeFirmId, DEFAULT_ACTIVE_YEAR).catch(console.error));
-        dailyPurchaseRecords.forEach((p) => supabaseUpsertDailyPurchase({ ...p, fiscalYear: '2026-27', date: transferDateTo2026_27(p.date) }, activeFirmId, DEFAULT_ACTIVE_YEAR).catch(console.error));
-        farmerAdvances.forEach((a) => supabaseUpsertAdvance({ ...a, fiscalYear: '2026-27', date: transferDateTo2026_27(a.date) }, activeFirmId, DEFAULT_ACTIVE_YEAR).catch(console.error));
-        farmerPayments.forEach((py) => supabaseUpsertPayment({ ...py, fiscalYear: '2026-27', date: transferDateTo2026_27(py.date) }, activeFirmId, DEFAULT_ACTIVE_YEAR).catch(console.error));
-        farmers.forEach((f) => supabaseUpsertFarmer(f, activeFirmId).catch(console.error));
       } catch (err) {
         console.warn('Background Supabase sync notice in transferAllDataTo2026_27:', err);
       }
@@ -5033,6 +5382,8 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const deleteSeller = (id: string): boolean => {
     setSellers((prev) => prev.filter((s) => s.id !== id));
+    recordDeletedId(id, activeFirmId);
+    queuePendingCloudDeletion({ id, type: 'SELLER', firmId: activeFirmId, deletedAt: new Date().toISOString() });
     supabaseDeleteSeller(id).catch(console.error);
     return true;
   };

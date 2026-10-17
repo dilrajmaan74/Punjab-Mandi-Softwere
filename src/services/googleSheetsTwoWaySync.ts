@@ -38,6 +38,7 @@ import {
 } from '../types/sheetsSync';
 import { getMaxFarmerSequence } from '../utils/farmerAuditLog';
 import { FIXED_BAG_WEIGHT_KG, FIXED_RATE_PER_QTL } from '../utils/calculations';
+import { isRecordDeleted } from '../utils/tombstoneStorage';
 
 const STORAGE_KEY_SPREADSHEET_ID = 'punjab_mandi_two_way_sheet_id_v2';
 const STORAGE_KEY_AUDIT_LOGS = 'punjab_mandi_sheet_audit_logs_v2';
@@ -1056,8 +1057,14 @@ export async function readAndValidateGoogleSheetsData(
       return;
     }
 
-    const existingFarmer = farmerMap.get(farmerId);
     const isDeleted = status === 'DELETED';
+    const firmId = (row[16] || 'FIRM-001').toString().trim();
+    if (isDeleted || isRecordDeleted(farmerId, firmId)) {
+      // Do not resurrect deleted farmers from Google Sheets
+      return;
+    }
+
+    const existingFarmer = farmerMap.get(farmerId);
 
     const farmerObj: Farmer = {
       id: farmerId,
@@ -1136,6 +1143,12 @@ export async function readAndValidateGoogleSheetsData(
     const status = (row[24] || row[22] || 'ACTIVE').toString().toUpperCase().trim();
 
     if (!entryNo && !farmerId && !bagsCount) return;
+
+    const firmId = (row[21] || 'FIRM-001').toString().trim();
+    if (status === 'DELETED' || isRecordDeleted(recordId, firmId, entryNo)) {
+      // Do not resurrect deleted bags entries from Google Sheets
+      return;
+    }
 
     // Validation
     if (!farmerId || !farmerMap.has(farmerId)) {

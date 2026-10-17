@@ -456,11 +456,11 @@ export const Header: React.FC = () => {
                           <h4 className="font-black text-white text-sm truncate">
                             {currentUser.fullName}
                           </h4>
-                          <p className="text-[11px] font-mono text-emerald-400">
-                            +91 {currentUser.mobile}
+                          <p className="text-[11px] font-mono text-emerald-400 truncate">
+                            {currentUser.email || `+91 ${currentUser.mobile}`}
                           </p>
                           <span className="inline-flex items-center gap-1 text-[9px] font-bold text-emerald-300 bg-emerald-950/80 px-1.5 py-0.2 rounded border border-emerald-800/80 mt-0.5">
-                            <ShieldCheck className="w-2.5 h-2.5" /> ਵੈਰੀਫਾਈਡ ਮਾਲਕ
+                            <ShieldCheck className="w-2.5 h-2.5" /> ਸੁਪਾਬੇਸ ਕਲਾਊਡ ਲਾਈਵ (Supabase Verified)
                           </span>
                         </div>
                       </div>

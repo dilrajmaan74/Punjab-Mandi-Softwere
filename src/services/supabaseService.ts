@@ -16,6 +16,12 @@ import {
   SellerMaster,
   TruckMasterRecord
 } from '../types/mandi';
+import {
+  getAllDeletedIds,
+  syncTombstonesFromRecycleBin,
+  getPendingCloudDeletions,
+  clearPendingCloudDeletion
+} from '../utils/tombstoneStorage';
 
 export interface SupabaseLoadResult {
   success: boolean;
@@ -339,6 +345,63 @@ export async function loadAllDataFromSupabase(): Promise<SupabaseLoadResult> {
     const boliRecords: BoliRecord[] = (boliRes.data || []).map((r: any) => r.data).filter(Boolean);
     const leftingRecords: LeftingRecord[] = (leftingRes.data || []).map((r: any) => r.data).filter(Boolean);
     const recycleBinItems: RecycleBinItem[] = (recycleRes.data || []).map((r: any) => r.data).filter(Boolean);
+
+    // Multi-Firms & Active Firm
+    const firms: MandiFirm[] = (firmsRes.data || []).map((r: any) => r.data).filter(Boolean);
+    const activeFirmId: string | undefined = activeFirmRes.data?.firm_id;
+
+    // 100% RELIABLE DELETION & TOMBSTONE PURGING:
+    // Ensure records deleted on ANY device never resurface on any new or synced phone
+    syncTombstonesFromRecycleBin(recycleBinItems, activeFirmId);
+    const deletedOriginalIds = getAllDeletedIds(activeFirmId);
+    recycleBinItems.forEach((item) => {
+      if (item.originalId) deletedOriginalIds.add(item.originalId.trim());
+      if ((item as any).recordData?.id) deletedOriginalIds.add(String((item as any).recordData.id).trim());
+      if ((item as any).recordData?.entryNumber) deletedOriginalIds.add(String((item as any).recordData.entryNumber).trim());
+    });
+
+    // Clean all active collections so deleted items are NEVER returned
+    const cleanFarmers = farmers.filter((f) => !f.isDeleted && !deletedOriginalIds.has(f.id));
+    const cleanBagsEntries = bagsEntries.filter((b) => !deletedOriginalIds.has(b.id) && !deletedOriginalIds.has((b as any).entryNumber));
+    const cleanBardanaRecords = bardanaRecords.filter((b) => !deletedOriginalIds.has(b.id));
+    const cleanDailyPurchases = dailyPurchaseRecords.filter((p) => !deletedOriginalIds.has(p.id));
+    const cleanFarmerPayments = farmerPayments.filter((p) => !deletedOriginalIds.has(p.id));
+    const cleanFarmerAdvances = farmerAdvances.filter((a) => !deletedOriginalIds.has(a.id));
+    const cleanBoliRecords = boliRecords.filter((b) => !deletedOriginalIds.has(b.id));
+    const cleanLeftingRecords = leftingRecords.filter((l) => !deletedOriginalIds.has(l.id));
+
+    // Auto-purge ghost rows from Supabase in the background if they were still hanging in the database
+    bagsEntries
+      .filter((b) => deletedOriginalIds.has(b.id) || deletedOriginalIds.has((b as any).entryNumber))
+      .forEach((b) => supabaseDeleteBagsEntry(b.id, (b as any).entryNumber).catch(() => {}));
+
+    farmers
+      .filter((f) => f.isDeleted || deletedOriginalIds.has(f.id))
+      .forEach((f) => supabaseDeleteFarmer(f.id).catch(() => {}));
+
+    dailyPurchaseRecords
+      .filter((p) => deletedOriginalIds.has(p.id))
+      .forEach((p) => supabaseDeleteDailyPurchase(p.id).catch(() => {}));
+
+    bardanaRecords
+      .filter((b) => deletedOriginalIds.has(b.id))
+      .forEach((b) => supabaseDeleteBardana(b.id).catch(() => {}));
+
+    farmerPayments
+      .filter((p) => deletedOriginalIds.has(p.id))
+      .forEach((p) => supabaseDeletePayment(p.id).catch(() => {}));
+
+    farmerAdvances
+      .filter((a) => deletedOriginalIds.has(a.id))
+      .forEach((a) => supabaseDeleteAdvance(a.id).catch(() => {}));
+
+    boliRecords
+      .filter((b) => deletedOriginalIds.has(b.id))
+      .forEach((b) => supabaseDeleteBoli(b.id).catch(() => {}));
+
+    leftingRecords
+      .filter((l) => deletedOriginalIds.has(l.id))
+      .forEach((l) => supabaseDeleteLefting(l.id).catch(() => {}));
     
     // Agencies
     const agencies: ProcurementAgency[] = (agenciesRes.data || []).map((r: any) => ({
@@ -356,10 +419,6 @@ export async function loadAllDataFromSupabase(): Promise<SupabaseLoadResult> {
       villages: r.villages || []
     }));
 
-    // Multi-Firms
-    const firms: MandiFirm[] = (firmsRes.data || []).map((r: any) => r.data).filter(Boolean);
-    const activeFirmId: string | undefined = activeFirmRes.data?.firm_id;
-
     // Fiscal Years
     const fiscalYears: string[] = (fiscalYearsRes.data || []).map((r: any) => r.year).filter(Boolean);
     const activeFiscalYear: string | undefined = activeFiscalRes.data?.year;
@@ -373,14 +432,14 @@ export async function loadAllDataFromSupabase(): Promise<SupabaseLoadResult> {
     return {
       success: true,
       data: {
-        farmers,
-        bagsEntries,
-        bardanaRecords,
-        dailyPurchaseRecords,
-        farmerPayments,
-        farmerAdvances,
-        boliRecords,
-        leftingRecords,
+        farmers: cleanFarmers,
+        bagsEntries: cleanBagsEntries,
+        bardanaRecords: cleanBardanaRecords,
+        dailyPurchaseRecords: cleanDailyPurchases,
+        farmerPayments: cleanFarmerPayments,
+        farmerAdvances: cleanFarmerAdvances,
+        boliRecords: cleanBoliRecords,
+        leftingRecords: cleanLeftingRecords,
         recycleBinItems,
         agencies,
         pinCodes,
@@ -907,11 +966,15 @@ export async function supabaseUpsertBagsEntry(entry: BagsEntryRecord, firmId?: s
   }
 }
 
-export async function supabaseDeleteBagsEntry(entryId: string): Promise<void> {
+export async function supabaseDeleteBagsEntry(entryId: string, entryNo?: string): Promise<void> {
   const client = getSupabaseClient();
-  if (!client || !isSupabaseConfigured()) return;
+  if (!client || !isSupabaseConfigured() || !entryId) return;
   try {
-    await client.from('bags_entries').delete().eq('id', entryId);
+    const cleanId = entryId.trim();
+    await client.from('bags_entries').delete().eq('id', cleanId);
+    if (entryNo && entryNo.trim()) {
+      await client.from('bags_entries').delete().eq('entry_no', entryNo.trim());
+    }
   } catch (err) {
     console.warn('Supabase bags entry delete error:', err);
   }
@@ -1369,5 +1432,44 @@ export async function supabaseClearRecycleBin(): Promise<void> {
     await client.from('recycle_bin').delete().neq('id', '');
   } catch (err) {
     console.warn('Supabase recycle bin clear error:', err);
+  }
+}
+
+/**
+ * Drain and retry all queued deletions against Supabase to guarantee 100% sync reliability
+ */
+export async function drainPendingCloudDeletions(): Promise<void> {
+  const client = getSupabaseClient();
+  if (!client || !isSupabaseConfigured()) return;
+  const pending = getPendingCloudDeletions();
+  if (!pending || pending.length === 0) return;
+
+  for (const item of pending) {
+    try {
+      if (item.type === 'BAGS_ENTRY') {
+        await supabaseDeleteBagsEntry(item.id, item.altId);
+      } else if (item.type === 'FARMER') {
+        await supabaseDeleteFarmer(item.id);
+      } else if (item.type === 'DAILY_PURCHASE') {
+        await supabaseDeleteDailyPurchase(item.id);
+      } else if (item.type === 'BARDANA') {
+        await supabaseDeleteBardana(item.id);
+      } else if (item.type === 'ADVANCE') {
+        await supabaseDeleteAdvance(item.id);
+      } else if (item.type === 'PAYMENT') {
+        await supabaseDeletePayment(item.id);
+      } else if (item.type === 'BOLI') {
+        await supabaseDeleteBoli(item.id);
+      } else if (item.type === 'LEFTING') {
+        await supabaseDeleteLefting(item.id);
+      } else if (item.type === 'TRUCK') {
+        await supabaseDeleteTruck(item.id);
+      } else if (item.type === 'SELLER') {
+        await supabaseDeleteSeller(item.id);
+      }
+      clearPendingCloudDeletion(item.id);
+    } catch (e) {
+      console.warn('Failed to drain pending deletion for ID:', item.id, e);
+    }
   }
 }

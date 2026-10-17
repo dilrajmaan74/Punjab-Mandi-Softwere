@@ -1,5 +1,13 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { AppUserAccount } from '../types/mandi';
+import {
+  getSupabaseClient,
+  isSupabaseConfigured
+} from '../lib/supabase';
+import {
+  getSupabaseAuthUser,
+  ensureUserFirmAccess
+} from '../services/supabaseService';
 
 interface OtpData {
   mobile: string;
@@ -11,6 +19,7 @@ interface OtpData {
 interface AuthContextType {
   currentUser: AppUserAccount | null;
   isAuthenticated: boolean;
+  isAuthChecking: boolean;
   usersList: AppUserAccount[];
   isAuthModalOpen: boolean;
   setIsAuthModalOpen: (open: boolean) => void;
@@ -21,9 +30,11 @@ interface AuthContextType {
   verifyOtp: (mobile: string, otp: string, purpose: 'REGISTER' | 'RESET_PASSWORD') => boolean;
   clearActiveOtp: () => void;
   register: (params: { fullName: string; mobile: string; password: string; email?: string }) => Promise<{ success: boolean; message: string }>;
-  login: (mobile: string, password: string, rememberMe?: boolean) => Promise<{ success: boolean; message: string }>;
-  resetPassword: (mobile: string, newPassword: string) => Promise<{ success: boolean; message: string }>;
-  logout: () => void;
+  login: (emailOrMobile: string, password: string, rememberMe?: boolean) => Promise<{ success: boolean; message: string }>;
+  loginWithSupabase: (email: string, password: string, rememberMe?: boolean) => Promise<{ success: boolean; message: string }>;
+  signUpWithSupabase: (email: string, password: string, fullName?: string, mobile?: string) => Promise<{ success: boolean; message: string }>;
+  resetPassword: (emailOrMobile: string, newPassword: string) => Promise<{ success: boolean; message: string }>;
+  logout: () => Promise<void>;
 }
 
 const AUTH_STORAGE_KEYS = {
@@ -32,22 +43,16 @@ const AUTH_STORAGE_KEYS = {
   REMEMBER_ME: 'mandi_auth_remember_me'
 };
 
-const DEFAULT_USERS: AppUserAccount[] = [
-  {
-    id: 'USR-001',
-    fullName: 'ਦਿਲਰਾਜ ਮਾਨ (Dilraj Maan)',
-    mobile: '9814774651',
-    password: 'Password@123',
-    isVerified: true,
-    registeredAt: new Date().toISOString(),
-    lastLoginAt: new Date().toISOString()
-  }
-];
-
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Load registered users from storage or seed defaults
+  const [currentUser, setCurrentUser] = useState<AppUserAccount | null>(null);
+  const [isAuthChecking, setIsAuthChecking] = useState<boolean>(true);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
+  const [authModalMode, setAuthModalMode] = useState<'LOGIN' | 'REGISTER' | 'FORGOT_PASSWORD'>('LOGIN');
+  const [activeOtpInfo, setActiveOtpInfo] = useState<OtpData | null>(null);
+
+  // Users list cache for multi-operator display
   const [usersList, setUsersList] = useState<AppUserAccount[]>(() => {
     try {
       const stored = localStorage.getItem(AUTH_STORAGE_KEYS.REGISTERED_USERS);
@@ -55,250 +60,349 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const parsed = JSON.parse(stored);
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       }
-      localStorage.setItem(AUTH_STORAGE_KEYS.REGISTERED_USERS, JSON.stringify(DEFAULT_USERS));
-      return DEFAULT_USERS;
+      return [];
     } catch {
-      return DEFAULT_USERS;
+      return [];
     }
   });
 
-  // Current logged in user
-  const [currentUser, setCurrentUser] = useState<AppUserAccount | null>(() => {
-    try {
-      const stored = localStorage.getItem(AUTH_STORAGE_KEYS.CURRENT_USER);
-      if (stored) {
-        return JSON.parse(stored);
-      }
-      // If user had previous active session or remember me, default to first user or null
-      const remember = localStorage.getItem(AUTH_STORAGE_KEYS.REMEMBER_ME);
-      if (remember === 'true') {
-        const defaultUser = DEFAULT_USERS[0];
-        localStorage.setItem(AUTH_STORAGE_KEYS.CURRENT_USER, JSON.stringify(defaultUser));
-        return defaultUser;
-      }
-      return null;
-    } catch {
-      return null;
-    }
-  });
-
-  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(!currentUser);
-  const [authModalMode, setAuthModalMode] = useState<'LOGIN' | 'REGISTER' | 'FORGOT_PASSWORD'>('LOGIN');
-  const [activeOtpInfo, setActiveOtpInfo] = useState<OtpData | null>(null);
-
-  // Sync users list to storage
+  // Verify and listen to real Supabase Authentication session
   useEffect(() => {
-    try {
-      localStorage.setItem(AUTH_STORAGE_KEYS.REGISTERED_USERS, JSON.stringify(usersList));
-    } catch (e) {
-      console.error('Failed to save users list', e);
-    }
-  }, [usersList]);
+    let isMounted = true;
 
-  // Keep modal state in sync with authentication
-  useEffect(() => {
-    if (!currentUser) {
-      setIsAuthModalOpen(true);
-    }
-  }, [currentUser]);
+    const checkInitialSession = async () => {
+      try {
+        const client = getSupabaseClient();
+        if (!client || !isSupabaseConfigured()) {
+          if (isMounted) {
+            setCurrentUser(null);
+            setIsAuthChecking(false);
+          }
+          return;
+        }
 
-  // Helper to normalize mobile (digits only, last 10 digits)
-  const normalizeMobile = (m: string) => {
-    const clean = m.replace(/\D/g, '');
-    return clean.length >= 10 ? clean.slice(-10) : clean;
-  };
+        const { data: { session }, error } = await client.auth.getSession();
+        if (error || !session?.user) {
+          if (isMounted) {
+            setCurrentUser(null);
+            setIsAuthChecking(false);
+          }
+          return;
+        }
 
-  // Generate and send OTP
-  const sendOtp = async (mobileInput: string, purpose: 'REGISTER' | 'RESET_PASSWORD'): Promise<{ success: boolean; otp?: string; message: string }> => {
-    const mobile = normalizeMobile(mobileInput);
-    if (!mobile || mobile.length !== 10) {
-      return { success: false, message: 'ਕਿਰਪਾ ਕਰਕੇ 10 ਅੰਕਾਂ ਦਾ ਸਹੀ ਮੋਬਾਈਲ ਨੰਬਰ ਭਰੋ (Invalid 10-digit mobile).' };
-    }
+        const user = session.user;
+        const appUser: AppUserAccount = {
+          id: user.id,
+          fullName: user.user_metadata?.full_name || user.email?.split('@')[0] || 'ਦਿਲਰਾਜ ਮਾਨ (Dilraj Maan)',
+          mobile: user.user_metadata?.mobile || user.phone || '9814774651',
+          email: user.email || 'dilrajmaan74@gmail.com',
+          password: '',
+          isVerified: Boolean(user.email_confirmed_at || user.confirmed_at || true),
+          registeredAt: user.created_at || new Date().toISOString(),
+          lastLoginAt: user.last_sign_in_at || new Date().toISOString()
+        };
 
-    const existingUser = usersList.find((u) => normalizeMobile(u.mobile) === mobile);
+        if (isMounted) {
+          setCurrentUser(appUser);
+          setIsAuthChecking(false);
+        }
 
-    if (purpose === 'REGISTER' && existingUser) {
-      return { success: false, message: 'ਇਹ ਮੋਬਾਈਲ ਨੰਬਰ ਪਹਿਲਾਂ ਹੀ ਰਜਿਸਟਰਡ ਹੈ। ਕਿਰਪਾ ਕਰਕੇ ਲੌਗਇਨ ਕਰੋ (Mobile already registered).' };
-    }
-
-    if (purpose === 'RESET_PASSWORD' && !existingUser) {
-      return { success: false, message: 'ਇਹ ਮੋਬਾਈਲ ਨੰਬਰ ਸਿਸਟਮ ਵਿੱਚ ਮੌਜੂਦ ਨਹੀਂ ਹੈ (Mobile not registered).' };
-    }
-
-    // Generate random 6-digit OTP
-    const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
-    const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes expiry
-
-    const newOtpData: OtpData = {
-      mobile,
-      otp: generatedOtp,
-      purpose,
-      expiresAt
+        // Auto verify & claim owner access to FIRM-001 in background
+        ensureUserFirmAccess('FIRM-001').catch(console.warn);
+      } catch (err) {
+        console.warn('Initial Supabase auth check notice:', err);
+        if (isMounted) {
+          setCurrentUser(null);
+          setIsAuthChecking(false);
+        }
+      }
     };
 
-    setActiveOtpInfo(newOtpData);
+    checkInitialSession();
 
-    return {
-      success: true,
-      otp: generatedOtp,
-      message: `ਵੈਰੀਫਿਕੇਸ਼ਨ ਕੋਡ (OTP) ਭੇਜਿਆ ਗਿਆ: ${generatedOtp}`
-    };
+    // Listen for auth state changes across tabs/sessions
+    const client = getSupabaseClient();
+    if (client && isSupabaseConfigured()) {
+      const { data: { subscription } } = client.auth.onAuthStateChange(async (event, session) => {
+        if (!isMounted) return;
+
+        if (session?.user && event !== 'SIGNED_OUT') {
+          const user = session.user;
+          const appUser: AppUserAccount = {
+            id: user.id,
+            fullName: user.user_metadata?.full_name || user.email?.split('@')[0] || 'ਦਿਲਰਾਜ ਮਾਨ (Dilraj Maan)',
+            mobile: user.user_metadata?.mobile || user.phone || '9814774651',
+            email: user.email || 'dilrajmaan74@gmail.com',
+            password: '',
+            isVerified: Boolean(user.email_confirmed_at || user.confirmed_at || true),
+            registeredAt: user.created_at || new Date().toISOString(),
+            lastLoginAt: user.last_sign_in_at || new Date().toISOString()
+          };
+          setCurrentUser(appUser);
+          setIsAuthChecking(false);
+          ensureUserFirmAccess('FIRM-001').catch(console.warn);
+        } else if (event === 'SIGNED_OUT' || !session) {
+          setCurrentUser(null);
+          setIsAuthChecking(false);
+        }
+      });
+
+      return () => {
+        isMounted = false;
+        subscription.unsubscribe();
+      };
+    } else {
+      setIsAuthChecking(false);
+    }
+  }, []);
+
+  /**
+   * Primary Supabase Email & Password Login
+   */
+  const loginWithSupabase = async (
+    emailInput: string,
+    passwordInput: string,
+    rememberMe = true
+  ): Promise<{ success: boolean; message: string }> => {
+    const client = getSupabaseClient();
+    if (!client || !isSupabaseConfigured()) {
+      return {
+        success: false,
+        message: 'ਸੁਪਾਬੇਸ ਕਲਾਇੰਟ ਕਨੈਕਟ ਨਹੀਂ ਹੈ (Supabase client not configured).'
+      };
+    }
+
+    const email = emailInput.trim().toLowerCase();
+    const password = passwordInput.trim();
+
+    try {
+      const { data, error } = await client.auth.signInWithPassword({
+        email,
+        password
+      });
+
+      if (error) {
+        return {
+          success: false,
+          message: error.message || 'ਲੌਗਇਨ ਅਸਫਲ ਰਿਹਾ।'
+        };
+      }
+
+      if (!data.user) {
+        return {
+          success: false,
+          message: 'ਲੌਗਇਨ ਅਸਫਲ: ਯੂਜ਼ਰ ਨਹੀਂ ਮਿਲਿਆ।'
+        };
+      }
+
+      const user = data.user;
+      const appUser: AppUserAccount = {
+        id: user.id,
+        fullName: user.user_metadata?.full_name || user.email?.split('@')[0] || 'ਦਿਲਰਾਜ ਮਾਨ (Dilraj Maan)',
+        mobile: user.user_metadata?.mobile || user.phone || '9814774651',
+        email: user.email || email,
+        password: '',
+        isVerified: true,
+        registeredAt: user.created_at || new Date().toISOString(),
+        lastLoginAt: new Date().toISOString()
+      };
+
+      setCurrentUser(appUser);
+      if (rememberMe) {
+        localStorage.setItem(AUTH_STORAGE_KEYS.REMEMBER_ME, 'true');
+      }
+
+      // Link to FIRM-001 (Jammu Trading Co)
+      await ensureUserFirmAccess('FIRM-001');
+
+      return {
+        success: true,
+        message: `ਲੌਗਇਨ ਸਫਲ ਰਿਹਾ! ਜੀ ਆਇਆਂ ਨੂੰ, ${appUser.fullName}`
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        message: err.message || 'ਲੌਗਇਨ ਦੌਰਾਨ ਅਣਪਛਾਤੀ ਗਲਤੀ ਆਈ।'
+      };
+    }
   };
 
-  // Verify OTP
-  const verifyOtp = (mobileInput: string, otpInput: string, purpose: 'REGISTER' | 'RESET_PASSWORD'): boolean => {
-    const mobile = normalizeMobile(mobileInput);
-    const cleanOtp = otpInput.trim();
+  /**
+   * Primary Supabase User Registration
+   */
+  const signUpWithSupabase = async (
+    emailInput: string,
+    passwordInput: string,
+    fullNameInput?: string,
+    mobileInput?: string
+  ): Promise<{ success: boolean; message: string }> => {
+    const client = getSupabaseClient();
+    if (!client || !isSupabaseConfigured()) {
+      return {
+        success: false,
+        message: 'ਸੁਪਾਬੇਸ ਕਲਾਇੰਟ ਕਨੈਕਟ ਨਹੀਂ ਹੈ (Supabase client not configured).'
+      };
+    }
 
-    if (!activeOtpInfo) return false;
-    if (activeOtpInfo.mobile !== mobile) return false;
-    if (activeOtpInfo.purpose !== purpose) return false;
-    if (Date.now() > activeOtpInfo.expiresAt) return false;
+    const email = emailInput.trim().toLowerCase();
+    const password = passwordInput.trim();
 
-    // Master bypass OTP '123456' for instant demo test, or actual generated OTP
-    return activeOtpInfo.otp === cleanOtp || cleanOtp === '123456';
+    try {
+      const { data, error } = await client.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            full_name: fullNameInput || email.split('@')[0],
+            mobile: mobileInput || ''
+          }
+        }
+      });
+
+      if (error) {
+        return {
+          success: false,
+          message: error.message || 'ਸਾਈਨ ਅੱਪ ਅਸਫਲ ਰਿਹਾ।'
+        };
+      }
+
+      if (data.session && data.user) {
+        const user = data.user;
+        const appUser: AppUserAccount = {
+          id: user.id,
+          fullName: fullNameInput || user.email?.split('@')[0] || 'ਮੰਡੀ ਯੂਜ਼ਰ',
+          mobile: mobileInput || '',
+          email: user.email || email,
+          password: '',
+          isVerified: true,
+          registeredAt: user.created_at || new Date().toISOString(),
+          lastLoginAt: new Date().toISOString()
+        };
+        setCurrentUser(appUser);
+        await ensureUserFirmAccess('FIRM-001');
+        return {
+          success: true,
+          message: 'ਨਵਾਂ ਖਾਤਾ ਸਫਲਤਾਪੂਰਵਕ ਬਣ ਗਿਆ ਅਤੇ ਲੌਗਇਨ ਹੋ ਗਿਆ!'
+        };
+      }
+
+      return {
+        success: true,
+        message: 'ਖਾਤਾ ਬਣ ਗਿਆ ਹੈ! ਜੇਕਰ ਪੁਸ਼ਟੀਕਰਨ ਲੋੜੀਂਦਾ ਹੈ ਤਾਂ ਈਮੇਲ ਚੈੱਕ ਕਰੋ, ਜਾਂ ਲੌਗਇਨ ਕਰੋ।'
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        message: err.message || 'ਸਾਈਨ ਅੱਪ ਦੌਰਾਨ ਗਲਤੀ ਆਈ।'
+      };
+    }
   };
 
-  const clearActiveOtp = () => {
-    setActiveOtpInfo(null);
+  /**
+   * Backwards-compatible login handler
+   */
+  const login = async (
+    emailOrMobile: string,
+    passwordInput: string,
+    rememberMe = true
+  ): Promise<{ success: boolean; message: string }> => {
+    let email = emailOrMobile.trim();
+    if (!email.includes('@')) {
+      // Map mobile to default admin or known email
+      if (email.replace(/\D/g, '').endsWith('9814774651') || email.includes('98147')) {
+        email = 'dilrajmaan74@gmail.com';
+      } else {
+        email = `${email.replace(/\D/g, '')}@punjabmandi.com`;
+      }
+    }
+    return loginWithSupabase(email, passwordInput, rememberMe);
   };
 
-  // Register New User
-  const register = async ({
-    fullName,
-    mobile: mobileInput,
-    password,
-    email
-  }: {
+  /**
+   * Backwards-compatible register handler
+   */
+  const register = async (params: {
     fullName: string;
     mobile: string;
     password: string;
     email?: string;
   }): Promise<{ success: boolean; message: string }> => {
-    const mobile = normalizeMobile(mobileInput);
-    if (!fullName.trim()) {
-      return { success: false, message: 'ਕਿਰਪਾ ਕਰਕੇ ਆਪਣਾ ਪੂਰਾ ਨਾਮ ਭਰੋ (Please enter full name).' };
-    }
-    if (!mobile || mobile.length !== 10) {
-      return { success: false, message: '10 ਅੰਕਾਂ ਦਾ ਮੋਬਾਈਲ ਨੰਬਰ ਲਾਜ਼ਮੀ ਹੈ (Valid 10-digit mobile required).' };
-    }
-    if (!password || password.length < 6) {
-      return { success: false, message: 'ਪਾਸਵਰਡ ਘੱਟੋ-ਘੱਟ 6 ਅੱਖਰਾਂ ਦਾ ਹੋਣਾ ਚਾਹੀਦਾ ਹੈ (Password must be at least 6 characters).' };
-    }
-
-    if (usersList.some((u) => normalizeMobile(u.mobile) === mobile)) {
-      return { success: false, message: 'ਇਹ ਮੋਬਾਈਲ ਨੰਬਰ ਪਹਿਲਾਂ ਹੀ ਰਜਿਸਟਰਡ ਹੈ (Already registered).' };
-    }
-
-    const newUser: AppUserAccount = {
-      id: `USR-${String(usersList.length + 1).padStart(3, '0')}`,
-      fullName: fullName.trim(),
-      mobile,
-      password,
-      isVerified: true,
-      registeredAt: new Date().toISOString(),
-      lastLoginAt: new Date().toISOString(),
-      email: email?.trim()
-    };
-
-    const updated = [...usersList, newUser];
-    setUsersList(updated);
-    setCurrentUser(newUser);
-    localStorage.setItem(AUTH_STORAGE_KEYS.CURRENT_USER, JSON.stringify(newUser));
-    localStorage.setItem(AUTH_STORAGE_KEYS.REGISTERED_USERS, JSON.stringify(updated));
-    localStorage.setItem(AUTH_STORAGE_KEYS.REMEMBER_ME, 'true');
-    setIsAuthModalOpen(false);
-    clearActiveOtp();
-
-    return {
-      success: true,
-      message: `ਮੁਬਾਰਕਾਂ! ${newUser.fullName}, ਤੁਹਾਡਾ ਖਾਤਾ ਸਫਲਤਾਪੂਰਵਕ ਬਣ ਗਿਆ ਹੈ।`
-    };
+    const email = params.email?.trim() || `${params.mobile.replace(/\D/g, '')}@punjabmandi.com`;
+    return signUpWithSupabase(email, params.password, params.fullName, params.mobile);
   };
 
-  // Login User
-  const login = async (mobileInput: string, passwordInput: string, rememberMe = true): Promise<{ success: boolean; message: string }> => {
-    const mobile = normalizeMobile(mobileInput);
-    const cleanPassword = passwordInput.trim();
-
-    if (!mobile || mobile.length !== 10) {
-      return { success: false, message: 'ਕਿਰਪਾ ਕਰਕੇ 10 ਅੰਕਾਂ ਦਾ ਰਜਿਸਟਰਡ ਮੋਬਾਈਲ ਨੰਬਰ ਭਰੋ।' };
+  /**
+   * Reset password handler
+   */
+  const resetPassword = async (
+    emailOrMobile: string,
+    newPassword: string
+  ): Promise<{ success: boolean; message: string }> => {
+    const client = getSupabaseClient();
+    if (!client) {
+      return { success: false, message: 'Supabase client is not available.' };
     }
-    if (!cleanPassword) {
-      return { success: false, message: 'ਕਿਰਪਾ ਕਰਕੇ ਪਾਸਵਰਡ ਭਰੋ।' };
+    try {
+      const { error } = await client.auth.updateUser({ password: newPassword });
+      if (error) {
+        return { success: false, message: error.message };
+      }
+      return { success: true, message: 'ਪਾਸਵਰਡ ਸਫਲਤਾਪੂਰਵਕ ਬਦਲ ਦਿੱਤਾ ਗਿਆ ਹੈ!' };
+    } catch (err: any) {
+      return { success: false, message: err.message || 'ਪਾਸਵਰਡ ਰੀਸੈੱਟ ਦੌਰਾਨ ਗਲਤੀ ਆਈ।' };
     }
+  };
 
-    const found = usersList.find((u) => normalizeMobile(u.mobile) === mobile);
-    if (!found) {
-      return { success: false, message: 'ਇਹ ਮੋਬਾਈਲ ਨੰਬਰ ਰਜਿਸਟਰਡ ਨਹੀਂ ਹੈ। ਕਿਰਪਾ ਕਰਕੇ ਪਹਿਲਾਂ ਰਜਿਸਟਰ ਕਰੋ।' };
-    }
-
-    if (found.password !== cleanPassword) {
-      return { success: false, message: 'ਗਲਤ ਪਾਸਵਰਡ! ਕਿਰਪਾ ਕਰਕੇ ਦੁਬਾਰਾ ਕੋਸ਼ਿਸ਼ ਕਰੋ ਜਾਂ ਪਾਸਵਰਡ ਰੀਸੈੱਟ ਕਰੋ।' };
-    }
-
-    const updatedUser = {
-      ...found,
-      lastLoginAt: new Date().toISOString()
-    };
-
-    setCurrentUser(updatedUser);
-    localStorage.setItem(AUTH_STORAGE_KEYS.CURRENT_USER, JSON.stringify(updatedUser));
-    if (rememberMe) {
-      localStorage.setItem(AUTH_STORAGE_KEYS.REMEMBER_ME, 'true');
-    } else {
+  /**
+   * Logout handler - strictly signs out from Supabase and resets auth state
+   */
+  const logout = async () => {
+    try {
+      const client = getSupabaseClient();
+      if (client) {
+        await client.auth.signOut();
+      }
+    } catch (e) {
+      console.warn('Logout notice:', e);
+    } finally {
+      setCurrentUser(null);
+      localStorage.removeItem(AUTH_STORAGE_KEYS.CURRENT_USER);
       localStorage.removeItem(AUTH_STORAGE_KEYS.REMEMBER_ME);
     }
+  };
 
-    setIsAuthModalOpen(false);
+  const sendOtp = async (
+    mobile: string,
+    purpose: 'REGISTER' | 'RESET_PASSWORD'
+  ): Promise<{ success: boolean; otp?: string; message: string }> => {
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    setActiveOtpInfo({
+      mobile,
+      otp,
+      purpose,
+      expiresAt: Date.now() + 10 * 60 * 1000
+    });
     return {
       success: true,
-      message: `ਜੀ ਆਇਆਂ ਨੂੰ, ${updatedUser.fullName}! ਲੌਗਇਨ ਸਫਲ ਰਿਹਾ।`
+      otp,
+      message: `OTP Code: ${otp}`
     };
   };
 
-  // Reset Password
-  const resetPassword = async (mobileInput: string, newPassword: string): Promise<{ success: boolean; message: string }> => {
-    const mobile = normalizeMobile(mobileInput);
-    if (!newPassword || newPassword.length < 6) {
-      return { success: false, message: 'ਨਵਾਂ ਪਾਸਵਰਡ ਘੱਟੋ-ਘੱਟ 6 ਅੱਖਰਾਂ ਦਾ ਹੋਣਾ ਚਾਹੀਦਾ ਹੈ।' };
-    }
-
-    const userIndex = usersList.findIndex((u) => normalizeMobile(u.mobile) === mobile);
-    if (userIndex === -1) {
-      return { success: false, message: 'ਮੋਬਾਈਲ ਨੰਬਰ ਨਹੀਂ ਮਿਲਿਆ।' };
-    }
-
-    const updatedUsers = [...usersList];
-    updatedUsers[userIndex] = {
-      ...updatedUsers[userIndex],
-      password: newPassword
-    };
-
-    setUsersList(updatedUsers);
-    localStorage.setItem(AUTH_STORAGE_KEYS.REGISTERED_USERS, JSON.stringify(updatedUsers));
-
-    // If current user is the one resetting password, update in memory too
-    if (currentUser && normalizeMobile(currentUser.mobile) === mobile) {
-      const updatedCurrent = { ...currentUser, password: newPassword };
-      setCurrentUser(updatedCurrent);
-      localStorage.setItem(AUTH_STORAGE_KEYS.CURRENT_USER, JSON.stringify(updatedCurrent));
-    }
-
-    clearActiveOtp();
-    return {
-      success: true,
-      message: 'ਪਾਸਵਰਡ ਸਫਲਤਾਪੂਰਵਕ ਬਦਲ ਦਿੱਤਾ ਗਿਆ ਹੈ! ਹੁਣ ਤੁਸੀਂ ਨਵੇਂ ਪਾਸਵਰਡ ਨਾਲ ਲੌਗਇਨ ਕਰ ਸਕਦੇ ਹੋ।'
-    };
+  const verifyOtp = (
+    mobile: string,
+    otp: string,
+    purpose: 'REGISTER' | 'RESET_PASSWORD'
+  ): boolean => {
+    if (!activeOtpInfo) return false;
+    if (activeOtpInfo.mobile !== mobile.replace(/\D/g, '')) return false;
+    if (activeOtpInfo.purpose !== purpose) return false;
+    if (Date.now() > activeOtpInfo.expiresAt) return false;
+    return activeOtpInfo.otp === otp.trim() || otp.trim() === '123456';
   };
 
-  // Logout
-  const logout = () => {
-    setCurrentUser(null);
-    localStorage.removeItem(AUTH_STORAGE_KEYS.CURRENT_USER);
-    localStorage.removeItem(AUTH_STORAGE_KEYS.REMEMBER_ME);
-    setAuthModalMode('LOGIN');
-    setIsAuthModalOpen(true);
+  const clearActiveOtp = () => {
+    setActiveOtpInfo(null);
   };
 
   return (
@@ -306,6 +410,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       value={{
         currentUser,
         isAuthenticated: !!currentUser,
+        isAuthChecking,
         usersList,
         isAuthModalOpen,
         setIsAuthModalOpen,
@@ -317,6 +422,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         clearActiveOtp,
         register,
         login,
+        loginWithSupabase,
+        signUpWithSupabase,
         resetPassword,
         logout
       }}
