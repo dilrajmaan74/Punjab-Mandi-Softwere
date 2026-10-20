@@ -940,7 +940,7 @@ export const BankDetailsManager: React.FC = () => {
                 ਕਿਸਾਨ ਬੈਂਕ ਖਾਤਾ ਤੇ ਆਧਾਰ ਸੂਚੀ (Farmer Bank & Aadhaar Directory)
               </h2>
               <span className="bg-purple-100 text-purple-900 border border-purple-200 text-[10px] font-black px-2 py-0.5 rounded-full">
-                {activeFirm?.name || 'Jammu Trading Co'}
+                {activeFirm?.name || 'Punjab Mandi Trading Co'}
               </span>
               <span className="bg-emerald-50 text-emerald-800 border border-emerald-300 text-[10px] font-black px-2 py-0.5 rounded-full flex items-center gap-1">
                 <ArrowDownAZ className="w-3 h-3 text-emerald-600" />

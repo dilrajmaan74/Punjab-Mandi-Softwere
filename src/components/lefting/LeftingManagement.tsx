@@ -35,6 +35,7 @@ import { formatCurrencyINR, autoFormatDate, FIXED_BAG_WEIGHT_KG, formatLeftingWe
 import { exportLeftingVoucherPDF } from '../../utils/leftingPdfExport';
 import { SellerMasterModal } from '../seller/SellerMasterModal';
 import { TruckMasterModal } from '../truck/TruckMasterModal';
+import { LeftingEditModal } from './LeftingEditModal';
 import { DateInput } from '../common/DateInput';
 import { AgencyLiftingReport } from './AgencyLiftingReport';
 import {
@@ -136,16 +137,10 @@ export const LeftingManagement: React.FC = () => {
   const [filterAgency, setFilterAgency] = useState<string>('ALL');
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
 
-  // Modals
+  // Modals & Full Edit Tracking
   const [viewRecord, setViewRecord] = useState<LeftingRecord | null>(null);
   const [editRecord, setEditRecord] = useState<LeftingRecord | null>(null);
-
-  // Edit Modal Form State
-  const [editStatus, setEditStatus] = useState<'DISPATCHED' | 'DELIVERED' | 'REJECTED_PARTIAL'>('DISPATCHED');
-  const [editRejectedBags, setEditRejectedBags] = useState<string>('0');
-  const [editShortageKg, setEditShortageKg] = useState<string>('0');
-  const [editReceivingDate, setEditReceivingDate] = useState<string>('');
-  const [editRemarks, setEditRemarks] = useState<string>('');
+  const [lastSavedRecord, setLastSavedRecord] = useState<LeftingRecord | null>(null);
 
   const agencyOptions: SearchableSelectOption[] = useMemo(() => {
     const opts: SearchableSelectOption[] = STANDARD_AGENCIES.map((ag) => ({
@@ -346,6 +341,7 @@ export const LeftingManagement: React.FC = () => {
     });
 
     if (res.success && res.record) {
+      setLastSavedRecord(res.record);
       notifySaveSuccess({
         titlePa: 'ਲਿਫਟਿੰਗ ਰਵਾਨਗੀ ਸਫਲਤਾਪੂਰਵਕ ਦਰਜ ਹੋ ਗਈ ਹੈ।',
         titleEn: 'Lefting Dispatch Saved Successfully',
@@ -378,39 +374,9 @@ export const LeftingManagement: React.FC = () => {
     }
   };
 
-  // Open Edit Modal
+  // Open Full Edit Modal
   const handleOpenEdit = (rec: LeftingRecord) => {
     setEditRecord(rec);
-    setEditStatus(rec.status);
-    setEditRejectedBags(String(rec.rejectedBags || 0));
-    setEditShortageKg(String(rec.shortageKg || 0));
-    setEditReceivingDate(rec.receivingDate || getTodayFormatted());
-    setEditRemarks(rec.remarks || '');
-  };
-
-  // Save Edit Updates
-  const handleSaveEdit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editRecord) return;
-
-    const rejBags = parseInt(editRejectedBags, 10) || 0;
-    const shortKg = parseFloat(editShortageKg) || 0;
-
-    updateLeftingRecord(editRecord.id, {
-      status: editStatus,
-      rejectedBags: rejBags,
-      shortageKg: shortKg,
-      receivingDate: editStatus === 'DELIVERED' ? editReceivingDate : undefined,
-      remarks: editRemarks.trim() || undefined
-    });
-
-    notifySaveSuccess({
-      titlePa: 'ਲਿਫਟਿੰਗ ਰਿਕਾਰਡ ਅੱਪਡੇਟ ਹੋ ਗਿਆ',
-      titleEn: 'Lefting Record Updated',
-      messagePa: `ਗੇਟ ਪਾਸ: ${editRecord.gatePassNo || editRecord.id} • ਸਥਿਤੀ: ${editStatus}`
-    });
-
-    setEditRecord(null);
   };
 
   // Delete Action
@@ -751,7 +717,7 @@ export const LeftingManagement: React.FC = () => {
                     type="tel"
                     value={sellerMobile || ''}
                     onChange={(e) => setSellerMobile(e.target.value)}
-                    placeholder="e.g. 98147-74651"
+                    placeholder="e.g. 98765-43210"
                     className="w-full px-3 py-2 text-xs font-medium text-slate-900 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-slate-900 focus:outline-none"
                   />
                 </div>
@@ -766,7 +732,7 @@ export const LeftingManagement: React.FC = () => {
                       type="text"
                       value={sellerAddress || ''}
                       onChange={(e) => setSellerAddress(e.target.value)}
-                      placeholder="e.g. Shahkot Road, Kang Khurd, Teh. Shahkot, Distt. Jalandhar - 144629"
+                      placeholder="e.g. Mandi Yard Road, Tehsil Area, Punjab - 144001"
                       className="w-full pl-9 pr-3 py-2 text-xs font-medium text-slate-900 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-slate-900 focus:outline-none"
                     />
                   </div>
@@ -1101,6 +1067,46 @@ export const LeftingManagement: React.FC = () => {
       {/* 4. DISPATCH REGISTER / HISTORY TABLE */}
       {activeTab === 'history' && (
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden space-y-4 p-5">
+          {/* Quick Edit Banner for freshly entered truck */}
+          {lastSavedRecord && (
+            <div className="bg-emerald-50 border-2 border-emerald-500 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-sm">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-emerald-600 text-white rounded-xl shadow-xs">
+                  <CheckCircle2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="text-xs font-black text-emerald-950 flex items-center gap-2">
+                    <span>{isEn ? 'Truck Entry Saved Successfully!' : 'ਟਰੱਕ ਐਂਟਰੀ ਸਫਲਤਾਪੂਰਵਕ ਦਰਜ ਹੋ ਗਈ!'}</span>
+                    <span className="font-mono bg-emerald-200/90 text-emerald-950 px-2 py-0.5 rounded font-black text-xs">
+                      {lastSavedRecord.truckNo}
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-emerald-800 mt-0.5 font-medium">
+                    {lastSavedRecord.bags} ਬੋਰੀਆਂ • ਸ਼ੈਲਰ: {lastSavedRecord.destination} • ਗੇਟ ਪਾਸ: {lastSavedRecord.gatePassNo || lastSavedRecord.id}
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleOpenEdit(lastSavedRecord)}
+                  className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-black flex items-center gap-1.5 shadow-sm transition cursor-pointer"
+                >
+                  <Edit className="w-3.5 h-3.5" />
+                  <span>{isEn ? 'Edit Full Entry' : 'ਹੁਣੇ ਦਰਜ ਕੀਤੀ ਐਂਟਰੀ ਸੋਧੋ (Edit)'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => exportLeftingVoucherPDF(lastSavedRecord, settings)}
+                  className="px-3.5 py-2 bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 rounded-xl text-xs font-bold flex items-center gap-1 shadow-2xs transition cursor-pointer"
+                >
+                  <FileDown className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>ਬਿਲਟੀ PDF</span>
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Mandi Branch Filter Bar with Primary Drop Down List */}
           <div className="flex items-center gap-2 flex-wrap pb-2 border-b border-slate-100">
             <span className="text-xs font-black text-slate-700 flex items-center gap-1">
@@ -1319,18 +1325,19 @@ export const LeftingManagement: React.FC = () => {
                       <td className="p-3 text-center print:hidden">
                         <div className="flex items-center justify-center gap-1.5">
                           <button
+                            onClick={() => handleOpenEdit(rec)}
+                            className="flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition-colors shadow-2xs cursor-pointer"
+                            title="ਪੂਰੀ ਟਰੱਕ ਐਂਟਰੀ ਸੋਧੋ (Edit Full Truck Entry)"
+                          >
+                            <Edit className="w-3.5 h-3.5 text-emerald-700" />
+                            <span>{isEn ? 'Edit' : 'ਸੋਧੋ'}</span>
+                          </button>
+                          <button
                             onClick={() => setViewRecord(rec)}
                             className="p-1 text-slate-400 hover:text-slate-800 rounded transition-colors"
                             title="View Dispatch Details"
                           >
                             <Eye className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => handleOpenEdit(rec)}
-                            className="p-1 text-slate-400 hover:text-emerald-700 rounded transition-colors"
-                            title="Update Status / Receiving"
-                          >
-                            <Edit className="w-4 h-4" />
                           </button>
                           <button
                             onClick={() => exportLeftingVoucherPDF(rec, settings)}
@@ -1506,15 +1513,27 @@ export const LeftingManagement: React.FC = () => {
 
             <div className="pt-2 flex items-center justify-end gap-2 border-t">
               <button
+                type="button"
+                onClick={() => {
+                  const r = viewRecord;
+                  setViewRecord(null);
+                  handleOpenEdit(r);
+                }}
+                className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition cursor-pointer"
+              >
+                <Edit className="w-3.5 h-3.5" />
+                <span>{isEn ? 'Edit Full Entry' : 'ਪੂਰੀ ਐਂਟਰੀ ਸੋਧੋ (Edit Entry)'}</span>
+              </button>
+              <button
                 onClick={() => exportLeftingVoucherPDF(viewRecord, settings)}
-                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5"
+                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer"
               >
                 <FileDown className="w-3.5 h-3.5" />
                 <span>PDF ਡਾਊਨਲੋਡ ਕਰੋ</span>
               </button>
               <button
                 onClick={() => setViewRecord(null)}
-                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold"
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold cursor-pointer"
               >
                 ਬੰਦ ਕਰੋ
               </button>
@@ -1523,110 +1542,20 @@ export const LeftingManagement: React.FC = () => {
         </div>
       )}
 
-      {/* 6. EDIT STATUS / SHORTAGE MODAL */}
-      {editRecord && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-xl border border-slate-200">
-            <div className="flex items-center justify-between border-b pb-3">
-              <div className="flex items-center gap-2">
-                <Edit className="w-5 h-5 text-slate-900" />
-                <h3 className="text-base font-black text-slate-900">ਸਥਿਤੀ ਤੇ ਡਲਿਵਰੀ ਅੱਪਡੇਟ</h3>
-              </div>
-              <button onClick={() => setEditRecord(null)} className="p-1 hover:bg-slate-100 rounded-lg">
-                <X className="w-4 h-4 text-slate-500" />
-              </button>
-            </div>
-
-            {/* Dispatch Record Summary */}
-            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-1">
-              <div className="flex justify-between font-bold text-slate-800">
-                <span>ਗੇਟ ਪਾਸ: {editRecord.gatePassNo || editRecord.id}</span>
-                <span>ਟਰੱਕ: {editRecord.truckNo}</span>
-              </div>
-              <div className="flex justify-between items-center text-slate-600">
-                <span>ਬੋਰੀਆਂ: {editRecord.bags} Bags</span>
-                <span className="font-mono font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                  Total Weight / ਕੁੱਲ ਵਜ਼ਨ: {formatLeftingWeightQtlKg(editRecord.totalWeightKg ?? (editRecord.qul * 100 + editRecord.kg))}
-                </span>
-              </div>
-            </div>
-
-            <form onSubmit={handleSaveEdit} className="space-y-4 text-xs">
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  {isEn ? 'Delivery Status' : 'ਸਥਿਤੀ (Delivery Status)'}
-                </label>
-                <SearchableSelect
-                  id="lefting-edit-status"
-                  value={editStatus || 'DISPATCHED'}
-                  onChange={(val) => setEditStatus(val as any)}
-                  options={editStatusOptions}
-                  placeholder={isEn ? "Select status..." : "ਸਥਿਤੀ ਚੁਣੋ..."}
-                />
-              </div>
-
-              {editStatus === 'DELIVERED' && (
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">ਪਹੁੰਚਣ ਦੀ ਮਿਤੀ (Receiving Date)</label>
-                  <DateInput
-                    value={editReceivingDate || ''}
-                    onChange={setEditReceivingDate}
-                  />
-                </div>
-              )}
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">ਸ਼ਾਰਟੇਜ ਕਿਲੋ (Shortage Kg)</label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    value={editShortageKg ?? ''}
-                    onChange={(e) => setEditShortageKg(e.target.value)}
-                    className="w-full px-3 py-2 text-xs font-bold text-slate-900 bg-slate-50 border border-slate-200 rounded-xl"
-                  />
-                </div>
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">ਰੱਦ ਬੋਰੀਆਂ (Rejected Bags)</label>
-                  <input
-                    type="number"
-                    value={editRejectedBags ?? ''}
-                    onChange={(e) => setEditRejectedBags(e.target.value)}
-                    className="w-full px-3 py-2 text-xs font-bold text-slate-900 bg-slate-50 border border-slate-200 rounded-xl"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">ਟਿੱਪਣੀ (Remarks)</label>
-                <input
-                  type="text"
-                  value={editRemarks || ''}
-                  onChange={(e) => setEditRemarks(e.target.value)}
-                  placeholder="ਡਲਿਵਰੀ ਰਸੀਦ ਜਾਂ ਸ਼ਾਰਟੇਜ ਵੇਰਵਾ"
-                  className="w-full px-3 py-2 text-xs text-slate-900 bg-slate-50 border border-slate-200 rounded-xl"
-                />
-              </div>
-
-              <div className="pt-2 flex items-center justify-end gap-2 border-t">
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold"
-                >
-                  ਅੱਪਡੇਟ ਸੇਵ ਕਰੋ
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setEditRecord(null)}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold"
-                >
-                  ਰੱਦ ਕਰੋ
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      {/* 6. FULL TRUCK EDIT MODAL */}
+      <LeftingEditModal
+        record={editRecord}
+        isOpen={!!editRecord}
+        onClose={() => setEditRecord(null)}
+        onSuccess={(updated) => {
+          if (lastSavedRecord && lastSavedRecord.id === updated.id) {
+            setLastSavedRecord(updated);
+          }
+          if (viewRecord && viewRecord.id === updated.id) {
+            setViewRecord(updated);
+          }
+        }}
+      />
 
       {/* 7. SELLER MASTER MODAL */}
       <SellerMasterModal

@@ -96,11 +96,11 @@ export async function checkUserFirmAccess(firmId: string = 'FIRM-001'): Promise<
 }
 
 /**
- * Ensure the currently authenticated user is linked to target firm (default: FIRM-001 Jammu Trading Co)
+ * Ensure the currently authenticated user is linked to target firm (default: DEMO-FIRM-001 Punjab Mandi Trading Co)
  * as owner/admin in firm_members table. Securely creates the firm_members record if missing.
- * Verifies user_has_firm_access('FIRM-001') = true.
+ * Verifies user_has_firm_access('DEMO-FIRM-001') = true.
  */
-export async function ensureUserFirmAccess(targetFirmId: string = 'FIRM-001'): Promise<{
+export async function ensureUserFirmAccess(targetFirmId: string = 'DEMO-FIRM-001'): Promise<{
   success: boolean;
   hasAccess: boolean;
   userId?: string;
@@ -148,17 +148,17 @@ export async function ensureUserFirmAccess(targetFirmId: string = 'FIRM-001'): P
     // Ensure target firm exists in public.mandi_firms table (ignore conflict if already present)
     const defaultFirmPayload = {
       id: targetFirmId,
-      name: 'Jammu Trading Co',
-      name_pa: 'ਜੰਮੂ ਟਰੇਡਿੰਗ ਕੰਪਨੀ',
-      address: 'Dana Mandi Kang Khurd, Teh. Shahkot, Distt. Jalandhar, Punjab - 144629',
-      mobile: '98141-92345',
-      licence_no: 'MC/KNG/2024/089',
-      market_committee: 'Kang Khurd',
+      name: 'Punjab Mandi Trading Co',
+      name_pa: 'ਪੰਜਾਬ ਮੰਡੀ ਟਰੇਡਿੰਗ ਕੰਪਨੀ',
+      address: 'Main Grain Market Yard, Punjab - 144001',
+      mobile: '98765-43210',
+      licence_no: 'DEMO/PB/2026',
+      market_committee: 'Punjab Mandi Board',
       is_default: true,
       data: {
         id: targetFirmId,
-        name: 'Jammu Trading Co',
-        namePa: 'ਜੰਮੂ ਟਰੇਡਿੰਗ ਕੰਪਨੀ',
+        name: 'Punjab Mandi Trading Co',
+        namePa: 'ਪੰਜਾਬ ਮੰਡੀ ਟਰੇਡਿੰਗ ਕੰਪਨੀ',
         isDefault: true
       },
       updated_at: new Date().toISOString()

@@ -122,7 +122,7 @@ export const TruckMasterModal: React.FC<TruckMasterModalProps> = ({
       const trimmed = line.trim();
       if (!trimmed) return;
 
-      // Can be comma separated: "PB10AZ9596, Gurmeet Singh, 9814774651, Shahkot Union"
+      // Can be comma separated: "PB10AZ9596, Gurmeet Singh, 9876543210, Shahkot Union"
       // or tab separated, or just truck number
       const parts = trimmed.split(/[,|\t]/).map((p) => p.trim());
       const tNo = parts[0]?.toUpperCase().replace(/\s+/g, ' ');
@@ -390,7 +390,7 @@ export const TruckMasterModal: React.FC<TruckMasterModalProps> = ({
                     type="tel"
                     value={driverMobile || ''}
                     onChange={(e) => setDriverMobile(e.target.value)}
-                    placeholder="e.g. 98147-74651"
+                    placeholder="e.g. 98765-43210"
                     className="w-full px-3 py-2 text-xs font-medium text-slate-900 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-slate-900 focus:outline-none"
                   />
                 </div>
@@ -465,7 +465,7 @@ export const TruckMasterModal: React.FC<TruckMasterModalProps> = ({
                   Excel ਜਾਂ ਕਿਸੇ ਵੀ ਸੂਚੀ ਵਿੱਚੋਂ ਕਾਪੀ ਕਰਕੇ ਹੇਠਾਂ ਪੇਸਟ ਕਰੋ। ਹਰ ਲਾਈਨ ਵਿੱਚ ਇੱਕ ਟਰੱਕ ਹੋਵੇ:
                 </p>
                 <div className="bg-white/80 p-2 rounded font-mono text-[11px] text-slate-700 border border-emerald-200">
-                  PB 10 AZ 9596, ਕੁਲਵੰਤ ਸਿੰਘ, 9814774651, ਸ਼ਾਹਕੋਟ ਯੂਨੀਅਨ, 600
+                  PB 10 AZ 9596, ਕੁਲਵੰਤ ਸਿੰਘ, 9876543210, ਸ਼ਾਹਕੋਟ ਯੂਨੀਅਨ, 600
                   <br />
                   PB 08 CW 1234, ਜਗਜੀਤ ਸਿੰਘ, 9876543210, ਲੋਹੀਆਂ ਯੂਨੀਅਨ
                   <br />

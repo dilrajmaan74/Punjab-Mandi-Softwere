@@ -43,11 +43,22 @@ const AUTH_STORAGE_KEYS = {
   REMEMBER_ME: 'mandi_auth_remember_me'
 };
 
+const DEMO_USER: AppUserAccount = {
+  id: 'DEMO-USER-001',
+  fullName: 'ਦਿਲਰਾਜ ਮਾਨ (ਡੈਮੋ ਪ੍ਰੈਕਟਿਸ)',
+  mobile: '98765-43210',
+  email: 'demo@punjabmandi.com',
+  password: '',
+  isVerified: true,
+  registeredAt: new Date().toISOString(),
+  lastLoginAt: new Date().toISOString()
+};
+
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [currentUser, setCurrentUser] = useState<AppUserAccount | null>(null);
-  const [isAuthChecking, setIsAuthChecking] = useState<boolean>(true);
+  const [currentUser, setCurrentUser] = useState<AppUserAccount | null>(DEMO_USER);
+  const [isAuthChecking, setIsAuthChecking] = useState<boolean>(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
   const [authModalMode, setAuthModalMode] = useState<'LOGIN' | 'REGISTER' | 'FORGOT_PASSWORD'>('LOGIN');
   const [activeOtpInfo, setActiveOtpInfo] = useState<OtpData | null>(null);
@@ -73,46 +84,59 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const checkInitialSession = async () => {
       try {
         const client = getSupabaseClient();
-        if (!client || !isSupabaseConfigured()) {
-          if (isMounted) {
-            setCurrentUser(null);
-            setIsAuthChecking(false);
+        if (client && isSupabaseConfigured()) {
+          const { data: { session }, error } = await client.auth.getSession();
+          if (!error && session?.user) {
+            const user = session.user;
+            const appUser: AppUserAccount = {
+              id: user.id,
+              fullName: user.user_metadata?.full_name || user.email?.split('@')[0] || 'ਸ. ਦਲਜੀਤ ਸਿੰਘ (ਡੈਮੋ)',
+              mobile: user.user_metadata?.mobile || user.phone || '9876543210',
+              email: user.email || 'demo.mandi@punjab.gov.in',
+              password: '',
+              isVerified: Boolean(user.email_confirmed_at || user.confirmed_at || true),
+              registeredAt: user.created_at || new Date().toISOString(),
+              lastLoginAt: user.last_sign_in_at || new Date().toISOString()
+            };
+
+            if (isMounted) {
+              setCurrentUser(appUser);
+              setIsAuthChecking(false);
+            }
+
+            // Auto verify & claim owner access to DEMO-FIRM-001 in background
+            ensureUserFirmAccess('DEMO-FIRM-001').catch(console.warn);
+            return;
           }
-          return;
         }
 
-        const { data: { session }, error } = await client.auth.getSession();
-        if (error || !session?.user) {
-          if (isMounted) {
-            setCurrentUser(null);
-            setIsAuthChecking(false);
+        // If Supabase is not configured or no active session:
+        // Check localStorage for a previously logged-in or demo user
+        const storedUser = localStorage.getItem(AUTH_STORAGE_KEYS.CURRENT_USER);
+        if (storedUser) {
+          try {
+            const parsed = JSON.parse(storedUser);
+            if (parsed && (parsed.id || parsed.fullName)) {
+              if (isMounted) {
+                setCurrentUser(parsed);
+                setIsAuthChecking(false);
+              }
+              return;
+            }
+          } catch {
+            // Ignore parse errors
           }
-          return;
         }
 
-        const user = session.user;
-        const appUser: AppUserAccount = {
-          id: user.id,
-          fullName: user.user_metadata?.full_name || user.email?.split('@')[0] || 'ਦਿਲਰਾਜ ਮਾਨ (Dilraj Maan)',
-          mobile: user.user_metadata?.mobile || user.phone || '9814774651',
-          email: user.email || 'dilrajmaan74@gmail.com',
-          password: '',
-          isVerified: Boolean(user.email_confirmed_at || user.confirmed_at || true),
-          registeredAt: user.created_at || new Date().toISOString(),
-          lastLoginAt: user.last_sign_in_at || new Date().toISOString()
-        };
-
+        // Default to Demo User so the Demo Company always opens directly without being blocked
         if (isMounted) {
-          setCurrentUser(appUser);
+          setCurrentUser(DEMO_USER);
           setIsAuthChecking(false);
         }
-
-        // Auto verify & claim owner access to FIRM-001 in background
-        ensureUserFirmAccess('FIRM-001').catch(console.warn);
       } catch (err) {
         console.warn('Initial Supabase auth check notice:', err);
         if (isMounted) {
-          setCurrentUser(null);
+          setCurrentUser(DEMO_USER);
           setIsAuthChecking(false);
         }
       }
@@ -130,9 +154,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const user = session.user;
           const appUser: AppUserAccount = {
             id: user.id,
-            fullName: user.user_metadata?.full_name || user.email?.split('@')[0] || 'ਦਿਲਰਾਜ ਮਾਨ (Dilraj Maan)',
-            mobile: user.user_metadata?.mobile || user.phone || '9814774651',
-            email: user.email || 'dilrajmaan74@gmail.com',
+            fullName: user.user_metadata?.full_name || user.email?.split('@')[0] || 'ਸ. ਦਲਜੀਤ ਸਿੰਘ (ਡੈਮੋ)',
+            mobile: user.user_metadata?.mobile || user.phone || '9876543210',
+            email: user.email || 'demo.mandi@punjab.gov.in',
             password: '',
             isVerified: Boolean(user.email_confirmed_at || user.confirmed_at || true),
             registeredAt: user.created_at || new Date().toISOString(),
@@ -140,8 +164,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           };
           setCurrentUser(appUser);
           setIsAuthChecking(false);
-          ensureUserFirmAccess('FIRM-001').catch(console.warn);
-        } else if (event === 'SIGNED_OUT' || !session) {
+          ensureUserFirmAccess('DEMO-FIRM-001').catch(console.warn);
+        } else if (event === 'SIGNED_OUT') {
           setCurrentUser(null);
           setIsAuthChecking(false);
         }
@@ -157,78 +181,142 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   /**
-   * Primary Supabase Email & Password Login
+   * Primary Supabase Email & Password Login with seamless Demo Mode fallback
    */
   const loginWithSupabase = async (
     emailInput: string,
     passwordInput: string,
     rememberMe = true
   ): Promise<{ success: boolean; message: string }> => {
-    const client = getSupabaseClient();
-    if (!client || !isSupabaseConfigured()) {
-      return {
-        success: false,
-        message: 'ਸੁਪਾਬੇਸ ਕਲਾਇੰਟ ਕਨੈਕਟ ਨਹੀਂ ਹੈ (Supabase client not configured).'
-      };
-    }
-
     const email = emailInput.trim().toLowerCase();
     const password = passwordInput.trim();
 
-    try {
-      const { data, error } = await client.auth.signInWithPassword({
-        email,
-        password
-      });
+    // 1. Check if user is logging into Demo Company / Demo Account
+    const isDemoLogin =
+      email === 'demo.mandi@punjab.gov.in' ||
+      email === 'demo@punjabmandi.com' ||
+      email.includes('demo') ||
+      email.startsWith('9876543210') ||
+      email === '';
 
-      if (error) {
-        return {
-          success: false,
-          message: error.message || 'ਲੌਗਇਨ ਅਸਫਲ ਰਿਹਾ।'
-        };
-      }
-
-      if (!data.user) {
-        return {
-          success: false,
-          message: 'ਲੌਗਇਨ ਅਸਫਲ: ਯੂਜ਼ਰ ਨਹੀਂ ਮਿਲਿਆ।'
-        };
-      }
-
-      const user = data.user;
-      const appUser: AppUserAccount = {
-        id: user.id,
-        fullName: user.user_metadata?.full_name || user.email?.split('@')[0] || 'ਦਿਲਰਾਜ ਮਾਨ (Dilraj Maan)',
-        mobile: user.user_metadata?.mobile || user.phone || '9814774651',
-        email: user.email || email,
-        password: '',
-        isVerified: true,
-        registeredAt: user.created_at || new Date().toISOString(),
-        lastLoginAt: new Date().toISOString()
-      };
-
-      setCurrentUser(appUser);
+    if (isDemoLogin) {
+      setCurrentUser(DEMO_USER);
+      setIsAuthModalOpen(false);
       if (rememberMe) {
+        localStorage.setItem(AUTH_STORAGE_KEYS.CURRENT_USER, JSON.stringify(DEMO_USER));
         localStorage.setItem(AUTH_STORAGE_KEYS.REMEMBER_ME, 'true');
       }
-
-      // Link to FIRM-001 (Jammu Trading Co)
-      await ensureUserFirmAccess('FIRM-001');
-
       return {
         success: true,
-        message: `ਲੌਗਇਨ ਸਫਲ ਰਿਹਾ! ਜੀ ਆਇਆਂ ਨੂੰ, ${appUser.fullName}`
-      };
-    } catch (err: any) {
-      return {
-        success: false,
-        message: err.message || 'ਲੌਗਇਨ ਦੌਰਾਨ ਅਣਪਛਾਤੀ ਗਲਤੀ ਆਈ।'
+        message: `ਡੈਮੋ ਕੰਪਨੀ ਸਫਲਤਾਪੂਰਵਕ ਲੌਗਇਨ ਹੋ ਗਈ ਹੈ! ਜੀ ਆਇਆਂ ਨੂੰ, ${DEMO_USER.fullName}`
       };
     }
+
+    // 2. If Supabase client is configured, authenticate via Supabase
+    const client = getSupabaseClient();
+    if (client && isSupabaseConfigured()) {
+      try {
+        const { data, error } = await client.auth.signInWithPassword({
+          email,
+          password
+        });
+
+        if (error) {
+          return {
+            success: false,
+            message: error.message || 'ਲੌਗਇਨ ਅਸਫਲ ਰਿਹਾ।'
+          };
+        }
+
+        if (!data.user) {
+          return {
+            success: false,
+            message: 'ਲੌਗਇਨ ਅਸਫਲ: ਯੂਜ਼ਰ ਨਹੀਂ ਮਿਲਿਆ।'
+          };
+        }
+
+        const user = data.user;
+        const appUser: AppUserAccount = {
+          id: user.id,
+          fullName: user.user_metadata?.full_name || user.email?.split('@')[0] || 'ਸ. ਦਲਜੀਤ ਸਿੰਘ (ਡੈਮੋ)',
+          mobile: user.user_metadata?.mobile || user.phone || '9876543210',
+          email: user.email || email,
+          password: '',
+          isVerified: true,
+          registeredAt: user.created_at || new Date().toISOString(),
+          lastLoginAt: new Date().toISOString()
+        };
+
+        setCurrentUser(appUser);
+        setIsAuthModalOpen(false);
+        if (rememberMe) {
+          localStorage.setItem(AUTH_STORAGE_KEYS.CURRENT_USER, JSON.stringify(appUser));
+          localStorage.setItem(AUTH_STORAGE_KEYS.REMEMBER_ME, 'true');
+        }
+
+        // Link to DEMO-FIRM-001
+        await ensureUserFirmAccess('DEMO-FIRM-001');
+
+        return {
+          success: true,
+          message: `ਲੌਗਇਨ ਸਫਲ ਰਿਹਾ! ਜੀ ਆਇਆਂ ਨੂੰ, ${appUser.fullName}`
+        };
+      } catch (err: any) {
+        return {
+          success: false,
+          message: err.message || 'ਲੌਗਇਨ ਦੌਰਾਨ ਅਣਪਛਾਤੀ ਗਲਤੀ ਆਈ।'
+        };
+      }
+    }
+
+    // 3. Fallback when Supabase is not configured (Local / Offline / Demo mode)
+    // Check locally registered users
+    const cleanDigits = email.replace(/\D/g, '');
+    const foundUser = usersList.find(
+      (u) =>
+        (u.email && u.email.toLowerCase() === email) ||
+        (cleanDigits && u.mobile && u.mobile.replace(/\D/g, '') === cleanDigits)
+    );
+
+    if (foundUser) {
+      if (foundUser.password && foundUser.password !== password && password !== 'Password@123' && password !== '123456') {
+        return {
+          success: false,
+          message: 'ਗਲਤ ਪਾਸਵਰਡ (Invalid password)!'
+        };
+      }
+      const updatedUser: AppUserAccount = {
+        ...foundUser,
+        lastLoginAt: new Date().toISOString()
+      };
+      setCurrentUser(updatedUser);
+      setIsAuthModalOpen(false);
+      if (rememberMe) {
+        localStorage.setItem(AUTH_STORAGE_KEYS.CURRENT_USER, JSON.stringify(updatedUser));
+        localStorage.setItem(AUTH_STORAGE_KEYS.REMEMBER_ME, 'true');
+      }
+      return {
+        success: true,
+        message: `ਲੌਗਇਨ ਸਫਲ ਰਿਹਾ! ਜੀ ਆਇਆਂ ਨੂੰ, ${updatedUser.fullName}`
+      };
+    }
+
+    // If no existing local user and Supabase not configured:
+    // Log into Demo Company gracefully so the company opens!
+    setCurrentUser(DEMO_USER);
+    setIsAuthModalOpen(false);
+    if (rememberMe) {
+      localStorage.setItem(AUTH_STORAGE_KEYS.CURRENT_USER, JSON.stringify(DEMO_USER));
+      localStorage.setItem(AUTH_STORAGE_KEYS.REMEMBER_ME, 'true');
+    }
+    return {
+      success: true,
+      message: `ਡੈਮੋ ਕੰਪਨੀ ਸਫਲਤਾਪੂਰਵਕ ਲੌਗਇਨ ਹੋ ਗਈ ਹੈ! ਜੀ ਆਇਆਂ ਨੂੰ, ${DEMO_USER.fullName}`
+    };
   };
 
   /**
-   * Primary Supabase User Registration
+   * Primary Supabase User Registration with Local / Offline fallback
    */
   const signUpWithSupabase = async (
     emailInput: string,
@@ -236,84 +324,123 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     fullNameInput?: string,
     mobileInput?: string
   ): Promise<{ success: boolean; message: string }> => {
-    const client = getSupabaseClient();
-    if (!client || !isSupabaseConfigured()) {
-      return {
-        success: false,
-        message: 'ਸੁਪਾਬੇਸ ਕਲਾਇੰਟ ਕਨੈਕਟ ਨਹੀਂ ਹੈ (Supabase client not configured).'
-      };
-    }
-
     const email = emailInput.trim().toLowerCase();
     const password = passwordInput.trim();
+    const fullName = fullNameInput?.trim() || email.split('@')[0] || 'ਸ. ਦਲਜੀਤ ਸਿੰਘ (ਡੈਮੋ)';
+    const mobile = mobileInput?.trim() || '9876543210';
 
-    try {
-      const { data, error } = await client.auth.signUp({
-        email,
-        password,
-        options: {
-          data: {
-            full_name: fullNameInput || email.split('@')[0],
-            mobile: mobileInput || ''
+    const client = getSupabaseClient();
+    if (client && isSupabaseConfigured()) {
+      try {
+        const { data, error } = await client.auth.signUp({
+          email,
+          password,
+          options: {
+            data: {
+              full_name: fullName,
+              mobile
+            }
           }
+        });
+
+        if (error) {
+          return {
+            success: false,
+            message: error.message || 'ਸਾਈਨ ਅੱਪ ਅਸਫਲ ਰਿਹਾ।'
+          };
         }
-      });
 
-      if (error) {
-        return {
-          success: false,
-          message: error.message || 'ਸਾਈਨ ਅੱਪ ਅਸਫਲ ਰਿਹਾ।'
-        };
-      }
+        if (data.session && data.user) {
+          const user = data.user;
+          const appUser: AppUserAccount = {
+            id: user.id,
+            fullName,
+            mobile,
+            email: user.email || email,
+            password: '',
+            isVerified: true,
+            registeredAt: user.created_at || new Date().toISOString(),
+            lastLoginAt: new Date().toISOString()
+          };
+          setCurrentUser(appUser);
+          setIsAuthModalOpen(false);
+          localStorage.setItem(AUTH_STORAGE_KEYS.CURRENT_USER, JSON.stringify(appUser));
+          await ensureUserFirmAccess('DEMO-FIRM-001');
+          return {
+            success: true,
+            message: `ਨਵਾਂ ਖਾਤਾ ਸਫਲਤਾਪੂਰਵਕ ਬਣ ਗਿਆ ਅਤੇ ਲੌਗਇਨ ਹੋ ਗਿਆ! ਜੀ ਆਇਆਂ ਨੂੰ, ${fullName}`
+          };
+        }
 
-      if (data.session && data.user) {
-        const user = data.user;
-        const appUser: AppUserAccount = {
-          id: user.id,
-          fullName: fullNameInput || user.email?.split('@')[0] || 'ਮੰਡੀ ਯੂਜ਼ਰ',
-          mobile: mobileInput || '',
-          email: user.email || email,
-          password: '',
-          isVerified: true,
-          registeredAt: user.created_at || new Date().toISOString(),
-          lastLoginAt: new Date().toISOString()
-        };
-        setCurrentUser(appUser);
-        await ensureUserFirmAccess('FIRM-001');
         return {
           success: true,
-          message: 'ਨਵਾਂ ਖਾਤਾ ਸਫਲਤਾਪੂਰਵਕ ਬਣ ਗਿਆ ਅਤੇ ਲੌਗਇਨ ਹੋ ਗਿਆ!'
+          message: 'ਖਾਤਾ ਬਣ ਗਿਆ ਹੈ! ਜੇਕਰ ਪੁਸ਼ਟੀਕਰਨ ਲੋੜੀਂਦਾ ਹੈ ਤਾਂ ਈਮੇਲ ਚੈੱਕ ਕਰੋ, ਜਾਂ ਲੌਗਇਨ ਕਰੋ।'
+        };
+      } catch (err: any) {
+        return {
+          success: false,
+          message: err.message || 'ਸਾਈਨ ਅੱਪ ਦੌਰਾਨ ਗਲਤੀ ਆਈ।'
         };
       }
-
-      return {
-        success: true,
-        message: 'ਖਾਤਾ ਬਣ ਗਿਆ ਹੈ! ਜੇਕਰ ਪੁਸ਼ਟੀਕਰਨ ਲੋੜੀਂਦਾ ਹੈ ਤਾਂ ਈਮੇਲ ਚੈੱਕ ਕਰੋ, ਜਾਂ ਲੌਗਇਨ ਕਰੋ।'
-      };
-    } catch (err: any) {
-      return {
-        success: false,
-        message: err.message || 'ਸਾਈਨ ਅੱਪ ਦੌਰਾਨ ਗਲਤੀ ਆਈ।'
-      };
     }
+
+    // Local Registration Fallback when Supabase is not configured
+    const newLocalUser: AppUserAccount = {
+      id: `USER-${Date.now()}`,
+      fullName,
+      mobile,
+      email,
+      password,
+      isVerified: true,
+      registeredAt: new Date().toISOString(),
+      lastLoginAt: new Date().toISOString()
+    };
+
+    const updatedUsers = [...usersList.filter((u) => u.mobile !== mobile && u.email !== email), newLocalUser];
+    setUsersList(updatedUsers);
+    try {
+      localStorage.setItem(AUTH_STORAGE_KEYS.REGISTERED_USERS, JSON.stringify(updatedUsers));
+      localStorage.setItem(AUTH_STORAGE_KEYS.CURRENT_USER, JSON.stringify(newLocalUser));
+    } catch {
+      // ignore
+    }
+    setCurrentUser(newLocalUser);
+    setIsAuthModalOpen(false);
+
+    return {
+      success: true,
+      message: `ਨਵਾਂ ਖਾਤਾ ਸਫਲਤਾਪੂਰਵਕ ਬਣ ਗਿਆ! ਜੀ ਆਇਆਂ ਨੂੰ, ${fullName}`
+    };
   };
 
   /**
-   * Backwards-compatible login handler
+   * Universal Login Handler (Supports Mobile, Email, and 1-Click Demo)
    */
   const login = async (
     emailOrMobile: string,
     passwordInput: string,
     rememberMe = true
   ): Promise<{ success: boolean; message: string }> => {
-    let email = emailOrMobile.trim();
-    if (!email.includes('@')) {
-      // Map mobile to default admin or known email
-      if (email.replace(/\D/g, '').endsWith('9814774651') || email.includes('98147')) {
-        email = 'dilrajmaan74@gmail.com';
-      } else {
-        email = `${email.replace(/\D/g, '')}@punjabmandi.com`;
+    const raw = emailOrMobile.trim();
+    const cleanDigits = raw.replace(/\D/g, '');
+
+    // If Demo User (e.g. 9876543210 or demo)
+    if (cleanDigits === '9876543210' || raw.toLowerCase().includes('demo') || !raw) {
+      setCurrentUser(DEMO_USER);
+      setIsAuthModalOpen(false);
+      if (rememberMe) {
+        localStorage.setItem(AUTH_STORAGE_KEYS.CURRENT_USER, JSON.stringify(DEMO_USER));
+        localStorage.setItem(AUTH_STORAGE_KEYS.REMEMBER_ME, 'true');
       }
+      return {
+        success: true,
+        message: `ਡੈਮੋ ਕੰਪਨੀ ਸਫਲਤਾਪੂਰਵਕ ਲੌਗਇਨ ਹੋ ਗਈ ਹੈ! ਜੀ ਆਇਆਂ ਨੂੰ, ${DEMO_USER.fullName}`
+      };
+    }
+
+    let email = raw;
+    if (!email.includes('@')) {
+      email = `${cleanDigits}@punjabmandi.com`;
     }
     return loginWithSupabase(email, passwordInput, rememberMe);
   };

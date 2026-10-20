@@ -235,11 +235,11 @@ export const FarmerAccountStatementA4: React.FC<FarmerAccountStatementA4Props> =
   const finalBalanceWeightQtl = finalBalanceWeightKg / 100;
 
   // Firm Information
-  const firmName = settings.firmNameEn || 'JAMMU TRADING CO.';
-  const firmNamePa = settings.firmNamePa || 'ਜੰਮੂ ਟਰੇਡਿੰਗ ਕੰਪਨੀ';
-  const firmAddress = settings.firmAddress || 'Dana Mandi Kang Khurd, Teh. Shahkot, Distt. Jalandhar, Punjab - 144629';
-  const firmLicence = settings.firmLicence || 'JAL/LKH/133';
-  const firmMobile = settings.firmMobile || '98147-74651';
+  const firmName = settings.firmNameEn || 'PUNJAB MANDI TRADING CO. (DEMO)';
+  const firmNamePa = settings.firmNamePa || 'ਪੰਜਾਬ ਮੰਡੀ ਟਰੇਡਿੰਗ ਕੰਪਨੀ (ਡੈਮੋ)';
+  const firmAddress = settings.firmAddress || 'Shop No. 12, Main Grain Market, Punjab - 144001';
+  const firmLicence = settings.firmLicence || 'DEMO/PB/2026';
+  const firmMobile = settings.firmMobile || '98765-43210';
   const firmPan = settings.firmPan || '';
   const firmGstin = settings.firmGstin || '';
 
@@ -1183,7 +1183,7 @@ export const FarmerAccountStatementA4: React.FC<FarmerAccountStatementA4Props> =
         </div>
 
         <div className="text-center text-[8px] text-slate-500 leading-tight">
-          Computer Generated Account Statement &nbsp;|&nbsp; {settings.firmNameEn || 'Jammu Trading Co.'}
+          Computer Generated Account Statement &nbsp;|&nbsp; {settings.firmNameEn || 'Punjab Mandi Trading Co (Demo)'}
           <br />
           Generated on {printDate}
         </div>

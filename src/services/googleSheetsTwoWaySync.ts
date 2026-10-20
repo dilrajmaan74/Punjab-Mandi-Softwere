@@ -582,7 +582,7 @@ export function serializeBagTransferToRow(bt: BagTransferRecord, isDeleted: bool
 
 export async function createFirmTwoWaySpreadsheet(
   accessToken: string,
-  firmName: string = 'Jammu Trading Co'
+  firmName: string = 'Punjab Mandi Trading Co (Demo)'
 ): Promise<{ spreadsheetId: string; spreadsheetUrl: string }> {
   const title = `${firmName} - Mandi Data Two-Way Backup & Sync`;
   const sheetsToCreate = Object.entries(SHEET_NAMES).map(([_, sheetName]) => ({
@@ -1072,8 +1072,8 @@ export async function readAndValidateGoogleSheetsData(
       farmerNamePa: farmerNamePa || farmerNameEn,
       fatherName: fatherNameEn,
       fatherNamePa: (row[5] || fatherNameEn).toString().trim(),
-      village: villageEn || 'Dana Mandi Kang Khurd',
-      villagePa: (row[7] || villageEn || 'ਦਾਣਾ ਮੰਡੀ ਕੰਗ ਖੁਰਦ').toString().trim(),
+      village: villageEn || 'Mandi Village (Demo)',
+      villagePa: (row[7] || villageEn || 'ਮੰਡੀ ਪਿੰਡ (ਡੈਮੋ)').toString().trim(),
       address: (row[8] || '').toString().trim() || undefined,
       pinCode: (row[9] || '144629').toString().trim(),
       mobile: (row[10] || '').toString().trim(),

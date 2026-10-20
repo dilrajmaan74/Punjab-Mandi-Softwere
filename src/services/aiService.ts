@@ -88,8 +88,8 @@ export async function getAiWhatsAppVoiceScript(params: {
     return json.data;
   } catch (err) {
     console.warn('AI WhatsApp Voice failed, fallback script:', err);
-    const farmerName = params.farmer?.farmerNamePa || params.farmer?.farmerName || 'ਸਰਦਾਰ ਜੀ';
-    const firmName = params.firm?.name || 'Jammu Trading Co';
+    const farmerName = params.farmer?.farmerNamePa || params.farmer?.farmerName || 'ਕਿਸਾਨ ਵੀਰ';
+    const firmName = params.firm?.name || 'Punjab Mandi Trading Co (Demo)';
     const script = `ਸਤਿ ਸ੍ਰੀ ਅਕਾਲ ਸਰਦਾਰ ${farmerName} ਜੀ, ${firmName} ਵੱਲੋਂ ਤੁਹਾਡਾ ਰਿਕਾਰਡ ਦਰਜ ਹੋ ਗਿਆ ਹੈ। ਧੰਨਵਾਦ!`;
     return {
       punjabiVoiceScript: script,
@@ -274,18 +274,18 @@ export async function draftLetterWithGemini(params: {
     console.warn('AI Letter drafting failed, generating high-grade client fallback:', err);
     const isEn = params.language === 'en';
     const isBilingual = params.language === 'bilingual';
-    const firmName = params.firmName || 'New Jammu Trading Co';
-    const firmNamePa = params.firmNamePa || 'ਨਿਊ ਜੰਮੂ ਟਰੇਡਿੰਗ ਕੰਪਨੀ';
-    const licenceNo = params.licenceNo || 'JAL/LKH/239';
-    const propName = params.proprietorName || 'Arpanreet Singh';
-    const propNamePa = params.proprietorNamePa || 'ਅਰਪਨਰੀਤ ਸਿੰਘ';
-    const mandi = params.mandiBranch || 'ਦਾਣਾ ਮੰਡੀ ਕੰਗ ਖੁਰਦ / ਮਹਿਰਾਜਵਾਲਾ / ਕਮਾਲਪੁਰ';
+    const firmName = params.firmName || 'Punjab Mandi Trading Co (Demo)';
+    const firmNamePa = params.firmNamePa || 'ਪੰਜਾਬ ਮੰਡੀ ਟਰੇਡਿੰਗ ਕੰਪਨੀ (ਡੈਮੋ)';
+    const licenceNo = params.licenceNo || 'DEMO/PB/2026';
+    const propName = params.proprietorName || 'Daljit Singh (Demo)';
+    const propNamePa = params.proprietorNamePa || 'ਸ. ਦਲਜੀਤ ਸਿੰਘ (ਡੈਮੋ)';
+    const mandi = params.mandiBranch || 'ਮੁੱਖ ਦਾਣਾ ਮੰਡੀ (ਡੈਮੋ)';
 
     const fallback: AiLetterDraftResult = {
-      refNo: `NJTC/MK/${new Date().getFullYear()}/${Math.floor(100 + Math.random() * 900)}`,
+      refNo: `PMTC/MK/${new Date().getFullYear()}/${Math.floor(100 + Math.random() * 900)}`,
       recipient: isEn
-        ? `The Secretary / In-charge,\nMarket Committee Lohian Khas,\nTehsil Shahkot, Distt. Jalandhar (Punjab).`
-        : `ਸਕੱਤਰ ਸਾਹਿਬ (The Secretary),\nਮਾਰਕੀਟ ਕਮੇਟੀ ਲੋਹੀਆਂ ਖਾਸ,\nਤਹਿਸੀਲ ਸ਼ਾਹਕੋਟ, ਜ਼ਿਲ੍ਹਾ ਜਲੰਧਰ (ਪੰਜਾਬ)।`,
+        ? `The Secretary / In-charge,\nMarket Committee Office,\nPunjab Mandi Board (Punjab).`
+        : `ਸਕੱਤਰ ਸਾਹਿਬ (The Secretary),\nਮਾਰਕੀਟ ਕਮੇਟੀ ਦਫ਼ਤਰ,\nਪੰਜਾਬ ਮੰਡੀ ਬੋਰਡ (ਪੰਜਾਬ)।`,
       subject: isEn
         ? `Subject: Regarding Mandi Operations and Official Request - ${firmName}`
         : isBilingual

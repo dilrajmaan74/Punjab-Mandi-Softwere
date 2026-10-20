@@ -26,9 +26,9 @@ export function generateBagsWeighmentWhatsAppMessage(params: {
   language?: 'en' | 'pa';
 }): string {
   const { receipt, firm, settings } = params;
-  const firmName = firm?.name || settings.firmNameEn || 'Jammu Trading Co';
-  const mandiName = settings.mandiNamePa || settings.mandiNameEn || 'ਦਾਣਾ ਮੰਡੀ ਕੰਗ ਖੁਰਦ';
-  const firmPhone = firm?.mobile || settings.firmMobile || '98147-74651';
+  const firmName = firm?.name || settings.firmNameEn || 'Punjab Mandi Trading Co (Demo)';
+  const mandiName = settings.mandiNamePa || settings.mandiNameEn || 'ਮੁੱਖ ਦਾਣਾ ਮੰਡੀ (ਡੈਮੋ)';
+  const firmPhone = firm?.mobile || settings.firmMobile || '98765-43210';
 
   const farmerName = receipt.farmerNamePa || receipt.farmerName;
   const village = receipt.farmerVillagePa || receipt.farmerVillage;
@@ -69,8 +69,8 @@ export function generateDailyPurchaseWhatsAppMessage(params: {
   settings: MandiSettings;
 }): string {
   const { purchase, firm, settings } = params;
-  const firmName = firm?.name || settings.firmNameEn || 'Jammu Trading Co';
-  const firmPhone = firm?.mobile || settings.firmMobile || '98147-74651';
+  const firmName = firm?.name || settings.firmNameEn || 'Punjab Mandi Trading Co (Demo)';
+  const firmPhone = firm?.mobile || settings.firmMobile || '98765-43210';
 
   const farmerName = purchase.farmerNamePa || purchase.farmerName;
   const village = purchase.villagePa || purchase.village || purchase.farmerVillage || '';
@@ -106,7 +106,7 @@ export function generatePaymentWhatsAppMessage(params: {
   settings: MandiSettings;
 }): string {
   const { payment, farmerName, firm, settings } = params;
-  const firmName = firm?.name || settings.firmNameEn || 'Jammu Trading Co';
+  const firmName = firm?.name || settings.firmNameEn || 'Punjab Mandi Trading Co (Demo)';
 
   return (
 `✅ *ਭੁਗਤਾਨ ਸੂਚਨਾ (Payment Update)* ✅
@@ -133,9 +133,9 @@ export function generateAdvanceWhatsAppMessage(params: {
   settings: MandiSettings;
 }): string {
   const { advance, farmerName, firm, settings } = params;
-  const firmName = firm?.name || settings.firmNameEn || 'Jammu Trading Co';
-  const mandiName = settings.mandiNamePa || settings.mandiNameEn || 'ਦਾਣਾ ਮੰਡੀ ਕੰਗ ਖੁਰਦ';
-  const firmPhone = firm?.mobile || settings.firmMobile || '98147-74651';
+  const firmName = firm?.name || settings.firmNameEn || 'Punjab Mandi Trading Co (Demo)';
+  const mandiName = settings.mandiNamePa || settings.mandiNameEn || 'ਮੁੱਖ ਦਾਣਾ ਮੰਡੀ (ਡੈਮੋ)';
+  const firmPhone = firm?.mobile || settings.firmMobile || '98765-43210';
 
   const categoryLabels: Record<string, string> = {
     CASH: 'ਨਕਦ ਪੇਸ਼ਗੀ (Cash)',
@@ -238,9 +238,9 @@ export function generateSeasonStatementWhatsAppMessage(params: {
   dateStr?: string;
 }): string {
   const { accountSummary, firm, settings, dateStr } = params;
-  const firmName = firm?.name || settings.firmNameEn || 'Jammu Trading Co';
-  const mandiName = settings.mandiNamePa || settings.mandiNameEn || 'ਦਾਣਾ ਮੰਡੀ ਕੰਗ ਖੁਰਦ';
-  const firmPhone = firm?.mobile || settings.firmMobile || '98147-74651';
+  const firmName = firm?.name || settings.firmNameEn || 'Punjab Mandi Trading Co (Demo)';
+  const mandiName = settings.mandiNamePa || settings.mandiNameEn || 'ਮੁੱਖ ਦਾਣਾ ਮੰਡੀ (ਡੈਮੋ)';
+  const firmPhone = firm?.mobile || settings.firmMobile || '98765-43210';
 
   const farmer = accountSummary.farmer;
   const farmerName = farmer.farmerNamePa ? `${farmer.farmerNamePa} (${farmer.farmerName})` : farmer.farmerName;
@@ -302,9 +302,9 @@ export function generateTodayWeighmentSummaryWhatsAppMessage(params: {
   dateStr?: string;
 }): string {
   const { farmerName, farmerId, village, todayEntries, firm, settings, dateStr } = params;
-  const firmName = firm?.name || settings.firmNameEn || 'Jammu Trading Co';
-  const mandiName = settings.mandiNamePa || settings.mandiNameEn || 'ਦਾਣਾ ਮੰਡੀ ਕੰਗ ਖੁਰਦ';
-  const firmPhone = firm?.mobile || settings.firmMobile || '98147-74651';
+  const firmName = firm?.name || settings.firmNameEn || 'Punjab Mandi Trading Co (Demo)';
+  const mandiName = settings.mandiNamePa || settings.mandiNameEn || 'ਮੁੱਖ ਦਾਣਾ ਮੰਡੀ (ਡੈਮੋ)';
+  const firmPhone = firm?.mobile || settings.firmMobile || '98765-43210';
   const dateDisplay = dateStr || new Date().toLocaleDateString('en-GB');
 
   const totalBags = todayEntries.reduce((sum, e) => sum + (Number(e.bags) || 0), 0);

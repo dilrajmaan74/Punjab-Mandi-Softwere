@@ -59,15 +59,15 @@ export async function exportDailyPurchaseVoucherPDF(
     summaryOrSettings && 'farmerId' in summaryOrSettings ? (summaryOrSettings as FarmerPurchaseSummary) : undefined;
 
   const fallbackSettings: MandiSettings = {
-    mandiNameEn: 'Dana Mandi Kang Khurd',
-    mandiNamePa: 'ਦਾਣਾ ਮੰਡੀ ਕੰਗ ਖੁਰਦ',
-    marketCommitteeEn: 'Market Committee Lohian Khas',
-    marketCommitteePa: 'ਮਾਰਕੀਟ ਕਮੇਟੀ ਲੋਹੀਆਂ ਖਾਸ',
-    firmNameEn: 'Jammu Trading Co',
-    firmAddress: 'Dana Mandi Kang Khurd, Teh. Shahkot, Distt. Jalandhar, Punjab - 144629',
-    firmMobile: '98147-74651',
-    firmLicence: 'JAL/LKH/133',
-    firmPan: 'AAACJ1234F',
+    mandiNameEn: 'Main Grain Market (Demo)',
+    mandiNamePa: 'ਮੁੱਖ ਦਾਣਾ ਮੰਡੀ (ਡੈਮੋ)',
+    marketCommitteeEn: 'Punjab Mandi Board',
+    marketCommitteePa: 'ਪੰਜਾਬ ਮੰਡੀ ਬੋਰਡ',
+    firmNameEn: 'Punjab Mandi Trading Co (Demo)',
+    firmAddress: 'Shop No. 12, Main Grain Market, Punjab - 144001',
+    firmMobile: '98765-43210',
+    firmLicence: 'DEMO/PB/2026',
+    firmPan: 'ABCDE1234F',
     fixedRatePerQtl: 2461,
     fixedBagWeightKg: 37.5,
     defaultPakkiLabourRate: 7,
@@ -423,28 +423,28 @@ function renderDailyPurchaseBWHeader(
   const centerX = pageWidth / 2;
 
   // Firm Information from Selected Firm or Settings / Profile
-  const firmName = (cleanPdfText(selectedFirm?.name || settings.firmNameEn) || 'JAMMU TRADING CO').toUpperCase();
+  const firmName = (cleanPdfText(selectedFirm?.name || settings.firmNameEn) || 'PUNJAB MANDI TRADING CO (DEMO)').toUpperCase();
   const firmAddress = selectedFirm
     ? (cleanPdfText(selectedFirm.address) || settings.firmAddress)
-    : 'Dana Mandi Kang Khurd / Dana Mandi Mehrajwala / Dana Mandi Kamalpur, Teh. Shahkot, Distt. Jalandhar, Punjab';
+    : 'Shop No. 12, Main Grain Market, Punjab - 144001 (Demo)';
   const licenceNo = selectedFirm
     ? (cleanPdfText(selectedFirm.licenceNo) || settings.firmLicence)
-    : 'JAL/LKH/133 (Kang Khurd) | JAL/LKH/133/M (Mehrajwala) | JAL/LKH/133/K (Kamalpur)';
-  const mobile = cleanPdfText(selectedFirm?.mobile || settings.firmMobile) || '98147-74651';
+    : 'DEMO/PB/2026';
+  const mobile = cleanPdfText(selectedFirm?.mobile || settings.firmMobile) || '98765-43210';
   const pan = cleanPdfText(selectedFirm?.pan || settings.firmPan);
-  const marketCommittee = cleanPdfText(selectedFirm?.marketCommittee || settings.marketCommitteeEn) || 'Market Committee Lohian Khas';
+  const marketCommittee = cleanPdfText(selectedFirm?.marketCommittee || settings.marketCommitteeEn) || 'Punjab Mandi Board';
 
   // Specific prominent Mandi Header Tag so no one gets confused
   let mandiBadgeText = mandiTitle || '';
   if (!mandiBadgeText) {
-    if (selectedFirm?.address?.includes('Mehrajwala') || selectedFirm?.name?.includes('Mehrajwala') || selectedFirm?.id === 'FIRM-002') {
-      mandiBadgeText = 'DANA MANDI MEHRAJWALA (ਦਾਣਾ ਮੰਡੀ ਮਹਿਰਾਜਵਾਲਾ)';
-    } else if (selectedFirm?.address?.includes('Kamalpur') || selectedFirm?.name?.includes('Kamalpur') || selectedFirm?.id === 'FIRM-003') {
-      mandiBadgeText = 'DANA MANDI KAMALPUR (ਦਾਣਾ ਮੰਡੀ ਕਮਾਲਪੁਰ)';
-    } else if (selectedFirm?.address?.includes('Kang Khurd') || selectedFirm?.name?.includes('Kang') || selectedFirm?.id === 'FIRM-001') {
-      mandiBadgeText = 'DANA MANDI KANG KHURD (ਦਾਣਾ ਮੰਡੀ ਕੰਗ ਖੁਰਦ)';
+    if (selectedFirm?.id === 'DEMO-FIRM-002' || selectedFirm?.name?.includes('Branch 2')) {
+      mandiBadgeText = 'DANA MANDI BRANCH 2 (ਦਾਣਾ ਮੰਡੀ ਬ੍ਰਾਂਚ 2)';
+    } else if (selectedFirm?.id === 'DEMO-FIRM-001' || selectedFirm?.name?.includes('Demo')) {
+      mandiBadgeText = 'MAIN GRAIN MARKET (ਮੁੱਖ ਦਾਣਾ ਮੰਡੀ)';
+    } else if (selectedFirm?.name) {
+      mandiBadgeText = selectedFirm.name;
     } else {
-      mandiBadgeText = 'ALL MANDIS COMBINED (ਕੰਗ ਖੁਰਦ • ਮਹਿਰਾਜਵਾਲਾ • ਕਮਾਲਪੁਰ)';
+      mandiBadgeText = 'ALL MANDIS (ਸਮੂਹ ਮੰਡੀਆਂ)';
     }
   }
 

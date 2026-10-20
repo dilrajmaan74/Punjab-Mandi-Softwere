@@ -498,13 +498,13 @@ export const TodayGlanceBanner: React.FC<TodayGlanceBannerProps> = ({
               {/* Official Header */}
               <div className="border-b-2 border-slate-900 pb-4 text-center space-y-1">
                 <h1 className="text-2xl font-black text-slate-900 uppercase tracking-tight">
-                  {activeFirm?.name || settings.firmNameEn || 'Jammu Trading Company'}
+                  {activeFirm?.name || settings.firmNameEn || 'Punjab Mandi Trading Company (Demo)'}
                 </h1>
                 <p className="text-sm font-bold text-slate-700">
-                  {settings.mandiNamePa || 'ਦਾਣਾ ਮੰਡੀ ਕੰਗ ਖੁਰਦ'} (Mandi Grain Market)
+                  {settings.mandiNamePa || 'ਮੁੱਖ ਦਾਣਾ ਮੰਡੀ (ਡੈਮੋ)'} (Mandi Grain Market)
                 </p>
                 <p className="text-xs text-slate-500">
-                  ਕਮਿਸ਼ਨ ਏਜੰਟ ਤੇ ਆੜ੍ਹਤ | ਮੋਬਾਈਲ: {activeFirm?.mobile || settings.firmMobile || '98147-74651'}
+                  ਕਮਿਸ਼ਨ ਏਜੰਟ ਤੇ ਆੜ੍ਹਤ | ਮੋਬਾਈਲ: {activeFirm?.mobile || settings.firmMobile || '98765-43210'}
                 </p>
                 <div className="inline-block mt-1 px-4 py-1 bg-slate-100 border border-slate-300 rounded-full font-black text-xs">
                   ਰੋਜ਼ਾਨਾ ਮੰਡੀ ਕਾਰਜ ਸਾਰ • ਮਿਤੀ: {selectedDate}

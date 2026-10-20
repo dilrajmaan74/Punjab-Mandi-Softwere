@@ -116,7 +116,7 @@ export const AiMunimSummaryModal: React.FC<AiMunimSummaryModalProps> = ({
         isAll || normalizeDateStr(p.date) === targetNorm || p.date === dateParam
       );
 
-      const firmName = activeFirm?.name || settings.firmNameEn || 'Jammu Trading Co';
+      const firmName = activeFirm?.name || settings.firmNameEn || 'Punjab Mandi Trading Co';
 
       const res = await getAiDailyMunimSummary({
         date: isAll ? 'ALL' : dateParam,
@@ -176,7 +176,7 @@ export const AiMunimSummaryModal: React.FC<AiMunimSummaryModalProps> = ({
     if (!summaryData) return;
     const dateLabel = selectedDate === 'ALL' ? 'ਪੂਰਾ ਸੀਜ਼ਨ (ਸਾਰਾ ਲੇਖਾ)' : selectedDate;
     const text = `🌙 *ਰੋਜ਼ਾਨਾ ਮੁਨੀਮੀ ਰੋਜ਼ਨਾਮਚਾ (Daily AI Munim Report)*
-🏛 *${activeFirm?.name || 'Jammu Trading Co'}*
+🏛 *${activeFirm?.name || 'Punjab Mandi Trading Co'}*
 📅 *ਮਿਤੀ / ਸਮਾਂ:* ${dateLabel}
 ---------------------------------
 🌾 *ਕੁੱਲ ਬੋਰੀਆਂ ਆਮਦ:* ${summaryData.highlights.totalBags.toLocaleString('en-IN')} ਬੋਰੀਆਂ

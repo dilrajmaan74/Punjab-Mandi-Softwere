@@ -219,15 +219,15 @@ export const CROP_CONFIGS: Record<CropType, CropConfig> = {
 };
 
 export interface MandiFirm {
-  id: string; // e.g. "FIRM-001"
-  name: string; // "Jammu Trading Co"
-  namePa: string; // "ਜੰਮੂ ਟਰੇਡਿੰਗ ਕੰਪਨੀ"
-  address: string; // "Dana Mandi Kang Khurd, Teh. Shahkot, Distt. Jalandhar, Punjab - 144629"
-  addressPa?: string; // "ਦਾਣਾ ਮੰਡੀ ਕੰਗ ਖੁਰਦ, ਤਹਿ. ਸ਼ਾਹਕੋਟ, ਜ਼ਿਲ੍ਹਾ ਜਲੰਧਰ, ਪੰਜਾਬ - 144629"
-  marketCommittee: string; // "Lohian Khas"
-  marketCommitteePa?: string; // "ਲੋਹੀਆਂ ਖਾਸ"
-  mobile: string; // "98147-74651"
-  licenceNo: string; // "JAL/LKH/133"
+  id: string; // e.g. "DEMO-FIRM-001"
+  name: string; // "Punjab Mandi Trading Co (Demo)"
+  namePa: string; // "ਪੰਜਾਬ ਮੰਡੀ ਟਰੇਡਿੰਗ ਕੰਪਨੀ (ਡੈਮੋ)"
+  address: string; // "Shop No. 12, Main Grain Market, Punjab - 144001"
+  addressPa?: string; // "ਦੁਕਾਨ ਨੰ. 12, ਮੁੱਖ ਦਾਣਾ ਮੰਡੀ, ਪੰਜਾਬ"
+  marketCommittee: string; // "Punjab Mandi Board"
+  marketCommitteePa?: string; // "ਪੰਜਾਬ ਮੰਡੀ ਬੋਰਡ"
+  mobile: string; // "98765-43210"
+  licenceNo: string; // "DEMO/PB/2026"
   gstin?: string;
   pan?: string;
   bankName?: string;
@@ -239,8 +239,8 @@ export interface MandiFirm {
   username?: string; // Firm specific username/munim
   password?: string; // Firm specific password
   pin?: string; // Quick 4-digit PIN
-  proprietorName?: string; // e.g. "Himmat Singh" or "Arpanreet Singh"
-  proprietorNamePa?: string; // e.g. "ਹਿੰਮਤ ਸਿੰਘ" or "ਅਰਪਨਰੀਤ ਸਿੰਘ"
+  proprietorName?: string; // e.g. "Daljit Singh (Demo)"
+  proprietorNamePa?: string; // e.g. "ਸ. ਦਲਜੀਤ ਸਿੰਘ (ਡੈਮੋ)"
 }
 
 export interface AppUserAccount {
@@ -780,7 +780,7 @@ export interface TruckMasterRecord {
   driverPhone: string;
   driverMobile?: string;
   capacityBags?: number;
-  truckUnion?: string; // e.g. "Truck Union Lohian Khas"
+  truckUnion?: string; // e.g. "Mandi Truck Union"
   notes?: string;
   createdAt: string;
   updatedAt?: string;
@@ -791,13 +791,13 @@ export interface MandiSettings {
   mandiNamePa: string;
   marketCommitteeEn: string;
   marketCommitteePa: string;
-  firmNameEn?: string; // e.g. "Jammu Trading Co"
-  firmNamePa?: string; // "ਜੰਮੂ ਟਰੇਡਿੰਗ ਕੰਪਨੀ"
-  firmAddress?: string; // "Dana Mandi Kang Khurd, Teh. Shahkot, Distt. Jalandhar, Punjab - 144629"
-  firmMobile?: string; // "98147-74651"
-  firmLicence?: string; // "JAL/LKH/133"
+  firmNameEn?: string; // e.g. "Punjab Mandi Trading Co (Demo)"
+  firmNamePa?: string; // "ਪੰਜਾਬ ਮੰਡੀ ਟਰੇਡਿੰਗ ਕੰਪਨੀ (ਡੈਮੋ)"
+  firmAddress?: string; // "Shop No. 12, Main Grain Market, Punjab - 144001"
+  firmMobile?: string; // "98765-43210"
+  firmLicence?: string; // "DEMO/PB/2026"
   licenceNo?: string; // alias for firmLicence
-  firmPan?: string; // "AAACJ1234F"
+  firmPan?: string; // "ABCDE1234F"
   firmGstin?: string;
   fixedRatePerQtl: number; // 2461
   fixedBagWeightKg: number; // 37.50
@@ -865,7 +865,7 @@ export interface LeftingRecord {
   driverName: string;
   driverPhone?: string;
   driverPhotoUrl?: string; // Driver Photo URL / base64
-  truckUnion?: string; // e.g. "Truck Union Lohian Khas"
+  truckUnion?: string; // e.g. "Mandi Truck Union"
   photos?: string[]; // Multiple photos: truck, bilti, receipts
   gatePassNo?: string;
   dispatchDate: string; // Dispatch date

@@ -3723,7 +3723,7 @@ export const FarmerAccount: React.FC = () => {
                         type="text"
                         value={advanceForm.upiId || advanceForm.toAccountNumber || ''}
                         onChange={(e) => setAdvanceForm({ ...advanceForm, upiId: e.target.value })}
-                        placeholder="e.g. 9814774651@okaxis ਜਾਂ ਕਿਸਾਨ ਦਾ UPI"
+                        placeholder="e.g. 9876543210@okaxis ਜਾਂ ਕਿਸਾਨ ਦਾ UPI"
                         className="w-full px-3 py-1.5 bg-white border border-emerald-300 rounded-xl text-xs font-mono font-medium text-emerald-950 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                       />
                     </div>

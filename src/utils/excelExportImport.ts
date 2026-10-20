@@ -173,7 +173,7 @@ export function downloadFarmerImportTemplate(filename: string = 'Punjab_Mandi_Fa
       'ਕੰਗ ਖੁਰਦ',
       'VPO Kang Khurd, Tehsil Shahkot',
       '144629',
-      '9814774651',
+      '9876543210',
       '7845 1290 3412',
       '',
       'State Bank of India',

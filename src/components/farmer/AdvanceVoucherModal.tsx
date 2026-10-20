@@ -41,12 +41,12 @@ export const AdvanceVoucherModal: React.FC<AdvanceVoucherModalProps> = ({
   const [showFullPhoto, setShowFullPhoto] = useState(false);
 
   const activeFirm = firms.find((f) => f.id === activeFirmId) || firms[0];
-  const firmName = activeFirm?.name || settings.firmNameEn || 'Jammu Trading Co';
-  const firmNamePa = activeFirm?.namePa || settings.firmNamePa || 'ਜੰਮੂ ਟਰੇਡਿੰਗ ਕੰਪਨੀ';
-  const mandiName = settings.mandiNamePa || settings.mandiNameEn || 'ਦਾਣਾ ਮੰਡੀ ਕੰਗ ਖੁਰਦ';
-  const firmAddress = activeFirm?.address || settings.firmAddress || 'Dana Mandi Kang Khurd';
-  const firmMobile = activeFirm?.mobile || settings.firmMobile || '98147-74651';
-  const licenceNo = (activeFirm as any)?.licenceNo || settings.firmLicence || settings.licenceNo || 'JAL/LKH/133';
+  const firmName = activeFirm?.name || settings.firmNameEn || 'Punjab Mandi Trading Co (Demo)';
+  const firmNamePa = activeFirm?.namePa || settings.firmNamePa || 'ਪੰਜਾਬ ਮੰਡੀ ਟਰੇਡਿੰਗ ਕੰਪਨੀ (ਡੈਮੋ)';
+  const mandiName = settings.mandiNamePa || settings.mandiNameEn || 'ਮੁੱਖ ਦਾਣਾ ਮੰਡੀ (ਡੈਮੋ)';
+  const firmAddress = activeFirm?.address || settings.firmAddress || 'Shop No. 12, Main Grain Market, Punjab - 144001';
+  const firmMobile = activeFirm?.mobile || settings.firmMobile || '98765-43210';
+  const licenceNo = (activeFirm as any)?.licenceNo || settings.firmLicence || settings.licenceNo || 'DEMO/PB/2026';
 
   const categoryLabels: Record<string, { en: string; pa: string }> = {
     CASH: { en: 'Cash Advance', pa: 'ਨਕਦ ਪੇਸ਼ਗੀ' },

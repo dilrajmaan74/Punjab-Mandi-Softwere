@@ -9,6 +9,22 @@ export default defineConfig(() => {
     plugins: [
       react(),
       tailwindcss(),
+      {
+        name: 'suppress-vite-hmr-noise',
+        transform(code: string, id: string) {
+          if (id.includes('vite/dist/client/client.mjs') || id.includes('@vite/client')) {
+            return code
+              .replaceAll(
+                'reject(new Error("WebSocket closed without opened."));',
+                'resolve();'
+              )
+              .replaceAll(
+                'throw e;',
+                '/* HMR suppressed in AI Studio sandbox */'
+              );
+          }
+        },
+      },
       VitePWA({
         registerType: 'autoUpdate',
         manifest: false, // Using public/manifest.json directly

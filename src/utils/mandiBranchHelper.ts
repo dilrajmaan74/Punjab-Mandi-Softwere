@@ -14,36 +14,28 @@ export interface MandiBranchConfig {
 
 export const MANDI_BRANCH_CONFIGS: MandiBranchConfig[] = [
   {
-    id: 'FIRM-001',
-    code: 'KK',
-    dropdownLabel: '[ MANDI BRANCH: DANA MANDI KANG KHURD (ਦਾਣਾ ਮੰਡੀ ਕਾਂਗ ਖੁਰਦ) ]',
-    plainLabel: 'DANA MANDI KANG KHURD (ਦਾਣਾ ਮੰਡੀ ਕਾਂਗ ਖੁਰਦ)',
-    namePa: 'ਦਾਣਾ ਮੰਡੀ ਕਾਂਗ ਖੁਰਦ',
-    nameEn: 'Dana Mandi Kang Khurd'
+    id: 'DEMO-FIRM-001',
+    code: 'MF',
+    dropdownLabel: '[ MANDI BRANCH: MAIN GRAIN MARKET (ਮੁੱਖ ਦਾਣਾ ਮੰਡੀ) ]',
+    plainLabel: 'MAIN GRAIN MARKET (ਮੁੱਖ ਦਾਣਾ ਮੰਡੀ)',
+    namePa: 'ਮੁੱਖ ਦਾਣਾ ਮੰਡੀ',
+    nameEn: 'Main Grain Market'
   },
   {
-    id: 'FIRM-002',
-    code: 'MW',
-    dropdownLabel: '[ MANDI BRANCH: DANA MANDI MEHRAJWALA (ਦਾਣਾ ਮੰਡੀ ਮਹਿਰਾਜਵਾਲਾ) ]',
-    plainLabel: 'DANA MANDI MEHRAJWALA (ਦਾਣਾ ਮੰਡੀ ਮਹਿਰਾਜਵਾਲਾ)',
-    namePa: 'ਦਾਣਾ ਮੰਡੀ ਮਹਿਰਾਜਵਾਲਾ',
-    nameEn: 'Dana Mandi Mehrajwala'
-  },
-  {
-    id: 'FIRM-003',
-    code: 'KP',
-    dropdownLabel: '[ MANDI BRANCH: DANA MANDI KAMALPUR (ਦਾਣਾ ਮੰਡੀ ਕਮਾਲਪੁਰ) ]',
-    plainLabel: 'DANA MANDI KAMALPUR (ਦਾਣਾ ਮੰਡੀ ਕਮਾਲਪੁਰ)',
-    namePa: 'ਦਾਣਾ ਮੰਡੀ ਕਮਾਲਪੁਰ',
-    nameEn: 'Dana Mandi Kamalpur'
+    id: 'DEMO-FIRM-002',
+    code: 'B2',
+    dropdownLabel: '[ MANDI BRANCH: DANA MANDI BRANCH 2 (ਦਾਣਾ ਮੰਡੀ ਬ੍ਰਾਂਚ 2) ]',
+    plainLabel: 'DANA MANDI BRANCH 2 (ਦਾਣਾ ਮੰਡੀ ਬ੍ਰਾਂਚ 2)',
+    namePa: 'ਦਾਣਾ ਮੰਡੀ ਬ੍ਰਾਂਚ 2',
+    nameEn: 'Dana Mandi Branch 2'
   }
 ];
 
-export const ALL_MANDIS_DROPDOWN_LABEL = '🌟 [ ALL MANDIS: ਸਾਰੀਆਂ ਮੰਡੀਆਂ (ਕਾਂਗ ਖੁਰਦ • ਮਹਿਰਾਜਵਾਲਾ • ਕਮਾਲਪੁਰ) ]';
+export const ALL_MANDIS_DROPDOWN_LABEL = '🌟 [ ALL MANDIS: ਸਾਰੀਆਂ ਮੰਡੀਆਂ (ਮੁੱਖ ਮੰਡੀ • ਬ੍ਰਾਂਚ 2) ]';
 
 /**
  * Returns formatted dropdown label for any firm or firmId:
- * e.g. "[ MANDI BRANCH: DANA MANDI KANG KHURD (ਦਾਣਾ ਮੰਡੀ ਕਾਂਗ ਖੁਰਦ) ]"
+ * e.g. "[ MANDI BRANCH: MAIN GRAIN MARKET (ਮੁੱਖ ਦਾਣਾ ਮੰਡੀ) ]"
  */
 export function getMandiBranchDropdownLabel(
   firmOrId: string | { id: string; name?: string; address?: string; namePa?: string } | null | undefined
@@ -52,51 +44,46 @@ export function getMandiBranchDropdownLabel(
 
   const id = typeof firmOrId === 'string' ? firmOrId : firmOrId.id;
   const name = typeof firmOrId === 'object' ? (firmOrId.name || '') : '';
-  const address = typeof firmOrId === 'object' ? (firmOrId.address || '') : '';
+  const namePa = typeof firmOrId === 'object' ? (firmOrId.namePa || '') : '';
 
-  if (id === 'FIRM-001' || name.includes('Kang') || address.includes('Kang')) {
-    return '[ MANDI BRANCH: DANA MANDI KANG KHURD (ਦਾਣਾ ਮੰਡੀ ਕਾਂਗ ਖੁਰਦ) ]';
+  if (id === 'DEMO-FIRM-001' || id === 'FIRM-001') {
+    return '[ MANDI BRANCH: MAIN GRAIN MARKET (ਮੁੱਖ ਦਾਣਾ ਮੰਡੀ) ]';
   }
-  if (id === 'FIRM-002' || name.includes('Mehrajwala') || address.includes('Mehrajwala')) {
-    return '[ MANDI BRANCH: DANA MANDI MEHRAJWALA (ਦਾਣਾ ਮੰਡੀ ਮਹਿਰਾਜਵਾਲਾ) ]';
-  }
-  if (id === 'FIRM-003' || name.includes('Kamalpur') || address.includes('Kamalpur')) {
-    return '[ MANDI BRANCH: DANA MANDI KAMALPUR (ਦਾਣਾ ਮੰਡੀ ਕਮਾਲਪੁਰ) ]';
+  if (id === 'DEMO-FIRM-002' || id === 'FIRM-002' || name.toLowerCase().includes('branch 2')) {
+    return '[ MANDI BRANCH: DANA MANDI BRANCH 2 (ਦਾਣਾ ਮੰਡੀ ਬ੍ਰਾਂਚ 2) ]';
   }
 
   if (typeof firmOrId === 'object' && firmOrId.name) {
-    return `[ MANDI BRANCH: ${firmOrId.name.toUpperCase()} ]`;
+    const labelPa = namePa ? ` (${namePa})` : '';
+    return `[ MANDI BRANCH: ${firmOrId.name.toUpperCase()}${labelPa} ]`;
   }
   return `[ MANDI BRANCH: ${id} ]`;
 }
 
 /**
  * Returns clean plain label for headers & PDFs:
- * e.g. "DANA MANDI KANG KHURD (ਦਾਣਾ ਮੰਡੀ ਕਾਂਗ ਖੁਰਦ)"
+ * e.g. "MAIN GRAIN MARKET (ਮੁੱਖ ਦਾਣਾ ਮੰਡੀ)"
  */
 export function getMandiBranchPlainLabel(
   firmOrId: string | { id: string; name?: string; address?: string; namePa?: string } | null | undefined
 ): string {
   if (!firmOrId || firmOrId === 'ALL') {
-    return 'ALL MANDIS (ਸਾਰੀਆਂ ਮੰਡੀਆਂ: ਕਾਂਗ ਖੁਰਦ • ਮਹਿਰਾਜਵਾਲਾ • ਕਮਾਲਪੁਰ)';
+    return 'ALL MANDIS (ਸਾਰੀਆਂ ਮੰਡੀਆਂ: ਮੁੱਖ ਮੰਡੀ • ਬ੍ਰਾਂਚ 2)';
   }
 
   const id = typeof firmOrId === 'string' ? firmOrId : firmOrId.id;
   const name = typeof firmOrId === 'object' ? (firmOrId.name || '') : '';
-  const address = typeof firmOrId === 'object' ? (firmOrId.address || '') : '';
+  const namePa = typeof firmOrId === 'object' ? (firmOrId.namePa || '') : '';
 
-  if (id === 'FIRM-001' || name.includes('Kang') || address.includes('Kang')) {
-    return 'DANA MANDI KANG KHURD (ਦਾਣਾ ਮੰਡੀ ਕਾਂਗ ਖੁਰਦ)';
+  if (id === 'DEMO-FIRM-001' || id === 'FIRM-001') {
+    return 'MAIN GRAIN MARKET (ਮੁੱਖ ਦਾਣਾ ਮੰਡੀ)';
   }
-  if (id === 'FIRM-002' || name.includes('Mehrajwala') || address.includes('Mehrajwala')) {
-    return 'DANA MANDI MEHRAJWALA (ਦਾਣਾ ਮੰਡੀ ਮਹਿਰਾਜਵਾਲਾ)';
-  }
-  if (id === 'FIRM-003' || name.includes('Kamalpur') || address.includes('Kamalpur')) {
-    return 'DANA MANDI KAMALPUR (ਦਾਣਾ ਮੰਡੀ ਕਮਾਲਪੁਰ)';
+  if (id === 'DEMO-FIRM-002' || id === 'FIRM-002' || name.toLowerCase().includes('branch 2')) {
+    return 'DANA MANDI BRANCH 2 (ਦਾਣਾ ਮੰਡੀ ਬ੍ਰਾਂਚ 2)';
   }
 
   if (typeof firmOrId === 'object' && firmOrId.name) {
-    return firmOrId.name;
+    return namePa ? `${firmOrId.name} (${namePa})` : firmOrId.name;
   }
   return id;
 }

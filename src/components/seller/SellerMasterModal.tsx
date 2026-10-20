@@ -268,7 +268,7 @@ export const SellerMasterModal: React.FC<SellerMasterModalProps> = ({
                   type="text"
                   value={address || ''}
                   onChange={(e) => setAddress(e.target.value)}
-                  placeholder="e.g. Shahkot Road, Kang Khurd, Teh. Shahkot, Distt. Jalandhar - 144629"
+                  placeholder="e.g. Mandi Yard Road, Tehsil Area, Punjab - 144001"
                   className="w-full px-3 py-2 text-xs font-medium border border-slate-200 rounded-lg bg-white focus:ring-2 focus:ring-slate-900 focus:outline-none"
                   required
                 />
@@ -282,7 +282,7 @@ export const SellerMasterModal: React.FC<SellerMasterModalProps> = ({
                   type="tel"
                   value={mobile || ''}
                   onChange={(e) => setMobile(e.target.value)}
-                  placeholder="e.g. 98147-74651"
+                  placeholder="e.g. 98765-43210"
                   className="w-full px-3 py-2 text-xs font-medium border border-slate-200 rounded-lg bg-white focus:ring-2 focus:ring-slate-900 focus:outline-none"
                 />
               </div>

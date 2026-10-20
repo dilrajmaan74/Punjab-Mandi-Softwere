@@ -15,7 +15,8 @@ import {
   Sparkles,
   Building2,
   Check,
-  ChevronLeft
+  ChevronLeft,
+  X
 } from 'lucide-react';
 
 export const AuthPortalModal: React.FC = () => {
@@ -160,6 +161,9 @@ export const AuthPortalModal: React.FC = () => {
       });
       if (res.success) {
         setSuccessMessage(res.message);
+        setTimeout(() => {
+          setIsAuthModalOpen(false);
+        }, 500);
       } else {
         setErrorMessage(res.message);
       }
@@ -181,6 +185,9 @@ export const AuthPortalModal: React.FC = () => {
       const res = await login(mobile, password, rememberMe);
       if (res.success) {
         setSuccessMessage(res.message);
+        setTimeout(() => {
+          setIsAuthModalOpen(false);
+        }, 400);
       } else {
         setErrorMessage(res.message);
       }
@@ -230,16 +237,23 @@ export const AuthPortalModal: React.FC = () => {
 
   // Quick 1-Click Demo Login
   const handleQuickDemo = async () => {
-    setMobile('9814774651');
+    setMobile('9876543210');
     setPassword('Password@123');
     setIsLoading(true);
+    setErrorMessage(null);
     try {
-      const res = await login('9814774651', 'Password@123', true);
+      const res = await login('9876543210', 'Password@123', true);
       if (res.success) {
         setSuccessMessage(res.message);
+        setTimeout(() => {
+          setIsAuthModalOpen(false);
+        }, 300);
       } else {
         setErrorMessage(res.message);
       }
+    } catch {
+      // In all cases close modal and open demo
+      setIsAuthModalOpen(false);
     } finally {
       setIsLoading(false);
     }
@@ -250,6 +264,20 @@ export const AuthPortalModal: React.FC = () => {
       <div className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden my-auto animate-in fade-in zoom-in-95 duration-200">
         {/* Top Accent Gradient Header */}
         <div className="bg-gradient-to-r from-emerald-700 via-teal-700 to-slate-900 p-6 text-white text-center relative">
+          {/* Close & Open Demo Company Button */}
+          <button
+            type="button"
+            onClick={async () => {
+              if (!currentUser) {
+                await login('9876543210', 'Password@123', true);
+              }
+              setIsAuthModalOpen(false);
+            }}
+            className="absolute top-4 right-4 p-1.5 text-white/80 hover:text-white bg-white/10 hover:bg-white/20 rounded-xl transition cursor-pointer"
+            title="ਡੈਮੋ ਕੰਪਨੀ ਖੋਲ੍ਹੋ (Open Demo Company)"
+          >
+            <X className="w-5 h-5" />
+          </button>
           <div className="inline-flex p-3 bg-white/10 rounded-2xl backdrop-blur-xs mb-3 ring-1 ring-white/20 shadow-inner">
             <Building2 className="w-8 h-8 text-amber-400" />
           </div>
@@ -425,7 +453,7 @@ export const AuthPortalModal: React.FC = () => {
                   <span>⚡ 1-ਕਲਿੱਕ ਨਾਲ ਡੈਮੋ ਖਾਤੇ ਵਿੱਚ ਦਾਖਲ ਹੋਵੋ (1-Click Demo)</span>
                 </button>
                 <p className="text-[10px] text-slate-400 mt-1">
-                  ਡੈਮੋ ਮੋਬਾਈਲ: 9814774651 / ਪਾਸਵਰਡ: Password@123
+                  ਡੈਮੋ ਮੋਬਾਈਲ: 9876543210 / ਪਾਸਵਰਡ: Password@123
                 </p>
               </div>
             </form>
@@ -447,7 +475,7 @@ export const AuthPortalModal: React.FC = () => {
                     type="text"
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
-                    placeholder="ਜਿਵੇਂ: ਦਿਲਰਾਜ ਮਾਨ (Dilraj Maan)"
+                    placeholder="ਜਿਵੇਂ: ਸ. ਦਲਜੀਤ ਸਿੰਘ (Daljit Singh)"
                     required
                     className="w-full pl-10 pr-3 py-2 text-sm font-semibold bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:bg-white focus:outline-none transition"
                   />
@@ -628,6 +656,18 @@ export const AuthPortalModal: React.FC = () => {
                   </>
                 )}
               </button>
+
+              {/* Quick Demo Access Button in Sign Up Mode */}
+              <div className="pt-2 border-t border-slate-100 text-center">
+                <button
+                  type="button"
+                  onClick={handleQuickDemo}
+                  className="w-full py-2 px-3 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-xl text-xs font-black transition flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                  <span>⚡ 1-ਕਲਿੱਕ ਨਾਲ ਡੈਮੋ ਖਾਤੇ ਵਿੱਚ ਦਾਖਲ ਹੋਵੋ (1-Click Demo)</span>
+                </button>
+              </div>
             </form>
           )}
 

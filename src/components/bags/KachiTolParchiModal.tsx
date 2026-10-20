@@ -50,11 +50,11 @@ export const KachiTolParchiModal: React.FC = () => {
 
   const entry = activeKachiReceipt;
   const receiptFirm = (entry.firmId ? firms.find((f) => f.id === entry.firmId) : null) || activeFirm;
-  const firmName = receiptFirm?.name || settings.firmNameEn || 'JAMMU TRADING CO.';
-  const firmNamePa = receiptFirm?.namePa || settings.firmNamePa || 'ਜੰਮੂ ਟਰੇਡਿੰਗ ਕੰਪਨੀ';
-  const firmAddress = receiptFirm?.address || settings.firmAddress || 'Dana Mandi Kang Khurd, Lohian Khas';
-  const firmMobile = receiptFirm?.mobile || settings.firmMobile || '98147-74651';
-  const mandiName = settings.mandiNamePa || settings.mandiNameEn || 'ਦਾਣਾ ਮੰਡੀ ਕੰਗ ਖੁਰਦ';
+  const firmName = receiptFirm?.name || settings.firmNameEn || 'PUNJAB MANDI TRADING CO. (DEMO)';
+  const firmNamePa = receiptFirm?.namePa || settings.firmNamePa || 'ਪੰਜਾਬ ਮੰਡੀ ਟਰੇਡਿੰਗ ਕੰਪਨੀ (ਡੈਮੋ)';
+  const firmAddress = receiptFirm?.address || settings.firmAddress || 'Shop No. 12, Main Grain Market, Punjab - 144001';
+  const firmMobile = receiptFirm?.mobile || settings.firmMobile || '98765-43210';
+  const mandiName = settings.mandiNamePa || settings.mandiNameEn || 'ਮੁੱਖ ਦਾਣਾ ਮੰਡੀ (ਡੈਮੋ)';
 
   const parchiDisplayNo = entry.parchiNo ? `#${entry.parchiNo}` : (entry.entryNumber || '#1');
   const farmerName = entry.farmerNamePa || entry.farmerName || 'ਕਿਸਾਨ';

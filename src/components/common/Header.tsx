@@ -93,10 +93,10 @@ export const Header: React.FC = () => {
               <div>
                 <div className="flex items-center gap-2">
                   <h1 className="text-sm sm:text-base font-black tracking-tight text-white">
-                    {activeFirm ? activeFirm.name : settings.firmNameEn || 'Jammu Trading Co'}
+                    {activeFirm ? activeFirm.name : settings.firmNameEn || 'Punjab Mandi Trading Co (Demo)'}
                   </h1>
                   <span className="text-[10px] font-bold px-1.5 py-0.5 bg-emerald-950 text-emerald-300 border border-emerald-800/80 rounded-md">
-                    Lic: {activeFirm?.licenceNo || settings.firmLicence || 'JAL/LKH/133'}
+                    Lic: {activeFirm?.licenceNo || settings.firmLicence || 'DEMO/PB/2026'}
                   </span>
                 </div>
                 <div className="text-[10px] text-slate-400 flex items-center gap-1.5 flex-wrap">
@@ -107,7 +107,7 @@ export const Header: React.FC = () => {
                   <span className="text-slate-600">•</span>
                   <span>{activeFirm?.marketCommitteePa || settings.marketCommitteePa || settings.marketCommitteeEn}</span>
                   <span className="text-slate-600">•</span>
-                  <span className="font-mono text-slate-300">Mob: {activeFirm?.mobile || settings.firmMobile || '98147-74651'}</span>
+                  <span className="font-mono text-slate-300">Mob: {activeFirm?.mobile || settings.firmMobile || '98765-43210'}</span>
                 </div>
               </div>
             </div>

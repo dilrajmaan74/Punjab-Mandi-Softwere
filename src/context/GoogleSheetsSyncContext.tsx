@@ -251,7 +251,7 @@ export const GoogleSheetsSyncProvider: React.FC<{ children: React.ReactNode }> =
 
     setSyncStatus('syncing');
     try {
-      const firmName = mandi.activeFirm?.name || 'Jammu Trading Co';
+      const firmName = mandi.activeFirm?.name || 'Punjab Mandi Trading Co';
       const created = await createFirmTwoWaySpreadsheet(accessToken, firmName);
       setSpreadsheetId(created.spreadsheetId);
 

@@ -127,8 +127,31 @@ export const FarmerBagBalanceReport: React.FC = () => {
   }, [dateFilterType, customStartDate, customEndDate]);
 
   // Main Farmers List & Computation
-  // Rule: Show ONLY MAIN farmers who have actually brought bags to the mandi.
-  // Do NOT show linked farmers as separate main rows. Linked farmers are included under their linked main farmer.
+  // Helper to extract true bag count from any entry safely
+  const getEntryBagsCount = (b: any): number => {
+    return Number(b?.bags || ((Number(b?.newBags || 0)) + (Number(b?.oldBags || 0))) || 0);
+  };
+
+  // Helper to safely extract recorded labour amount from any arrival entry
+  const getEntryRecordedLabour = (b: any): number => {
+    if (b?.labourDeductions?.totalLabourDeduction !== undefined && b?.labourDeductions?.totalLabourDeduction !== null) {
+      return Number(b.labourDeductions.totalLabourDeduction) || 0;
+    }
+    if (b?.labourDeductions?.grandTotalDeductions !== undefined && b?.labourDeductions?.grandTotalDeductions !== null) {
+      return Number(b.labourDeductions.grandTotalDeductions) || 0;
+    }
+    if (b?.conditionBreakdown) {
+      const cb = b.conditionBreakdown;
+      const cbSum = (Number(cb.pakkiAmount) || 0) + (Number(cb.doubleAmount) || 0) + (Number(cb.sukkiAmount) || 0);
+      if (cbSum > 0) return cbSum;
+      if ((cb as any).totalLabour) return Number((cb as any).totalLabour) || 0;
+    }
+    return 0;
+  };
+
+  // Main Farmers List & Computation
+  // Rule: Includes all bag entries accurately. Main farmers include their own and all linked sub-farmers' arrivals and purchases.
+  // Any bags not claimed by a main farmer family are also grouped so NO bags are ever omitted!
   const reportData: FarmerBagBalanceItem[] = useMemo(() => {
     // 1. Filter bagsEntries by date range
     const filteredBags = bagsEntries.filter((b) => {
@@ -148,20 +171,34 @@ export const FarmerBagBalanceReport: React.FC = () => {
     const mainFarmers = farmers.filter((f) => !f.linkedMainFarmerId);
 
     const items: FarmerBagBalanceItem[] = [];
+    const claimedBagIds = new Set<string>();
 
     mainFarmers.forEach((mainFarmer) => {
       // Find all linked sub-farmers of this main farmer
       const linkedSubFarmers = farmers.filter((f) => f.linkedMainFarmerId === mainFarmer.id);
 
-      // Bags brought by the main farmer
-      const arrivalEntries = filteredBags.filter((b) => b.farmerId === mainFarmer.id);
-      const totalBagsBrought = arrivalEntries.reduce((sum, b) => sum + (Number(b.bags) || 0), 0);
-      const totalWeightBroughtKg = arrivalEntries.reduce((sum, b) => sum + (Number(b.grandTotalKg) || 0), 0);
+      // Collect all IDs and names representing this farmer's family
+      const allFamilyFarmerIds = new Set<string>([mainFarmer.id, ...linkedSubFarmers.map((f) => f.id)]);
+      const allFamilyNames = new Set<string>([
+        (mainFarmer.farmerName || '').trim().toLowerCase(),
+        ...linkedSubFarmers.map((f) => (f.farmerName || '').trim().toLowerCase())
+      ].filter(Boolean));
 
-      // CONSTRAINT: Show only MAIN farmers who have actually brought bags to the mandi
-      if (totalBagsBrought <= 0 && arrivalEntries.length === 0) {
-        return; // Exclude main farmers with no bags brought
-      }
+      // Bags brought by the main farmer and any linked sub-farmers
+      const arrivalEntries = filteredBags.filter((b) => {
+        const bAny = b as any;
+        const matchId = allFamilyFarmerIds.has(b.farmerId) || (Boolean(bAny.mainFarmerId) && allFamilyFarmerIds.has(bAny.mainFarmerId));
+        const matchName = b.farmerName && allFamilyNames.has(b.farmerName.trim().toLowerCase());
+        return matchId || matchName;
+      });
+
+      arrivalEntries.forEach((b) => claimedBagIds.add(b.id));
+
+      const totalBagsBrought = arrivalEntries.reduce((sum, b) => sum + getEntryBagsCount(b), 0);
+      const totalWeightBroughtKg = arrivalEntries.reduce((sum, b) => {
+        const safeWt = Number(b.grandTotalKg || b.totalBagsWeightKg) || (getEntryBagsCount(b) * 37.5);
+        return sum + safeWt;
+      }, 0);
 
       // Own purchases made directly by this main farmer
       const ownPurchasesList = filteredPurchases.filter((p) => p.farmerId === mainFarmer.id);
@@ -209,30 +246,28 @@ export const FarmerBagBalanceReport: React.FC = () => {
         ownPurchasesList.reduce((s, p) => s + (Number(p.totalAmount) || 0), 0) +
         linkedFarmerPurchases.reduce((s, lf) => s + lf.totalAmount, 0);
 
+      // CONSTRAINT: Only skip if farmer has neither brought bags nor has any purchases
+      if (totalBagsBrought <= 0 && totalPurchasedBags <= 0 && arrivalEntries.length === 0) {
+        return;
+      }
+
       // Balance Before Labour = Total Bags Brought - Total Purchase
       const balanceBeforeLabourBags = totalBagsBrought - totalPurchasedBags;
 
       // Labour Expense
-      // 1) If user has a manual override for this farmer, use it
-      // 2) Else if arrival entries have recorded labour deductions, sum them
-      // 3) Else calculate by default Pakki labour rate (e.g. ₹7/bag or ₹15/bag)
       let labourExpense = 0;
       if (farmerLabourOverrides[mainFarmer.id] !== undefined) {
         labourExpense = farmerLabourOverrides[mainFarmer.id];
       } else {
         const recordedLabour = arrivalEntries.reduce((sum, b) => {
-          const lDeduction =
-            b.labourDeductions?.totalLabourDeduction ??
-            b.labourDeductions?.grandTotalDeductions ??
-            0;
-          return sum + Number(lDeduction);
+          return sum + getEntryRecordedLabour(b);
         }, 0);
 
         if (recordedLabour > 0) {
           labourExpense = recordedLabour;
         } else {
           // Fallback to default Pakki labour rate per brought bag
-          const defaultRate = settings.defaultPakkiLabourRate ?? 7;
+          const defaultRate = settings.defaultPakkiLabourRate ?? 8;
           labourExpense = totalBagsBrought * defaultRate;
         }
       }
@@ -269,11 +304,11 @@ export const FarmerBagBalanceReport: React.FC = () => {
           id: b.id,
           entryNumber: b.entryNumber || (b as any).parchiNumber || '-',
           date: b.date,
-          newBags: Number(b.newBags ?? (b.bardana === 'NEW' ? b.bags : 0)),
-          oldBags: Number(b.oldBags ?? (b.bardana === 'OLD' ? b.bags : 0)),
-          bags: Number(b.bags) || 0,
-          weightDisplay: b.grandTotalDisplay || formatKgToQulKg(b.grandTotalKg).displayEn,
-          labourAmount: Number(b.labourDeductions?.totalLabourDeduction ?? 0)
+          newBags: Number(b.newBags ?? (b.bardana === 'NEW' ? getEntryBagsCount(b) : 0)),
+          oldBags: Number(b.oldBags ?? (b.bardana === 'OLD' ? getEntryBagsCount(b) : 0)),
+          bags: getEntryBagsCount(b),
+          weightDisplay: b.grandTotalDisplay || b.totalBagsWeightDisplay || formatKgToQulKg(b.grandTotalKg || (getEntryBagsCount(b) * 37.5)).displayEn,
+          labourAmount: getEntryRecordedLabour(b)
         })),
         ownPurchasedBags,
         ownPurchasedWeightKg,
@@ -300,6 +335,118 @@ export const FarmerBagBalanceReport: React.FC = () => {
         finalBalanceBags
       });
     });
+
+    // 4. Check for any unclaimed bag entries in filteredBags
+    // (e.g. entered for sub-farmers whose main farmer wasn't found, or ad-hoc entries)
+    const unclaimedBags = filteredBags.filter((b) => !claimedBagIds.has(b.id));
+    if (unclaimedBags.length > 0) {
+      const groupMap = new Map<string, typeof filteredBags>();
+      unclaimedBags.forEach((b) => {
+        const key = (b.farmerId || b.farmerName || 'UNKNOWN_FARMER').trim();
+        if (!groupMap.has(key)) {
+          groupMap.set(key, []);
+        }
+        groupMap.get(key)!.push(b);
+      });
+
+      groupMap.forEach((entryList, groupKey) => {
+        const first = entryList[0];
+        const matchedFarmer = farmers.find(
+          (f) => f.id === first.farmerId || (f.farmerName && f.farmerName.trim().toLowerCase() === (first.farmerName || '').trim().toLowerCase())
+        );
+
+        const farmerId = matchedFarmer?.id || first.farmerId || groupKey;
+        const farmerName = matchedFarmer?.farmerName || first.farmerName || groupKey;
+        const farmerNamePa = matchedFarmer?.farmerNamePa || first.farmerNamePa || farmerName;
+        const fatherName = matchedFarmer?.fatherName || first.farmerFatherName || '-';
+        const village = matchedFarmer?.village || first.farmerVillage || '-';
+        const villagePa = matchedFarmer?.villagePa || first.farmerVillagePa;
+        const mobile = matchedFarmer?.mobile || first.farmerMobile || '-';
+
+        const totalBagsBrought = entryList.reduce((sum, b) => sum + getEntryBagsCount(b), 0);
+        const totalWeightBroughtKg = entryList.reduce(
+          (sum, b) => sum + (Number(b.grandTotalKg || b.totalBagsWeightKg) || (getEntryBagsCount(b) * 37.5)),
+          0
+        );
+
+        const ownPurchasesList = filteredPurchases.filter(
+          (p) => p.farmerId === farmerId || (p.farmerName && p.farmerName.trim().toLowerCase() === farmerName.trim().toLowerCase())
+        );
+        const ownPurchasedBags = ownPurchasesList.reduce((sum, p) => sum + (Number(p.bags) || 0), 0);
+        const ownPurchasedWeightKg = ownPurchasesList.reduce((sum, p) => sum + (Number(p.totalWeightKg) || 0), 0);
+        const totalPurchasedAmount = ownPurchasesList.reduce((sum, p) => sum + (Number(p.totalAmount) || 0), 0);
+
+        const balanceBeforeLabourBags = totalBagsBrought - ownPurchasedBags;
+
+        let labourExpense = 0;
+        if (farmerLabourOverrides[farmerId] !== undefined) {
+          labourExpense = farmerLabourOverrides[farmerId];
+        } else {
+          const recordedLabour = entryList.reduce((sum, b) => {
+            return sum + getEntryRecordedLabour(b);
+          }, 0);
+
+          if (recordedLabour > 0) {
+            labourExpense = recordedLabour;
+          } else {
+            const defaultRate = settings.defaultPakkiLabourRate ?? 8;
+            labourExpense = totalBagsBrought * defaultRate;
+          }
+        }
+
+        const safeBagRate = applicableBagRate > 0 ? applicableBagRate : 925;
+        const rawLabourBags = labourExpense / safeBagRate;
+        const labourBagsAdjustment = Math.ceil(rawLabourBags);
+        const finalBalanceBags = balanceBeforeLabourBags - labourBagsAdjustment;
+
+        items.push({
+          farmerId,
+          farmerName,
+          farmerNamePa,
+          fatherName,
+          village,
+          villagePa,
+          mobile,
+          aadhaar: matchedFarmer?.aadhaar || first.farmerAadhaar,
+          linkedFarmers: [],
+          totalBagsBrought,
+          totalWeightBroughtKg,
+          arrivalEntries: entryList.map((b) => ({
+            id: b.id,
+            entryNumber: b.entryNumber || (b as any).parchiNumber || '-',
+            date: b.date,
+            newBags: Number(b.newBags ?? (b.bardana === 'NEW' ? getEntryBagsCount(b) : 0)),
+            oldBags: Number(b.oldBags ?? (b.bardana === 'OLD' ? getEntryBagsCount(b) : 0)),
+            bags: getEntryBagsCount(b),
+            weightDisplay: b.grandTotalDisplay || b.totalBagsWeightDisplay || formatKgToQulKg(b.grandTotalKg || (getEntryBagsCount(b) * 37.5)).displayEn,
+            labourAmount: getEntryRecordedLabour(b)
+          })),
+          ownPurchasedBags,
+          ownPurchasedWeightKg,
+          ownPurchases: ownPurchasesList.map((p) => ({
+            id: p.id,
+            date: p.date,
+            agency: p.agency || 'Other',
+            bags: Number(p.bags) || 0,
+            weightDisplay: p.totalWeightDisplay || formatKgToQulKg(p.totalWeightKg).displayEn,
+            rate: p.rate || settings.fixedRatePerQtl || 2461,
+            totalAmount: Number(p.totalAmount) || 0
+          })),
+          linkedPurchasedBags: 0,
+          linkedPurchasedWeightKg: 0,
+          linkedFarmerPurchases: [],
+          totalPurchasedBags: ownPurchasedBags,
+          totalPurchasedWeightKg: ownPurchasedWeightKg,
+          totalPurchasedAmount,
+          balanceBeforeLabourBags,
+          labourExpense,
+          applicableBagRate: safeBagRate,
+          rawLabourBags,
+          labourBagsAdjustment,
+          finalBalanceBags
+        });
+      });
+    }
 
     return items;
   }, [

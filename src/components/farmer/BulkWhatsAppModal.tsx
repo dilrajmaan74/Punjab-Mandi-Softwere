@@ -70,8 +70,8 @@ export const BulkWhatsAppModal: React.FC<BulkWhatsAppModalProps> = ({
   const [customMessage, setCustomMessage] = useState<string>(
 `🌾 *ਕਿਸਾਨ ਭਰਾਵੋ ਸਤਿ ਸ਼੍ਰੀ ਅਕਾਲ ਜੀ* 🌾
 -----------------------------------
-🏛 *${activeFirm?.name || settings.firmNameEn || 'Jammu Trading Co'}*
-📍 ${settings.mandiNamePa || 'ਦਾਣਾ ਮੰਡੀ ਕੰਗ ਖੁਰਦ'}
+🏛 *${activeFirm?.name || settings.firmNameEn || 'Punjab Mandi Trading Co (Demo)'}*
+📍 ${settings.mandiNamePa || 'ਮੁੱਖ ਦਾਣਾ ਮੰਡੀ (ਡੈਮੋ)'}
 -----------------------------------
 👤 *ਕਿਸਾਨ:* {FARMER_NAME} ({FARMER_ID})
 🏡 *ਪਿੰਡ:* {VILLAGE}
@@ -207,8 +207,8 @@ export const BulkWhatsAppModal: React.FC<BulkWhatsAppModalProps> = ({
   // Generate customized message for a given farmer
   const generateMessageForFarmer = (item: (typeof farmerDataList)[0]): string => {
     const { farmer, summary, todayWeighments } = item;
-    const firmTitle = activeFirm?.name || settings.firmNameEn || 'Jammu Trading Co';
-    const mandiTitle = settings.mandiNamePa || settings.mandiNameEn || 'ਦਾਣਾ ਮੰਡੀ ਕੰਗ ਖੁਰਦ';
+    const firmTitle = activeFirm?.name || settings.firmNameEn || 'Punjab Mandi Trading Co (Demo)';
+    const mandiTitle = settings.mandiNamePa || settings.mandiNameEn || 'ਮੁੱਖ ਦਾਣਾ ਮੰਡੀ (ਡੈਮੋ)';
     const farmerName = farmer.farmerNamePa ? `${farmer.farmerNamePa} (${farmer.farmerName})` : farmer.farmerName;
     const village = farmer.villagePa || farmer.village || '—';
 
@@ -246,7 +246,7 @@ export const BulkWhatsAppModal: React.FC<BulkWhatsAppModalProps> = ({
 `📢 *ਮੰਡੀ ਆਮ ਸੂਚਨਾ (Mandi General Notice)* 📢
 -----------------------------------
 🏛 *${firmTitle.toUpperCase()}*
-📍 ${mandiTitle} | 📞 ${activeFirm?.mobile || settings.firmMobile || '98147-74651'}
+📍 ${mandiTitle} | 📞 ${activeFirm?.mobile || settings.firmMobile || '98765-43210'}
 -----------------------------------
 👤 *ਕਿਸਾਨ ਭਰਾ:* ${farmerName} (${farmer.id})
 🏡 *ਪਿੰਡ:* ${village}

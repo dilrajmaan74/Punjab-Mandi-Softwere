@@ -101,7 +101,7 @@ export const AiWhatsAppVoiceModal: React.FC<AiWhatsAppVoiceModalProps> = ({
   };
 
   const farmerName = farmer?.farmerNamePa || farmer?.farmerName || 'ਕਿਸਾਨ ਵੀਰ';
-  const firmName = firm?.name || 'Jammu Trading Co';
+  const firmName = firm?.name || 'Punjab Mandi Trading Co';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-xs overflow-y-auto">

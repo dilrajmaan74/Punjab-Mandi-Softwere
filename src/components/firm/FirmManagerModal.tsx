@@ -53,8 +53,8 @@ export const FirmManagerModal: React.FC<FirmManagerModalProps> = ({ isOpen, onCl
   const [namePa, setNamePa] = useState<string>('');
   const [address, setAddress] = useState<string>('');
   const [addressPa, setAddressPa] = useState<string>('');
-  const [marketCommittee, setMarketCommittee] = useState<string>('Lohian Khas');
-  const [marketCommitteePa, setMarketCommitteePa] = useState<string>('ਲੋਹੀਆਂ ਖਾਸ');
+  const [marketCommittee, setMarketCommittee] = useState<string>('Punjab Mandi Board');
+  const [marketCommitteePa, setMarketCommitteePa] = useState<string>('ਪੰਜਾਬ ਮੰਡੀ ਬੋਰਡ');
   const [mobile, setMobile] = useState<string>('');
   const [licenceNo, setLicenceNo] = useState<string>('');
   const [pan, setPan] = useState<string>('');
@@ -79,8 +79,8 @@ export const FirmManagerModal: React.FC<FirmManagerModalProps> = ({ isOpen, onCl
     setNamePa('');
     setAddress('');
     setAddressPa('');
-    setMarketCommittee('Lohian Khas');
-    setMarketCommitteePa('ਲੋਹੀਆਂ ਖਾਸ');
+    setMarketCommittee('Punjab Mandi Board');
+    setMarketCommitteePa('ਪੰਜਾਬ ਮੰਡੀ ਬੋਰਡ');
     setMobile('');
     setLicenceNo('');
     setPan('');
@@ -353,7 +353,7 @@ export const FirmManagerModal: React.FC<FirmManagerModalProps> = ({ isOpen, onCl
                       type="text"
                       value={name}
                       onChange={(e) => setName(e.target.value)}
-                      placeholder="e.g. Jammu Trading Co"
+                      placeholder="e.g. Punjab Mandi Trading Co"
                       className="w-full px-3 py-2 text-xs font-medium border border-slate-200 rounded-lg bg-white focus:ring-2 focus:ring-slate-900 focus:outline-none"
                       required
                     />
@@ -367,7 +367,7 @@ export const FirmManagerModal: React.FC<FirmManagerModalProps> = ({ isOpen, onCl
                       type="text"
                       value={namePa}
                       onChange={(e) => setNamePa(e.target.value)}
-                      placeholder="ਉਦਾਹਰਣ: ਜੰਮੂ ਟਰੇਡਿੰਗ ਕੰਪਨੀ"
+                      placeholder="ਉਦਾਹਰਣ: ਪੰਜਾਬ ਮੰਡੀ ਟਰੇਡਿੰਗ ਕੰਪਨੀ"
                       className="w-full px-3 py-2 text-xs font-medium border border-slate-200 rounded-lg bg-white focus:ring-2 focus:ring-slate-900 focus:outline-none"
                     />
                   </div>
@@ -380,7 +380,7 @@ export const FirmManagerModal: React.FC<FirmManagerModalProps> = ({ isOpen, onCl
                       type="text"
                       value={address}
                       onChange={(e) => setAddress(e.target.value)}
-                      placeholder="e.g. Dana Mandi Kang Khurd, Teh. Shahkot, Distt. Jalandhar, Punjab - 144629"
+                      placeholder="e.g. Shop No. 12, Main Grain Market, Punjab - 144001"
                       className="w-full px-3 py-2 text-xs font-medium border border-slate-200 rounded-lg bg-white focus:ring-2 focus:ring-slate-900 focus:outline-none"
                       required
                     />
@@ -394,7 +394,7 @@ export const FirmManagerModal: React.FC<FirmManagerModalProps> = ({ isOpen, onCl
                       type="text"
                       value={marketCommittee}
                       onChange={(e) => setMarketCommittee(e.target.value)}
-                      placeholder="e.g. Lohian Khas"
+                      placeholder="e.g. Punjab Mandi Board"
                       className="w-full px-3 py-2 text-xs font-medium border border-slate-200 rounded-lg bg-white focus:ring-2 focus:ring-slate-900 focus:outline-none"
                       required
                     />
@@ -421,7 +421,7 @@ export const FirmManagerModal: React.FC<FirmManagerModalProps> = ({ isOpen, onCl
                       type="tel"
                       value={mobile}
                       onChange={(e) => setMobile(e.target.value)}
-                      placeholder="e.g. 98147-74651"
+                      placeholder="e.g. 98765-43210"
                       className="w-full px-3 py-2 text-xs font-medium border border-slate-200 rounded-lg bg-white focus:ring-2 focus:ring-slate-900 focus:outline-none"
                       required
                     />
@@ -435,7 +435,7 @@ export const FirmManagerModal: React.FC<FirmManagerModalProps> = ({ isOpen, onCl
                       type="text"
                       value={licenceNo}
                       onChange={(e) => setLicenceNo(e.target.value)}
-                      placeholder="e.g. JAL/LKH/133"
+                      placeholder="e.g. DEMO/PB/2026"
                       className="w-full px-3 py-2 text-xs font-medium border border-slate-200 rounded-lg bg-white focus:ring-2 focus:ring-slate-900 focus:outline-none"
                       required
                     />

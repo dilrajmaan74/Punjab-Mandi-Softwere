@@ -126,13 +126,13 @@ export const AndroidAppInstallModal: React.FC<{
               <div className="bg-slate-800/60 p-2 rounded-lg border border-slate-700/60">
                 <span className="text-[10px] text-slate-400 block">ਮਾਲਕ / ਯੂਜ਼ਰ ਦਾ ਨਾਂ:</span>
                 <strong className="text-white text-xs font-bold truncate block">
-                  {currentUser?.fullName || 'ਦਿਲਰਾਜ ਮਾਨ (Dilraj Maan)'}
+                  {currentUser?.fullName || 'ਸ. ਦਲਜੀਤ ਸਿੰਘ (ਡੈਮੋ)'}
                 </strong>
               </div>
               <div className="bg-slate-800/60 p-2 rounded-lg border border-slate-700/60">
                 <span className="text-[10px] text-slate-400 block">ਮੋਬਾਈਲ ਨੰਬਰ (User ID):</span>
                 <strong className="text-emerald-400 font-mono text-xs font-bold block">
-                  {currentUser?.mobile || '98147-74651'}
+                  {currentUser?.mobile || '98765-43210'}
                 </strong>
               </div>
             </div>

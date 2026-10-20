@@ -4,6 +4,7 @@ import { MandiProvider, useMandi } from './context/MandiContext';
 import { NotificationProvider } from './context/NotificationContext';
 import { GoogleSheetsSyncProvider } from './context/GoogleSheetsSyncContext';
 import { SupabaseStrictLoginLock } from './components/auth/SupabaseStrictLoginLock';
+import { DemoModeBanner } from './components/common/DemoModeBanner';
 import { AuthPortalModal } from './components/auth/AuthPortalModal';
 import { ToastContainer } from './components/common/ToastContainer';
 import { ConfirmationModal } from './components/common/ConfirmationModal';
@@ -60,28 +61,13 @@ import {
 } from 'lucide-react';
 
 const MainAppContent: React.FC = () => {
-  const { isAuthenticated, isAuthChecking } = useAuth();
   const { activeSection, setActiveSection, activeReceipt, setActiveReceipt, appMode } = useMandi();
-
-  if (isAuthChecking) {
-    return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-white p-4">
-        <div className="w-16 h-16 rounded-2xl bg-emerald-600/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 mb-4 animate-pulse">
-          <Wheat className="w-8 h-8" />
-        </div>
-        <h2 className="text-lg font-black text-white">ਪੰਜਾਬ ਮੰਡੀ ਸਾਫਟਵੇਅਰ (Punjab Mandi Pro)</h2>
-        <p className="text-xs text-slate-400 mt-1">ਸੁਰੱਖਿਅਤ ਸੁਪਾਬੇਸ ਕਲਾਊਡ ਕਨੈਕਸ਼ਨ ਜਾਂਚਿਆ ਜਾ ਰਿਹਾ ਹੈ...</p>
-      </div>
-    );
-  }
-
-  // STRICT LOGIN: If not logged in, NO DATA IS SHOWN AT ALL!
-  if (!isAuthenticated) {
-    return <SupabaseStrictLoginLock />;
-  }
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col font-sans selection:bg-emerald-500 selection:text-white">
+      {/* Demo Practice Mode Banner - 100% Disconnected from Real Supabase */}
+      <DemoModeBanner />
+
       {/* Global Toast Container */}
       <ToastContainer />
 

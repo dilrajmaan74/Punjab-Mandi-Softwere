@@ -237,7 +237,7 @@ export const TallyDashboardView: React.FC<TallyDashboardViewProps> = ({ onExitTa
             <span className="text-[10px] bg-[#0f2b38] text-[#f59e0b] px-1 py-0.2 rounded font-mono">MANDI v4</span>
           </div>
           <div className="hidden sm:flex items-center gap-2 text-slate-300 font-mono text-[11px]">
-            <span className="text-amber-400 font-bold">{activeFirm?.name || 'Jammu Trading Company'}</span>
+            <span className="text-amber-400 font-bold">{activeFirm?.name || 'Punjab Mandi Trading Co'}</span>
             <span>|</span>
             <span>FY: {activeFiscalYear || '2026-27'}</span>
             <span>|</span>
@@ -305,8 +305,8 @@ export const TallyDashboardView: React.FC<TallyDashboardViewProps> = ({ onExitTa
               <div className="pt-2 flex items-center justify-between">
                 <div>
                   <div className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Name of Company / Mandi Firm</div>
-                  <div className="text-lg font-black text-white font-mono">{activeFirm?.name || 'Jammu Trading Company'}</div>
-                  <div className="text-xs text-slate-300">Market Committee: ਦਾਣਾ ਮੰਡੀ ਕੰਗ ਖੁਰਦ</div>
+                  <div className="text-lg font-black text-white font-mono">{activeFirm?.name || 'Punjab Mandi Trading Co'}</div>
+                  <div className="text-xs text-slate-300">Market Committee: {activeFirm?.marketCommittee || 'ਮਾਰਕੀਟ ਕਮੇਟੀ (ਪੰਜਾਬ)'}</div>
                 </div>
                 <div className="text-right">
                   <div className="text-[10px] text-amber-400 font-mono uppercase font-bold">SELECTED CROP</div>

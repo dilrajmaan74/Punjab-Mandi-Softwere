@@ -25,32 +25,131 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Mukta+Mahee:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <script>
-      // Global error shield to prevent harmless iframe / dev-server noise from crashing the UI
-      window.addEventListener('error', function (event) {
-        if (!event.error && event.message === 'Script error.') {
-          event.preventDefault();
-          return true;
+      // Global error shield and WebSocket shim to prevent harmless dev-server/HMR noise in Google AI Studio
+      (function () {
+        // 1. Shim WebSocket for Vite HMR (disabled in AI Studio environment)
+        var OriginalWebSocket = window.WebSocket;
+        if (typeof OriginalWebSocket === 'function') {
+          function isViteHmr(url, protocols) {
+            if (protocols === 'vite-hmr') return true;
+            if (Array.isArray(protocols) && protocols.indexOf('vite-hmr') !== -1) return true;
+            if (typeof url === 'string' && (url.indexOf('token=') !== -1 || url.indexOf('vite-hmr') !== -1)) return true;
+            return false;
+          }
+
+          function ViteHmrMockSocket(url, protocols) {
+            var target = document.createDocumentFragment();
+            this.addEventListener = target.addEventListener.bind(target);
+            this.removeEventListener = target.removeEventListener.bind(target);
+            this.dispatchEvent = target.dispatchEvent.bind(target);
+
+            this.url = url || '';
+            this.protocol = Array.isArray(protocols) ? protocols[0] : (protocols || 'vite-hmr');
+            this.readyState = 1; // WebSocket.OPEN
+            this.CONNECTING = 0;
+            this.OPEN = 1;
+            this.CLOSING = 2;
+            this.CLOSED = 3;
+            this.binaryType = 'blob';
+            this.bufferedAmount = 0;
+            this.extensions = '';
+            this.onopen = null;
+            this.onclose = null;
+            this.onerror = null;
+            this.onmessage = null;
+
+            var self = this;
+            setTimeout(function () {
+              var ev = new Event('open');
+              self.dispatchEvent(ev);
+              if (typeof self.onopen === 'function') self.onopen(ev);
+            }, 0);
+          }
+
+          ViteHmrMockSocket.prototype = Object.create(OriginalWebSocket.prototype);
+          ViteHmrMockSocket.prototype.constructor = ViteHmrMockSocket;
+          ViteHmrMockSocket.prototype.send = function () {};
+          ViteHmrMockSocket.prototype.close = function (code, reason) {
+            this.readyState = 3;
+            var ev = new Event('close');
+            ev.wasClean = true;
+            ev.code = code || 1000;
+            ev.reason = reason || 'HMR Disabled';
+            this.dispatchEvent(ev);
+            if (typeof this.onclose === 'function') this.onclose(ev);
+          };
+
+          window.WebSocket = function (url, protocols) {
+            if (isViteHmr(url, protocols)) {
+              return new ViteHmrMockSocket(url, protocols);
+            }
+            return new OriginalWebSocket(url, protocols);
+          };
+
+          window.WebSocket.prototype = OriginalWebSocket.prototype;
+          window.WebSocket.CONNECTING = 0;
+          window.WebSocket.OPEN = 1;
+          window.WebSocket.CLOSING = 2;
+          window.WebSocket.CLOSED = 3;
         }
-        if (event.message && (
-          event.message.indexOf('WebSocket') !== -1 ||
-          event.message.indexOf('ResizeObserver') !== -1 ||
-          event.message.indexOf('virtual:pwa') !== -1
-        )) {
-          event.preventDefault();
-          return true;
+
+        // 2. Global Error Shield
+        function shouldSuppress(msg, src) {
+          if (!msg && !src) return false;
+          var str = (String(msg) + ' ' + String(src)).toLowerCase();
+          return (
+            str.indexOf('websocket') !== -1 ||
+            str.indexOf('closed without opened') !== -1 ||
+            str.indexOf('@vite/client') !== -1 ||
+            str.indexOf('resizeobserver') !== -1 ||
+            str.indexOf('script error.') !== -1 ||
+            str.indexOf('virtual:pwa') !== -1 ||
+            str.indexOf('serviceworker') !== -1
+          );
         }
-      });
-      window.addEventListener('unhandledrejection', function (event) {
-        var reason = '' + (event.reason || '');
-        if (
-          reason.indexOf('WebSocket') !== -1 ||
-          reason.indexOf('service worker') !== -1 ||
-          reason.indexOf('ServiceWorker') !== -1
-        ) {
-          event.preventDefault();
-          return true;
-        }
-      });
+
+        window.addEventListener(
+          'error',
+          function (event) {
+            var msg = event.message || (event.error && event.error.message) || '';
+            var src = (event.error && event.error.stack) || event.filename || '';
+            if (shouldSuppress(msg, src) || (event.target && event.target instanceof WebSocket)) {
+              event.preventDefault();
+              event.stopPropagation();
+              if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+              return true;
+            }
+          },
+          true
+        );
+
+        window.addEventListener(
+          'unhandledrejection',
+          function (event) {
+            var reason = event.reason || '';
+            var msg = (reason && reason.message) || String(reason);
+            var src = (reason && reason.stack) || '';
+            if (shouldSuppress(msg, src)) {
+              event.preventDefault();
+              event.stopPropagation();
+              if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+              return true;
+            }
+          },
+          true
+        );
+
+        var origOnError = window.onerror;
+        window.onerror = function (msg, url, lineNo, columnNo, error) {
+          if (shouldSuppress(msg, (error && error.stack) || url)) {
+            return true;
+          }
+          if (origOnError) {
+            return origOnError.apply(this, arguments);
+          }
+          return false;
+        };
+      })();
     </script>
   </head>
   <body class="bg-slate-100 text-slate-900 antialiased font-sans">

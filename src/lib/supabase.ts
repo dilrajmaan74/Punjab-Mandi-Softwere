@@ -77,13 +77,28 @@ let cachedClient: SupabaseClient | null = null;
 let lastUsedUrl = '';
 let lastUsedKey = '';
 
+export const isDemoPracticeMode = (): boolean => {
+  try {
+    const val = localStorage.getItem('mandi_demo_practice_mode');
+    return val !== 'false'; // Defaults to TRUE for 100% isolated practice in Google AI Studio
+  } catch {
+    return true;
+  }
+};
+
 export const isSupabaseConfigured = (): boolean => {
+  if (isDemoPracticeMode()) return false;
   const url = getSupabaseUrl();
   const key = getSupabaseAnonKey();
   return Boolean(url && key && key.length > 10);
 };
 
 export const getSupabaseClient = (): SupabaseClient | null => {
+  // If in isolated demo practice mode, strictly block connection to real Supabase
+  if (isDemoPracticeMode()) {
+    return null;
+  }
+
   const url = getSupabaseUrl();
   const key = getSupabaseAnonKey();
 

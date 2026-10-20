@@ -28,10 +28,10 @@ export const SupabaseStrictLoginLock: React.FC = () => {
   const { loginWithSupabase, signUpWithSupabase } = useAuth();
 
   const [mode, setMode] = useState<'LOGIN' | 'SIGNUP'>('LOGIN');
-  const [email, setEmail] = useState<string>('dilrajmaan74@gmail.com');
+  const [email, setEmail] = useState<string>('demo.mandi@punjab.gov.in');
   const [password, setPassword] = useState<string>('');
-  const [fullName, setFullName] = useState<string>('ਦਿਲਰਾਜ ਮਾਨ (Dilraj Maan)');
-  const [mobile, setMobile] = useState<string>('9814774651');
+  const [fullName, setFullName] = useState<string>('ਸ. ਦਲਜੀਤ ਸਿੰਘ (ਡੈਮੋ)');
+  const [mobile, setMobile] = useState<string>('9876543210');
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [rememberMe, setRememberMe] = useState<boolean>(true);
 
@@ -131,14 +131,14 @@ export const SupabaseStrictLoginLock: React.FC = () => {
             </span>
           </h1>
           <p className="text-xs sm:text-sm text-slate-300 font-medium mt-1">
-            ਜੰਮੂ ਟਰੇਡਿੰਗ ਕੰਪਨੀ (Jammu Trading Co) • ਦਾਣਾ ਮੰਡੀ ਲੱਖੇਵਾਲੀ
+            ਪੰਜਾਬ ਮੰਡੀ ਟਰੇਡਿੰਗ ਕੰਪਨੀ (Punjab Mandi Trading Co) • ਦਾਣਾ ਮੰਡੀ (ਡੈਮੋ ਪ੍ਰੈਕਟਿਸ)
           </p>
           <div className="flex items-center justify-center gap-2 mt-1.5 text-[11px] text-slate-400">
             <span className="px-2 py-0.5 bg-slate-800/80 rounded-md border border-slate-700 font-mono">
-              ਲਾਇਸੰਸ: JAL/LKH/133
+              ਲਾਇਸੰਸ: DEMO/PB/2026
             </span>
             <span className="px-2 py-0.5 bg-slate-800/80 rounded-md border border-slate-700 font-mono">
-              FIRM-001
+              DEMO-FIRM-001
             </span>
           </div>
         </div>
@@ -200,22 +200,45 @@ export const SupabaseStrictLoginLock: React.FC = () => {
             </button>
           </div>
 
-          {/* Quick Prefill Pill for Dilraj Maan */}
+          {/* 1-Click Demo Company Quick Open */}
+          <button
+            type="button"
+            onClick={async () => {
+              setIsSubmitting(true);
+              setErrorMessage(null);
+              try {
+                const res = await loginWithSupabase('demo.mandi@punjab.gov.in', 'Password@123', true);
+                if (res.success) {
+                  setSuccessMessage('ਡੈਮੋ ਕੰਪਨੀ ਸਫਲਤਾਪੂਰਵਕ ਖੁੱਲ੍ਹ ਗਈ ਹੈ!');
+                } else {
+                  setErrorMessage(res.message);
+                }
+              } finally {
+                setIsSubmitting(false);
+              }
+            }}
+            className="w-full mb-3 py-2.5 px-3 bg-gradient-to-r from-amber-500/20 via-emerald-500/20 to-amber-500/20 border border-amber-400/50 hover:border-amber-400 rounded-xl text-amber-300 font-black text-xs transition flex items-center justify-center gap-2 cursor-pointer shadow-sm"
+          >
+            <Sparkles className="w-4 h-4 text-amber-400" />
+            <span>⚡ 1-ਕਲਿੱਕ ਨਾਲ ਡੈਮੋ ਕੰਪਨੀ ਖੋਲ੍ਹੋ (Open Demo Company - Punjab Mandi Trading Co)</span>
+          </button>
+
+          {/* Quick Prefill Pill for Demo User */}
           <div className="flex items-center justify-between mb-4 bg-slate-800/60 px-3 py-1.5 rounded-xl border border-slate-700/60 text-xs">
             <span className="text-[11px] text-slate-300 font-medium flex items-center gap-1">
               <Building2 className="w-3.5 h-3.5 text-emerald-400" />
-              ਮਾਲਕ ਆਈਡੀ (Owner ID):
+              ਡੈਮੋ ਲੌਗਇਨ ਆਈਡੀ (Demo ID):
             </span>
             <button
               type="button"
               onClick={() => {
-                setEmail('dilrajmaan74@gmail.com');
+                setEmail('demo.mandi@punjab.gov.in');
                 setErrorMessage(null);
               }}
               className="text-[11px] font-mono font-bold text-emerald-400 hover:text-emerald-300 underline cursor-pointer"
-              title="Click to fill dilrajmaan74@gmail.com"
+              title="Click to fill demo email"
             >
-              dilrajmaan74@gmail.com
+              demo.mandi@punjab.gov.in
             </button>
           </div>
 
@@ -232,7 +255,7 @@ export const SupabaseStrictLoginLock: React.FC = () => {
                     required
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
-                    placeholder="e.g. ਦਿਲਰਾਜ ਮਾਨ (Dilraj Maan)"
+                    placeholder="e.g. ਸ. ਦਲਜੀਤ ਸਿੰਘ (ਡੈਮੋ)"
                     className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
                   />
                 </div>
@@ -245,7 +268,7 @@ export const SupabaseStrictLoginLock: React.FC = () => {
                     required
                     value={mobile}
                     onChange={(e) => setMobile(e.target.value)}
-                    placeholder="e.g. 9814774651"
+                    placeholder="e.g. 9876543210"
                     className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
                   />
                 </div>
@@ -261,7 +284,7 @@ export const SupabaseStrictLoginLock: React.FC = () => {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="dilrajmaan74@gmail.com"
+                placeholder="demo.mandi@punjab.gov.in"
                 className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
               />
             </div>

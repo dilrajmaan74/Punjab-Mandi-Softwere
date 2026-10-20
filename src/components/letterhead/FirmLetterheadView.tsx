@@ -65,18 +65,17 @@ export const FirmLetterheadView: React.FC = () => {
     return `${day}/${month}/${year}`;
   };
 
-  // Determine if active firm is New Jammu Trading Co or Jammu Trading Co
-  const isNewJammuActive =
-    activeFirm.id === 'FIRM-004' ||
-    activeFirm.name.toLowerCase().includes('new jammu') ||
-    activeFirm.licenceNo === 'JAL/LKH/239';
+  // Determine if active firm is Branch 2 or Main Firm
+  const isBranchActive =
+    activeFirm.id === 'DEMO-FIRM-002' ||
+    activeFirm.name.toLowerCase().includes('branch 2');
 
   // Effective Firm Details (dynamically bound to active firm or user toggle)
-  const currentFirmNameEn = isNewJammuActive ? 'NEW JAMMU TRADING CO.' : 'JAMMU TRADING CO.';
-  const currentFirmNamePa = isNewJammuActive ? 'ਨਿਊ ਜੰਮੂ ਟਰੇਡਿੰਗ ਕੰਪਨੀ' : 'ਜੰਮੂ ਟਰੇਡਿੰਗ ਕੰਪਨੀ';
-  const currentLicence = isNewJammuActive ? 'JAL/LKH/239' : (activeFirm.licenceNo || 'JAL/LKH/133');
-  const defaultPropName = isNewJammuActive ? 'Arpanreet Singh' : 'Himmat Singh';
-  const defaultPropNamePa = isNewJammuActive ? 'ਅਰਪਨਰੀਤ ਸਿੰਘ' : 'ਹਿੰਮਤ ਸਿੰਘ';
+  const currentFirmNameEn = activeFirm.name || 'PUNJAB MANDI TRADING CO. (DEMO)';
+  const currentFirmNamePa = activeFirm.namePa || 'ਪੰਜਾਬ ਮੰਡੀ ਟਰੇਡਿੰਗ ਕੰਪਨੀ (ਡੈਮੋ)';
+  const currentLicence = activeFirm.licenceNo || 'DEMO/PB/2026';
+  const defaultPropName = activeFirm.proprietorName || 'Daljit Singh (Demo)';
+  const defaultPropNamePa = activeFirm.proprietorNamePa || 'ਸ. ਦਲਜੀਤ ਸਿੰਘ (ਡੈਮੋ)';
 
   // 1. PAGE LAYOUT MODE (Blank vs Lined vs Typed)
   const [pageMode, setPageMode] = useState<LetterpadPageMode>('blank');
@@ -93,11 +92,11 @@ export const FirmLetterheadView: React.FC = () => {
   const [isGeneratingPdf, setIsGeneratingPdf] = useState<boolean>(false);
 
   // Letterhead State
-  const defaultRefPrefix = isNewJammuActive ? 'NJTC' : 'JTC';
+  const defaultRefPrefix = isBranchActive ? 'PMTC-B2' : 'PMTC';
   const [refNo, setRefNo] = useState<string>(`${defaultRefPrefix}/MK/2026/042`);
   const [date, setDate] = useState<string>(getTodayFormatted());
   const [recipient, setRecipient] = useState<string>(
-    'ਸਕੱਤਰ ਸਾਹਿਬ (The Secretary),\nਮਾਰਕੀਟ ਕਮੇਟੀ ਲੋਹੀਆਂ ਖਾਸ,\nਤਹਿਸੀਲ ਸ਼ਾਹਕੋਟ, ਜ਼ਿਲ੍ਹਾ ਜਲੰਧਰ।'
+    'ਸਕੱਤਰ ਸਾਹਿਬ (The Secretary),\nਮਾਰਕੀਟ ਕਮੇਟੀ (Market Committee),\nਪੰਜਾਬ।'
   );
   const [subject, setSubject] = useState<string>(
     `ਵਿਸ਼ਾ: ਦਾਣਾ ਮੰਡੀ ਕੰਗ ਖੁਰਦ / ਮਹਿਰਾਜਵਾਲਾ / ਕਮਾਲਪੁਰ ਵਿਖੇ ਖਰੀਦ ਅਤੇ ਤੁਲਾਈ ਸੰਬੰਧੀ ਜ਼ਰੂਰੀ ਬੇਨਤੀ ਪੱਤਰ — ${currentFirmNamePa}`
@@ -117,11 +116,11 @@ export const FirmLetterheadView: React.FC = () => {
 
   // Synchronize proprietor names when firm changes
   useEffect(() => {
-    setProprietorName(isNewJammuActive ? 'Arpanreet Singh' : (activeFirm.proprietorName || 'Himmat Singh'));
-    setProprietorNamePa(isNewJammuActive ? 'ਅਰਪਨਰੀਤ ਸਿੰਘ' : (activeFirm.proprietorNamePa || 'ਹਿੰਮਤ ਸਿੰਘ'));
-    const prefix = isNewJammuActive ? 'NJTC' : 'JTC';
+    setProprietorName(activeFirm.proprietorName || 'Daljit Singh (Demo)');
+    setProprietorNamePa(activeFirm.proprietorNamePa || 'ਸ. ਦਲਜੀਤ ਸਿੰਘ (ਡੈਮੋ)');
+    const prefix = 'PMTC';
     setRefNo(`${prefix}/MK/2026/${Math.floor(100 + Math.random() * 900)}`);
-  }, [activeFirm.id, isNewJammuActive]);
+  }, [activeFirm.id]);
 
   // ==============================================================
   // GOOGLE GEMINI 3.8 AI LETTERPAD WRITER STATE
@@ -259,15 +258,14 @@ export const FirmLetterheadView: React.FC = () => {
     });
   };
 
-  // Switch between Jammu Trading Co and New Jammu Trading Co
+  // Switch between Mandi Branches
   const handleSelectFirm = (firmId: string) => {
     setActiveFirmId(firmId);
+    const target = firms.find((f) => f.id === firmId);
     notifySaveSuccess({
       titlePa: 'ਫਰਮ ਲੈਟਰ ਪੈਡ ਸਵਿੱਚ ਹੋ ਗਿਆ',
       titleEn: 'Firm Letterhead Switched',
-      messagePa: firmId === 'FIRM-004'
-        ? 'New Jammu Trading Co (ਪ੍ਰੋ. ਅਰਪਨਰੀਤ ਸਿੰਘ • ਲਾਇਸੰਸ JAL/LKH/239) ਲੈਟਰ ਪੈਡ ਚੁਣਿਆ ਗਿਆ ਹੈ।'
-        : 'Jammu Trading Co (ਪ੍ਰੋ. ਹਿੰਮਤ ਸਿੰਘ • ਲਾਇਸੰਸ JAL/LKH/133) ਲੈਟਰ ਪੈਡ ਚੁਣਿਆ ਗਿਆ ਹੈ।'
+      messagePa: `${target?.namePa || target?.name || 'ਮੰਡੀ ਸ਼ਾਖਾ'} ਲੈਟਰ ਪੈਡ ਚੁਣਿਆ ਗਿਆ ਹੈ।`
     });
   };
 
@@ -416,7 +414,7 @@ export const FirmLetterheadView: React.FC = () => {
       // Fit into exact 210mm x 297mm A4 page
       pdf.addImage(dataUrl, 'PNG', 0, 0, 210, 297, undefined, 'FAST');
       const modeText = pageMode === 'blank' ? 'Blank' : pageMode === 'lined' ? 'Lined' : 'Typed';
-      const firmSlug = isNewJammuActive ? 'New_Jammu_Trading_Co' : 'Jammu_Trading_Co';
+      const firmSlug = isBranchActive ? 'Punjab_Mandi_Branch2' : 'Punjab_Mandi_Main';
       const mandiCode =
         mandiScope === 'mehrajwala'
           ? 'Mehrajwala'
@@ -587,35 +585,25 @@ export const FirmLetterheadView: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
-            {/* Firm 1: Jammu Trading Co */}
-            <button
-              type="button"
-              onClick={() => handleSelectFirm('FIRM-001')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-black transition flex items-center gap-1.5 cursor-pointer border ${
-                !isNewJammuActive
-                  ? 'bg-amber-600 text-white border-amber-700 shadow-md ring-2 ring-amber-400/50'
-                  : 'bg-white text-slate-700 border-slate-300 hover:bg-amber-50'
-              }`}
-            >
-              <span>🏛️ Jammu Trading Co</span>
-              <span className="text-[10px] opacity-90">(ਪ੍ਰੋ. ਹਿੰਮਤ ਸਿੰਘ • ਲਾਇਸੰਸ JAL/LKH/133)</span>
-              {!isNewJammuActive && <Check className="w-3.5 h-3.5 text-white" />}
-            </button>
-
-            {/* Firm 2: New Jammu Trading Co */}
-            <button
-              type="button"
-              onClick={() => handleSelectFirm('FIRM-004')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-black transition flex items-center gap-1.5 cursor-pointer border ${
-                isNewJammuActive
-                  ? 'bg-indigo-900 text-amber-300 border-indigo-950 shadow-md ring-2 ring-indigo-400/50'
-                  : 'bg-white text-slate-700 border-slate-300 hover:bg-indigo-50'
-              }`}
-            >
-              <span>✨ New Jammu Trading Co</span>
-              <span className="text-[10px] opacity-90">(ਪ੍ਰੋ. ਅਰਪਨਰੀਤ ਸਿੰਘ • ਲਾਇਸੰਸ JAL/LKH/239)</span>
-              {isNewJammuActive && <Check className="w-3.5 h-3.5 text-amber-300" />}
-            </button>
+            {firms.map((f) => {
+              const isSelected = activeFirm.id === f.id;
+              return (
+                <button
+                  key={f.id}
+                  type="button"
+                  onClick={() => handleSelectFirm(f.id)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-black transition flex items-center gap-1.5 cursor-pointer border ${
+                    isSelected
+                      ? 'bg-amber-600 text-white border-amber-700 shadow-md ring-2 ring-amber-400/50'
+                      : 'bg-white text-slate-700 border-slate-300 hover:bg-amber-50'
+                  }`}
+                >
+                  <span>🏛️ {f.namePa || f.name}</span>
+                  <span className="text-[10px] opacity-90">({f.licenceNo || 'DEMO/PB/2026'})</span>
+                  {isSelected && <Check className="w-3.5 h-3.5 text-white" />}
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -1189,7 +1177,7 @@ export const FirmLetterheadView: React.FC = () => {
                 </div>
                 <div>
                   <span>ਮੋਬਾਈਲ: </span>
-                  <strong className="text-slate-900 font-mono">{activeFirm.mobile || '98147-74651'}</strong>
+                  <strong className="text-slate-900 font-mono">{activeFirm.mobile || '98765-43210'}</strong>
                 </div>
               </div>
 
@@ -1433,7 +1421,7 @@ export const FirmLetterheadView: React.FC = () => {
 
             {/* Bottom Mandi Details */}
             <div className="mt-6 pt-2 border-t border-slate-100 flex items-center justify-between text-[9px] text-slate-400 font-sans">
-              <span>Dana Mandi Kang Khurd / Dana Mandi Mehrajwala / Kamalpur • Lohian Khas (Jalandhar)</span>
+              <span>{activeFirm.address || 'Grain Market Yard • Punjab'}</span>
               <span>Computerized Mandi Management System • Punjab</span>
             </div>
           </footer>

@@ -67,9 +67,9 @@ export const AgencyProcurementModal: React.FC<AgencyProcurementModalProps> = ({
 
   if (!isOpen) return null;
 
-  const firmName = firm?.namePa || firm?.name || settings.firmNamePa || settings.firmNameEn || 'JAMMU TRADING CO.';
-  const firmMobile = firm?.mobile || settings.firmMobile || '98147-74651';
-  const mandiName = settings.mandiNamePa || settings.mandiNameEn || 'ਦਾਣਾ ਮੰਡੀ ਕੰਗ ਖੁਰਦ';
+  const firmName = firm?.namePa || firm?.name || settings.firmNamePa || settings.firmNameEn || 'PUNJAB MANDI TRADING CO. (DEMO)';
+  const firmMobile = firm?.mobile || settings.firmMobile || '98765-43210';
+  const mandiName = settings.mandiNamePa || settings.mandiNameEn || 'ਮੁੱਖ ਦਾਣਾ ਮੰਡੀ (ਡੈਮੋ)';
 
   // Summary Totals
   const totalBags = filteredRecords.reduce((sum, r) => sum + (r.bags || 0), 0);

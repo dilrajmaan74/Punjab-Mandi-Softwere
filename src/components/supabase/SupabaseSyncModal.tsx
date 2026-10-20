@@ -148,12 +148,12 @@ export const SupabaseSyncModal: React.FC<SupabaseSyncModalProps> = ({ isOpen, on
     setIsVerifyingAccess(true);
     setAuthFeedback(null);
     try {
-      const res = await ensureUserFirmAccess('FIRM-001');
+      const res = await ensureUserFirmAccess('DEMO-FIRM-001');
       setHasFirmAccess(res.hasAccess);
       if (res.hasAccess) {
         setAuthFeedback({
           type: 'success',
-          message: 'Firm Access: Verified (FIRM-001 - Jammu Trading Co ਓਨਰ ਐਕਸੈਸ ਪ੍ਰਮਾਣਿਤ ਹੈ)'
+          message: 'Firm Access: Verified (DEMO-FIRM-001 ਓਨਰ ਐਕਸੈਸ ਪ੍ਰਮਾਣਿਤ ਹੈ)'
         });
       } else {
         setAuthFeedback({
@@ -191,15 +191,14 @@ export const SupabaseSyncModal: React.FC<SupabaseSyncModalProps> = ({ isOpen, on
       } else if (data.user) {
         setAuthUser(data.user);
         setIsVerifyingAccess(true);
-        // Automatically ensure the logged-in user has owner access to FIRM-001 (Jammu Trading Co).
-        // If missing, create the firm_members record securely. Then refresh and show "Firm Access: Verified".
-        const access = await ensureUserFirmAccess('FIRM-001');
+        // Automatically ensure the logged-in user has owner access to DEMO-FIRM-001.
+        const access = await ensureUserFirmAccess('DEMO-FIRM-001');
         setHasFirmAccess(access.hasAccess);
         setIsVerifyingAccess(false);
         setAuthFeedback({
           type: 'success',
           message: access.hasAccess
-            ? 'ਲੌਗਇਨ ਸਫਲ ਰਿਹਾ! Firm Access: Verified (FIRM-001 - Jammu Trading Co)'
+            ? 'ਲੌਗਇਨ ਸਫਲ ਰਿਹਾ! Firm Access: Verified (DEMO-FIRM-001)'
             : 'ਲੌਗਇਨ ਸਫਲ ਰਿਹਾ ਪਰ ਫਰਮ ਐਕਸੈਸ ਲਿੰਕ ਨਹੀਂ ਹੋ ਸਕੀ।'
         });
       }
@@ -229,13 +228,13 @@ export const SupabaseSyncModal: React.FC<SupabaseSyncModalProps> = ({ isOpen, on
       } else if (data.session && data.user) {
         setAuthUser(data.user);
         setIsVerifyingAccess(true);
-        const access = await ensureUserFirmAccess('FIRM-001');
+        const access = await ensureUserFirmAccess('DEMO-FIRM-001');
         setHasFirmAccess(access.hasAccess);
         setIsVerifyingAccess(false);
         setAuthFeedback({
           type: 'success',
           message: access.hasAccess
-            ? 'ਨਵਾਂ ਖਾਤਾ ਬਣ ਗਿਆ! Firm Access: Verified (FIRM-001 - Jammu Trading Co)'
+            ? 'ਨਵਾਂ ਖਾਤਾ ਬਣ ਗਿਆ! Firm Access: Verified (DEMO-FIRM-001)'
             : 'ਨਵਾਂ ਖਾਤਾ ਬਣ ਗਿਆ।'
         });
       } else {
@@ -481,7 +480,7 @@ export const SupabaseSyncModal: React.FC<SupabaseSyncModalProps> = ({ isOpen, on
                 <div className="flex items-center justify-between pt-1 border-t border-slate-100">
                   <div className="flex items-center gap-1.5 text-xs">
                     <span className="text-slate-500">ਫਰਮ ਮੈਂਬਰਸ਼ਿਪ:</span>
-                    <span className="font-semibold text-slate-800">FIRM-001 (Jammu Trading Co)</span>
+                    <span className="font-semibold text-slate-800">DEMO-FIRM-001 (Punjab Mandi Trading Co)</span>
                   </div>
                   <div className="flex items-center gap-1.5">
                     <span
@@ -528,7 +527,7 @@ export const SupabaseSyncModal: React.FC<SupabaseSyncModalProps> = ({ isOpen, on
             ) : (
               <div className="bg-white p-3.5 rounded-lg border border-slate-200 space-y-2.5">
                 <p className="text-xs text-slate-600">
-                  ਸੁਰੱਖਿਅਤ RLS ਪਾਲਿਸੀਆਂ ਕਾਰਨ ਡਾਟਾ ਮਾਈਗ੍ਰੇਸ਼ਨ ਲਈ ਸੁਪਾਬੇਸ ਲੌਗਇਨ ਲਾਜ਼ਮੀ ਹੈ। ਲੌਗਇਨ ਉਪਰੰਤ ਯੂਜ਼ਰ ਆਟੋਮੈਟਿਕਲੀ <strong>FIRM-001 (Jammu Trading Co)</strong> ਨਾਲ ਓਨਰ ਵਜੋਂ ਲਿੰਕ ਹੋ ਜਾਵੇਗਾ।
+                  ਸੁਰੱਖਿਅਤ RLS ਪਾਲਿਸੀਆਂ ਕਾਰਨ ਡਾਟਾ ਮਾਈਗ੍ਰੇਸ਼ਨ ਲਈ ਸੁਪਾਬੇਸ ਲੌਗਇਨ ਲਾਜ਼ਮੀ ਹੈ। ਲੌਗਇਨ ਉਪਰੰਤ ਯੂਜ਼ਰ ਆਟੋਮੈਟਿਕਲੀ <strong>DEMO-FIRM-001 (Punjab Mandi Trading Co)</strong> ਨਾਲ ਓਨਰ ਵਜੋਂ ਲਿੰਕ ਹੋ ਜਾਵੇਗਾ।
                 </p>
                 <form onSubmit={handleSignIn} className="space-y-2">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">

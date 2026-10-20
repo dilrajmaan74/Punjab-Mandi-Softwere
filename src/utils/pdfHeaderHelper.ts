@@ -43,12 +43,12 @@ export function renderStandardPdfHeader(options: StandardPdfHeaderOptions): numb
   const contentWidth = pageWidth - margin * 2;
 
   // Firm Information from Settings / Profile (never hardcoded)
-  const firmName = (cleanPdfText(settings.firmNameEn) || 'JAMMU TRADING CO').toUpperCase();
-  const firmAddress = cleanPdfText(settings.firmAddress) || 'Dana Mandi Kang Khurd, Teh. Shahkot, Distt. Jalandhar, Punjab - 144629';
-  const licenceNo = cleanPdfText(settings.firmLicence) || 'JAL/LKH/133';
-  const mobile = cleanPdfText(settings.firmMobile) || '98147-74651';
+  const firmName = (cleanPdfText(settings.firmNameEn) || 'PUNJAB MANDI TRADING CO (DEMO)').toUpperCase();
+  const firmAddress = cleanPdfText(settings.firmAddress) || 'Shop No. 12, Main Grain Market, Punjab - 144001';
+  const licenceNo = cleanPdfText(settings.firmLicence) || 'DEMO/PB/2026';
+  const mobile = cleanPdfText(settings.firmMobile) || '98765-43210';
   const pan = cleanPdfText(settings.firmPan);
-  const marketCommittee = cleanPdfText(settings.marketCommitteeEn) || 'Market Committee Lohian Khas';
+  const marketCommittee = cleanPdfText(settings.marketCommitteeEn) || 'Punjab Mandi Board';
 
   let curY = startY;
   const centerX = pageWidth / 2;

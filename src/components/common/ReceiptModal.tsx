@@ -39,9 +39,9 @@ export const ReceiptModal: React.FC = () => {
 
   // Resolve firm details from receipt's firmId, activeFirm, or settings
   const receiptFirm = (activeReceipt.firmId ? firms.find((f) => f.id === activeReceipt.firmId) : null) || activeFirm;
-  const firmName = receiptFirm?.name || settings.firmNameEn || 'JAMMU TRADING CO.';
-  const firmAddress = receiptFirm?.address || settings.firmAddress || 'Dana Mandi Kang Khurd, Lohian Khas, Jalandhar, Punjab - 144629';
-  const firmMobile = receiptFirm?.mobile || settings.firmMobile || '98147-74651';
+  const firmName = receiptFirm?.name || settings.firmNameEn || 'PUNJAB MANDI TRADING CO. (DEMO)';
+  const firmAddress = receiptFirm?.address || settings.firmAddress || 'Shop No. 12, Main Grain Market, Punjab - 144001';
+  const firmMobile = receiptFirm?.mobile || settings.firmMobile || '98765-43210';
 
   const handlePrint = (mode: 'standard' | 'thermal' = printMode) => {
     if (mode === 'thermal') {
@@ -299,7 +299,7 @@ export const ReceiptModal: React.FC = () => {
         <div className="bg-white p-4 sm:p-6 border border-slate-300 rounded-lg text-slate-900 text-xs font-sans print:border-none print:p-0 print:m-0">
           {/* Header */}
           <div className="text-center border-b-2 border-slate-900 pb-3 mb-3">
-            {/* Firm Information (Top of the Slip, above Dana Mandi Kang Khurd) */}
+            {/* Firm Information (Top of the Slip, above Mandi Header) */}
             <div className="mb-2.5 text-center">
               <h1 className="text-xl sm:text-2xl font-black tracking-tight text-slate-950 uppercase font-sans leading-snug">
                 {firmName}
