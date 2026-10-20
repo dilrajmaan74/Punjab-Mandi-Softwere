@@ -1,7 +1,7 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-// Default Supabase project URL as provided by user
 export const SUPABASE_DEFAULT_URL = 'https://bktiuuxunjadogposalb.supabase.co';
+export const SUPABASE_DEFAULT_ANON_KEY = 'sb_publishable_FqksyHDXLoj0Tpf9UjESFg_sxbtujaR';
 
 export const getSupabaseUrl = (): string => {
   const envUrl = (import.meta as any).env?.VITE_SUPABASE_URL;
@@ -52,7 +52,8 @@ export const getSupabaseAnonKey = (): string => {
   } catch {
     // Ignore localStorage read errors
   }
-  return '';
+  // Fallback to project default anon key so Supabase client is ALWAYS configured on any device / laptop / PWA install
+  return SUPABASE_DEFAULT_ANON_KEY;
 };
 
 export const setSupabaseAnonKeyLocal = (key: string) => {
@@ -80,25 +81,20 @@ let lastUsedKey = '';
 export const isDemoPracticeMode = (): boolean => {
   try {
     const val = localStorage.getItem('mandi_demo_practice_mode');
-    return val !== 'false'; // Defaults to TRUE for 100% isolated practice in Google AI Studio
+    // Only true if explicitly switched to 'true'; defaults to false so real Supabase is accessible!
+    return val === 'true';
   } catch {
-    return true;
+    return false;
   }
 };
 
 export const isSupabaseConfigured = (): boolean => {
-  if (isDemoPracticeMode()) return false;
   const url = getSupabaseUrl();
   const key = getSupabaseAnonKey();
   return Boolean(url && key && key.length > 10);
 };
 
 export const getSupabaseClient = (): SupabaseClient | null => {
-  // If in isolated demo practice mode, strictly block connection to real Supabase
-  if (isDemoPracticeMode()) {
-    return null;
-  }
-
   const url = getSupabaseUrl();
   const key = getSupabaseAnonKey();
 

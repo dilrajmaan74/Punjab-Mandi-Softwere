@@ -708,7 +708,6 @@ if (typeof window !== 'undefined') {
         }
       }
       keysToRemove.forEach((k) => localStorage.removeItem(k));
-      localStorage.setItem('mandi_demo_practice_mode', 'true');
       localStorage.setItem('mandi_legacy_real_data_purged_v5', 'true');
     }
   } catch {}
@@ -719,9 +718,9 @@ export const loadFirmData = <T,>(baseKey: string, firmId: string, defaultValue: 
   try {
     const isDemo = (() => {
       try {
-        return localStorage.getItem('mandi_demo_practice_mode') !== 'false';
+        return localStorage.getItem('mandi_demo_practice_mode') === 'true';
       } catch {
-        return true;
+        return false;
       }
     })();
 
@@ -732,7 +731,7 @@ export const loadFirmData = <T,>(baseKey: string, firmId: string, defaultValue: 
       return parsed !== null && parsed !== undefined ? parsed : defaultValue;
     }
 
-    // In demo practice mode, strictly use clean defaultValue (demo practice dataset)
+    // In demo practice mode, return clean defaultValue
     return defaultValue;
   } catch {
     return defaultValue;
