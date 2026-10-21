@@ -21,9 +21,11 @@ import {
   SlidersHorizontal,
   ChevronRight,
   ExternalLink,
-  ShieldAlert
+  ShieldAlert,
+  AlertTriangle
 } from 'lucide-react';
-import { formatCurrencyINR, formatKgToQulKg } from '../../utils/calculations';
+import { formatCurrencyINR, formatKgToQulKg, isRecordInFiscalYear } from '../../utils/calculations';
+import { CropFilterType } from '../../types/mandi';
 import {
   exportFarmerBagLabourPDF,
   FarmerBagBalanceItem,
@@ -39,7 +41,12 @@ export const FarmerBagBalanceReport: React.FC = () => {
     settings,
     language,
     setActiveSection,
-    setSelectedFarmerForAccount
+    setSelectedFarmerForAccount,
+    activeFiscalYear,
+    fiscalYears,
+    activeFirmId,
+    firms,
+    activeCrop
   } = useMandi();
 
   const isEn = language === 'en';
@@ -47,6 +54,9 @@ export const FarmerBagBalanceReport: React.FC = () => {
 
   // Search & Filters
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedFiscalYear, setSelectedFiscalYear] = useState<string>(activeFiscalYear || 'ALL');
+  const [selectedMandiFilter, setSelectedMandiFilter] = useState<string>('ALL');
+  const [selectedCropFilter, setSelectedCropFilter] = useState<CropFilterType>('ALL');
   const [dateFilterType, setDateFilterType] = useState<'ALL' | 'TODAY' | 'YESTERDAY' | 'THIS_WEEK' | 'CUSTOM'>('ALL');
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
@@ -149,50 +159,155 @@ export const FarmerBagBalanceReport: React.FC = () => {
     return 0;
   };
 
+  // 1. Filter bagsEntries strictly by fiscal year, mandi filter, crop, and date
+  const filteredBags = useMemo(() => {
+    return bagsEntries.filter((b) => {
+      // Fiscal Year
+      if (selectedFiscalYear !== 'ALL' && !isRecordInFiscalYear(b.date, b.fiscalYear, selectedFiscalYear)) {
+        return false;
+      }
+      // Mandi Branch
+      if (selectedMandiFilter !== 'ALL' && (b.firmId || 'FIRM-001') !== selectedMandiFilter) {
+        return false;
+      }
+      // Crop
+      if (selectedCropFilter !== 'ALL' && (b.cropType || 'PADDY') !== selectedCropFilter) {
+        return false;
+      }
+      // Date Range
+      if (dateFilterType !== 'ALL') {
+        const t = normalizeDateToComparable(b.date);
+        if (t < dateRangeBounds.start || t > dateRangeBounds.end) return false;
+      }
+      return true;
+    });
+  }, [bagsEntries, selectedFiscalYear, selectedMandiFilter, selectedCropFilter, dateFilterType, dateRangeBounds]);
+
+  // 2. Filter dailyPurchaseRecords strictly by fiscal year, mandi filter, crop, and date
+  const filteredPurchases = useMemo(() => {
+    return dailyPurchaseRecords.filter((p) => {
+      // Fiscal Year
+      if (selectedFiscalYear !== 'ALL' && !isRecordInFiscalYear(p.date, p.fiscalYear, selectedFiscalYear)) {
+        return false;
+      }
+      // Mandi Branch
+      if (selectedMandiFilter !== 'ALL' && (p.firmId || 'FIRM-001') !== selectedMandiFilter) {
+        return false;
+      }
+      // Crop
+      if (selectedCropFilter !== 'ALL' && (p.cropType || 'PADDY') !== selectedCropFilter) {
+        return false;
+      }
+      // Date Range
+      if (dateFilterType !== 'ALL') {
+        const t = normalizeDateToComparable(p.date);
+        if (t < dateRangeBounds.start || t > dateRangeBounds.end) return false;
+      }
+      return true;
+    });
+  }, [dailyPurchaseRecords, selectedFiscalYear, selectedMandiFilter, selectedCropFilter, dateFilterType, dateRangeBounds]);
+
+  // Ground truth bags count in 37.5kg Kachi Tol register under current active filters
+  const totalEnteredBagsCount = useMemo(() => {
+    return filteredBags.reduce((sum, b) => sum + getEntryBagsCount(b), 0);
+  }, [filteredBags]);
+
+  const totalEnteredPurchasedBagsCount = useMemo(() => {
+    return filteredPurchases.reduce((sum, p) => sum + (Number(p.bags) || 0), 0);
+  }, [filteredPurchases]);
+
   // Main Farmers List & Computation
-  // Rule: Includes all bag entries accurately. Main farmers include their own and all linked sub-farmers' arrivals and purchases.
-  // Any bags not claimed by a main farmer family are also grouped so NO bags are ever omitted!
+  // STRICT ZERO-DUPLICATION RULE:
+  // Every bag entry and purchase record is partitioned into EXACTLY ONE main farmer family bucket.
+  // No entry can ever appear under multiple farmers or be counted more than once!
   const reportData: FarmerBagBalanceItem[] = useMemo(() => {
-    // 1. Filter bagsEntries by date range
-    const filteredBags = bagsEntries.filter((b) => {
-      if (dateFilterType === 'ALL') return true;
-      const t = normalizeDateToComparable(b.date);
-      return t >= dateRangeBounds.start && t <= dateRangeBounds.end;
+    // 1. Build fast lookup index for farmers
+    const farmerById = new Map<string, typeof farmers[0]>();
+    const mainFarmers: typeof farmers[0][] = [];
+    const subFarmersByMainId = new Map<string, typeof farmers[0][]>();
+
+    farmers.forEach((f) => {
+      farmerById.set(f.id, f);
+      if (f.linkedMainFarmerId) {
+        const list = subFarmersByMainId.get(f.linkedMainFarmerId) || [];
+        list.push(f);
+        subFarmersByMainId.set(f.linkedMainFarmerId, list);
+      } else {
+        mainFarmers.push(f);
+      }
     });
 
-    // 2. Filter dailyPurchaseRecords by date range
-    const filteredPurchases = dailyPurchaseRecords.filter((p) => {
-      if (dateFilterType === 'ALL') return true;
-      const t = normalizeDateToComparable(p.date);
-      return t >= dateRangeBounds.start && t <= dateRangeBounds.end;
+    // Helper: Determine strictly ONE target main farmer ID for any entry
+    const resolveMainFarmerId = (
+      entryFarmerId?: string,
+      entryFarmerName?: string,
+      entryMainFarmerId?: string
+    ): string => {
+      // A) Explicit mainFarmerId if valid
+      if (entryMainFarmerId && farmerById.has(entryMainFarmerId)) {
+        const mf = farmerById.get(entryMainFarmerId)!;
+        return mf.linkedMainFarmerId || mf.id;
+      }
+
+      // B) Direct farmer ID lookup
+      if (entryFarmerId && farmerById.has(entryFarmerId)) {
+        const f = farmerById.get(entryFarmerId)!;
+        return f.linkedMainFarmerId || f.id;
+      }
+
+      // C) Name matching ONLY if exactly one farmer in the entire registry has this name
+      if (entryFarmerName && entryFarmerName.trim()) {
+        const cleanName = entryFarmerName.trim().toLowerCase();
+        const matches = farmers.filter(
+          (f) =>
+            (f.farmerName || '').trim().toLowerCase() === cleanName ||
+            (f.farmerNamePa || '').trim() === entryFarmerName.trim()
+        );
+        if (matches.length === 1) {
+          const f = matches[0];
+          return f.linkedMainFarmerId || f.id;
+        }
+      }
+
+      // D) Fallback to the raw ID or sanitized name as an independent key
+      return (entryFarmerId || entryFarmerName || 'UNKNOWN_FARMER').trim();
+    };
+
+    // 2. Group all filtered bag entries strictly into buckets by targetMainFarmerId
+    // GUARANTEE: Every bag entry is placed into EXACTLY ONE bucket! Never duplicated across farmers!
+    const bagsByMainFarmer = new Map<string, typeof filteredBags>();
+    filteredBags.forEach((b) => {
+      const bAny = b as any;
+      const targetMainId = resolveMainFarmerId(b.farmerId, b.farmerName, bAny.mainFarmerId);
+      const list = bagsByMainFarmer.get(targetMainId) || [];
+      list.push(b);
+      bagsByMainFarmer.set(targetMainId, list);
     });
 
-    // 3. Find all MAIN farmers (farmer.linkedMainFarmerId is falsy)
-    const mainFarmers = farmers.filter((f) => !f.linkedMainFarmerId);
+    // 3. Group all filtered purchase records strictly into buckets by targetMainFarmerId
+    // GUARANTEE: Every purchase record is placed into EXACTLY ONE bucket! Never duplicated across farmers!
+    const purchasesByMainFarmer = new Map<string, typeof filteredPurchases>();
+    filteredPurchases.forEach((p) => {
+      const pAny = p as any;
+      const targetMainId = resolveMainFarmerId(p.farmerId, p.farmerName, pAny.mainFarmerId);
+      const list = purchasesByMainFarmer.get(targetMainId) || [];
+      list.push(p);
+      purchasesByMainFarmer.set(targetMainId, list);
+    });
 
     const items: FarmerBagBalanceItem[] = [];
-    const claimedBagIds = new Set<string>();
+    const processedKeys = new Set<string>();
 
+    // 4. Process all registered Main Farmers
     mainFarmers.forEach((mainFarmer) => {
-      // Find all linked sub-farmers of this main farmer
-      const linkedSubFarmers = farmers.filter((f) => f.linkedMainFarmerId === mainFarmer.id);
+      processedKeys.add(mainFarmer.id);
 
-      // Collect all IDs and names representing this farmer's family
-      const allFamilyFarmerIds = new Set<string>([mainFarmer.id, ...linkedSubFarmers.map((f) => f.id)]);
-      const allFamilyNames = new Set<string>([
-        (mainFarmer.farmerName || '').trim().toLowerCase(),
-        ...linkedSubFarmers.map((f) => (f.farmerName || '').trim().toLowerCase())
-      ].filter(Boolean));
+      const arrivalEntries = bagsByMainFarmer.get(mainFarmer.id) || [];
+      const linkedSubFarmers = subFarmersByMainId.get(mainFarmer.id) || [];
+      const subFarmerIdSet = new Set(linkedSubFarmers.map((s) => s.id));
 
-      // Bags brought by the main farmer and any linked sub-farmers
-      const arrivalEntries = filteredBags.filter((b) => {
-        const bAny = b as any;
-        const matchId = allFamilyFarmerIds.has(b.farmerId) || (Boolean(bAny.mainFarmerId) && allFamilyFarmerIds.has(bAny.mainFarmerId));
-        const matchName = b.farmerName && allFamilyNames.has(b.farmerName.trim().toLowerCase());
-        return matchId || matchName;
-      });
-
-      arrivalEntries.forEach((b) => claimedBagIds.add(b.id));
+      const familyPurchases = purchasesByMainFarmer.get(mainFarmer.id) || [];
+      const ownPurchasesList = familyPurchases.filter((p) => !subFarmerIdSet.has(p.farmerId));
 
       const totalBagsBrought = arrivalEntries.reduce((sum, b) => sum + getEntryBagsCount(b), 0);
       const totalWeightBroughtKg = arrivalEntries.reduce((sum, b) => {
@@ -200,16 +315,11 @@ export const FarmerBagBalanceReport: React.FC = () => {
         return sum + safeWt;
       }, 0);
 
-      // Own purchases made directly by this main farmer
-      const ownPurchasesList = filteredPurchases.filter((p) => p.farmerId === mainFarmer.id);
       const ownPurchasedBags = ownPurchasesList.reduce((sum, p) => sum + (Number(p.bags) || 0), 0);
       const ownPurchasedWeightKg = ownPurchasesList.reduce((sum, p) => sum + (Number(p.totalWeightKg) || 0), 0);
 
-      // Linked farmers purchases
       const linkedFarmerPurchases = linkedSubFarmers.map((subFarmer) => {
-        const subPurchases = filteredPurchases.filter(
-          (p) => p.farmerId === subFarmer.id || p.mainFarmerId === mainFarmer.id && p.farmerName === subFarmer.farmerName
-        );
+        const subPurchases = familyPurchases.filter((p) => p.farmerId === subFarmer.id);
         const subTotalBags = subPurchases.reduce((s, p) => s + (Number(p.bags) || 0), 0);
         const subTotalWeight = subPurchases.reduce((s, p) => s + (Number(p.totalWeightKg) || 0), 0);
         const subTotalAmount = subPurchases.reduce((s, p) => s + (Number(p.totalAmount) || 0), 0);
@@ -239,45 +349,35 @@ export const FarmerBagBalanceReport: React.FC = () => {
       const linkedPurchasedBags = linkedFarmerPurchases.reduce((s, lf) => s + lf.totalBags, 0);
       const linkedPurchasedWeightKg = linkedFarmerPurchases.reduce((s, lf) => s + lf.totalWeightKg, 0);
 
-      // Total Purchase = Own Purchase + All Linked Farmers Purchase
       const totalPurchasedBags = ownPurchasedBags + linkedPurchasedBags;
       const totalPurchasedWeightKg = ownPurchasedWeightKg + linkedPurchasedWeightKg;
       const totalPurchasedAmount =
         ownPurchasesList.reduce((s, p) => s + (Number(p.totalAmount) || 0), 0) +
         linkedFarmerPurchases.reduce((s, lf) => s + lf.totalAmount, 0);
 
-      // CONSTRAINT: Only skip if farmer has neither brought bags nor has any purchases
+      // Skip farmers that have neither brought bags nor have purchases in this filter scope
       if (totalBagsBrought <= 0 && totalPurchasedBags <= 0 && arrivalEntries.length === 0) {
         return;
       }
 
-      // Balance Before Labour = Total Bags Brought - Total Purchase
       const balanceBeforeLabourBags = totalBagsBrought - totalPurchasedBags;
 
-      // Labour Expense
       let labourExpense = 0;
       if (farmerLabourOverrides[mainFarmer.id] !== undefined) {
         labourExpense = farmerLabourOverrides[mainFarmer.id];
       } else {
-        const recordedLabour = arrivalEntries.reduce((sum, b) => {
-          return sum + getEntryRecordedLabour(b);
-        }, 0);
-
+        const recordedLabour = arrivalEntries.reduce((sum, b) => sum + getEntryRecordedLabour(b), 0);
         if (recordedLabour > 0) {
           labourExpense = recordedLabour;
         } else {
-          // Fallback to default Pakki labour rate per brought bag
           const defaultRate = settings.defaultPakkiLabourRate ?? 8;
           labourExpense = totalBagsBrought * defaultRate;
         }
       }
 
-      // Labour Bags Adjustment = Labour Expense ÷ applicable Bag Rate, rounded UP to the next whole bag
       const safeBagRate = applicableBagRate > 0 ? applicableBagRate : 925;
       const rawLabourBags = labourExpense / safeBagRate;
       const labourBagsAdjustment = Math.ceil(rawLabourBags);
-
-      // Final Balance Bags = Balance Before Labour - Labour Bags Adjustment
       const finalBalanceBags = balanceBeforeLabourBags - labourBagsAdjustment;
 
       items.push({
@@ -336,125 +436,120 @@ export const FarmerBagBalanceReport: React.FC = () => {
       });
     });
 
-    // 4. Check for any unclaimed bag entries in filteredBags
-    // (e.g. entered for sub-farmers whose main farmer wasn't found, or ad-hoc entries)
-    const unclaimedBags = filteredBags.filter((b) => !claimedBagIds.has(b.id));
-    if (unclaimedBags.length > 0) {
-      const groupMap = new Map<string, typeof filteredBags>();
-      unclaimedBags.forEach((b) => {
-        const key = (b.farmerId || b.farmerName || 'UNKNOWN_FARMER').trim();
-        if (!groupMap.has(key)) {
-          groupMap.set(key, []);
-        }
-        groupMap.get(key)!.push(b);
-      });
+    // 5. Process any remaining buckets (e.g. ad-hoc entries not linked to registered main farmer)
+    const allRemainingKeys = new Set<string>([
+      ...Array.from(bagsByMainFarmer.keys()),
+      ...Array.from(purchasesByMainFarmer.keys())
+    ]);
 
-      groupMap.forEach((entryList, groupKey) => {
-        const first = entryList[0];
-        const matchedFarmer = farmers.find(
-          (f) => f.id === first.farmerId || (f.farmerName && f.farmerName.trim().toLowerCase() === (first.farmerName || '').trim().toLowerCase())
-        );
+    allRemainingKeys.forEach((key) => {
+      if (processedKeys.has(key)) return;
+      processedKeys.add(key);
 
-        const farmerId = matchedFarmer?.id || first.farmerId || groupKey;
-        const farmerName = matchedFarmer?.farmerName || first.farmerName || groupKey;
-        const farmerNamePa = matchedFarmer?.farmerNamePa || first.farmerNamePa || farmerName;
-        const fatherName = matchedFarmer?.fatherName || first.farmerFatherName || '-';
-        const village = matchedFarmer?.village || first.farmerVillage || '-';
-        const villagePa = matchedFarmer?.villagePa || first.farmerVillagePa;
-        const mobile = matchedFarmer?.mobile || first.farmerMobile || '-';
+      const arrivalEntries = bagsByMainFarmer.get(key) || [];
+      const purchasesList = purchasesByMainFarmer.get(key) || [];
 
-        const totalBagsBrought = entryList.reduce((sum, b) => sum + getEntryBagsCount(b), 0);
-        const totalWeightBroughtKg = entryList.reduce(
-          (sum, b) => sum + (Number(b.grandTotalKg || b.totalBagsWeightKg) || (getEntryBagsCount(b) * 37.5)),
-          0
-        );
+      if (arrivalEntries.length === 0 && purchasesList.length === 0) return;
 
-        const ownPurchasesList = filteredPurchases.filter(
-          (p) => p.farmerId === farmerId || (p.farmerName && p.farmerName.trim().toLowerCase() === farmerName.trim().toLowerCase())
-        );
-        const ownPurchasedBags = ownPurchasesList.reduce((sum, p) => sum + (Number(p.bags) || 0), 0);
-        const ownPurchasedWeightKg = ownPurchasesList.reduce((sum, p) => sum + (Number(p.totalWeightKg) || 0), 0);
-        const totalPurchasedAmount = ownPurchasesList.reduce((sum, p) => sum + (Number(p.totalAmount) || 0), 0);
+      const firstB = arrivalEntries[0];
+      const firstP = purchasesList[0];
+      const matchedFarmer = farmerById.get(key) || farmers.find(
+        (f) =>
+          f.id === key ||
+          (f.farmerName && f.farmerName.trim().toLowerCase() === (firstB?.farmerName || firstP?.farmerName || '').trim().toLowerCase())
+      );
 
-        const balanceBeforeLabourBags = totalBagsBrought - ownPurchasedBags;
+      const farmerId = matchedFarmer?.id || key;
+      const farmerName = matchedFarmer?.farmerName || firstB?.farmerName || firstP?.farmerName || key;
+      const farmerNamePa = matchedFarmer?.farmerNamePa || firstB?.farmerNamePa || firstP?.farmerNamePa || farmerName;
+      const fatherName = matchedFarmer?.fatherName || firstB?.farmerFatherName || '-';
+      const village = matchedFarmer?.village || firstB?.farmerVillage || '-';
+      const villagePa = matchedFarmer?.villagePa || firstB?.farmerVillagePa;
+      const mobile = matchedFarmer?.mobile || firstB?.farmerMobile || '-';
 
-        let labourExpense = 0;
-        if (farmerLabourOverrides[farmerId] !== undefined) {
-          labourExpense = farmerLabourOverrides[farmerId];
+      const totalBagsBrought = arrivalEntries.reduce((sum, b) => sum + getEntryBagsCount(b), 0);
+      const totalWeightBroughtKg = arrivalEntries.reduce((sum, b) => {
+        const safeWt = Number(b.grandTotalKg || b.totalBagsWeightKg) || (getEntryBagsCount(b) * 37.5);
+        return sum + safeWt;
+      }, 0);
+
+      const ownPurchasedBags = purchasesList.reduce((sum, p) => sum + (Number(p.bags) || 0), 0);
+      const ownPurchasedWeightKg = purchasesList.reduce((sum, p) => sum + (Number(p.totalWeightKg) || 0), 0);
+      const totalPurchasedAmount = purchasesList.reduce((sum, p) => sum + (Number(p.totalAmount) || 0), 0);
+
+      const balanceBeforeLabourBags = totalBagsBrought - ownPurchasedBags;
+
+      let labourExpense = 0;
+      if (farmerLabourOverrides[farmerId] !== undefined) {
+        labourExpense = farmerLabourOverrides[farmerId];
+      } else {
+        const recordedLabour = arrivalEntries.reduce((sum, b) => sum + getEntryRecordedLabour(b), 0);
+        if (recordedLabour > 0) {
+          labourExpense = recordedLabour;
         } else {
-          const recordedLabour = entryList.reduce((sum, b) => {
-            return sum + getEntryRecordedLabour(b);
-          }, 0);
-
-          if (recordedLabour > 0) {
-            labourExpense = recordedLabour;
-          } else {
-            const defaultRate = settings.defaultPakkiLabourRate ?? 8;
-            labourExpense = totalBagsBrought * defaultRate;
-          }
+          const defaultRate = settings.defaultPakkiLabourRate ?? 8;
+          labourExpense = totalBagsBrought * defaultRate;
         }
+      }
 
-        const safeBagRate = applicableBagRate > 0 ? applicableBagRate : 925;
-        const rawLabourBags = labourExpense / safeBagRate;
-        const labourBagsAdjustment = Math.ceil(rawLabourBags);
-        const finalBalanceBags = balanceBeforeLabourBags - labourBagsAdjustment;
+      const safeBagRate = applicableBagRate > 0 ? applicableBagRate : 925;
+      const rawLabourBags = labourExpense / safeBagRate;
+      const labourBagsAdjustment = Math.ceil(rawLabourBags);
+      const finalBalanceBags = balanceBeforeLabourBags - labourBagsAdjustment;
 
-        items.push({
-          farmerId,
-          farmerName,
-          farmerNamePa,
-          fatherName,
-          village,
-          villagePa,
-          mobile,
-          aadhaar: matchedFarmer?.aadhaar || first.farmerAadhaar,
-          linkedFarmers: [],
-          totalBagsBrought,
-          totalWeightBroughtKg,
-          arrivalEntries: entryList.map((b) => ({
-            id: b.id,
-            entryNumber: b.entryNumber || (b as any).parchiNumber || '-',
-            date: b.date,
-            newBags: Number(b.newBags ?? (b.bardana === 'NEW' ? getEntryBagsCount(b) : 0)),
-            oldBags: Number(b.oldBags ?? (b.bardana === 'OLD' ? getEntryBagsCount(b) : 0)),
-            bags: getEntryBagsCount(b),
-            weightDisplay: b.grandTotalDisplay || b.totalBagsWeightDisplay || formatKgToQulKg(b.grandTotalKg || (getEntryBagsCount(b) * 37.5)).displayEn,
-            labourAmount: getEntryRecordedLabour(b)
-          })),
-          ownPurchasedBags,
-          ownPurchasedWeightKg,
-          ownPurchases: ownPurchasesList.map((p) => ({
-            id: p.id,
-            date: p.date,
-            agency: p.agency || 'Other',
-            bags: Number(p.bags) || 0,
-            weightDisplay: p.totalWeightDisplay || formatKgToQulKg(p.totalWeightKg).displayEn,
-            rate: p.rate || settings.fixedRatePerQtl || 2461,
-            totalAmount: Number(p.totalAmount) || 0
-          })),
-          linkedPurchasedBags: 0,
-          linkedPurchasedWeightKg: 0,
-          linkedFarmerPurchases: [],
-          totalPurchasedBags: ownPurchasedBags,
-          totalPurchasedWeightKg: ownPurchasedWeightKg,
-          totalPurchasedAmount,
-          balanceBeforeLabourBags,
-          labourExpense,
-          applicableBagRate: safeBagRate,
-          rawLabourBags,
-          labourBagsAdjustment,
-          finalBalanceBags
-        });
+      items.push({
+        farmerId,
+        farmerName,
+        farmerNamePa,
+        fatherName,
+        village,
+        villagePa,
+        mobile,
+        aadhaar: matchedFarmer?.aadhaar || (firstB as any)?.farmerAadhaar,
+        linkedFarmers: [],
+        totalBagsBrought,
+        totalWeightBroughtKg,
+        arrivalEntries: arrivalEntries.map((b) => ({
+          id: b.id,
+          entryNumber: b.entryNumber || (b as any).parchiNumber || '-',
+          date: b.date,
+          newBags: Number(b.newBags ?? (b.bardana === 'NEW' ? getEntryBagsCount(b) : 0)),
+          oldBags: Number(b.oldBags ?? (b.bardana === 'OLD' ? getEntryBagsCount(b) : 0)),
+          bags: getEntryBagsCount(b),
+          weightDisplay: b.grandTotalDisplay || b.totalBagsWeightDisplay || formatKgToQulKg(b.grandTotalKg || (getEntryBagsCount(b) * 37.5)).displayEn,
+          labourAmount: getEntryRecordedLabour(b)
+        })),
+        ownPurchasedBags,
+        ownPurchasedWeightKg,
+        ownPurchases: purchasesList.map((p) => ({
+          id: p.id,
+          date: p.date,
+          agency: p.agency || 'Other',
+          bags: Number(p.bags) || 0,
+          weightDisplay: p.totalWeightDisplay || formatKgToQulKg(p.totalWeightKg).displayEn,
+          rate: p.rate || settings.fixedRatePerQtl || 2461,
+          totalAmount: Number(p.totalAmount) || 0
+        })),
+        linkedPurchasedBags: 0,
+        linkedPurchasedWeightKg: 0,
+        linkedFarmerPurchases: [],
+        totalPurchasedBags: ownPurchasedBags,
+        totalPurchasedWeightKg: ownPurchasedWeightKg,
+        totalPurchasedAmount,
+        balanceBeforeLabourBags,
+        labourExpense,
+        applicableBagRate: safeBagRate,
+        rawLabourBags,
+        labourBagsAdjustment,
+        finalBalanceBags
       });
-    }
+    });
 
     return items;
   }, [
     farmers,
-    bagsEntries,
-    dailyPurchaseRecords,
-    dateFilterType,
-    dateRangeBounds,
+    filteredBags,
+    filteredPurchases,
     settings,
     applicableBagRate,
     farmerLabourOverrides
@@ -510,12 +605,17 @@ export const FarmerBagBalanceReport: React.FC = () => {
     );
   }, [filteredData]);
 
+  // Exact Match / Difference between 37.5kg Kachi Tol register and this report
+  const bagsDifference = useMemo(() => {
+    return Math.abs(grandTotals.totalBagsBrought - totalEnteredBagsCount);
+  }, [grandTotals.totalBagsBrought, totalEnteredBagsCount]);
+
   // PDF Export Trigger
   const handleExportPDF = async () => {
     try {
       setIsExportingPDF(true);
       await exportFarmerBagLabourPDF(filteredData, settings, {
-        dateFilterLabel: dateRangeBounds.label,
+        dateFilterLabel: `${dateRangeBounds.label} • FY: ${selectedFiscalYear} • Mandi: ${selectedMandiFilter === 'ALL' ? (isEn ? 'All Mandis' : 'ਸਾਰੀਆਂ ਮੰਡੀਆਂ') : selectedMandiFilter} • Crop: ${selectedCropFilter}`,
         applicableBagRate,
         totals: grandTotals
       });
@@ -722,6 +822,152 @@ export const FarmerBagBalanceReport: React.FC = () => {
                 />
               </div>
             )}
+          </div>
+        </div>
+
+        {/* Mandi Branch, Fiscal Year & Crop Filter Pills */}
+        <div className="mt-4 pt-3 border-t border-slate-200 flex flex-wrap items-center gap-2">
+          {/* Mandi Branch */}
+          <span className="text-xs font-bold text-slate-700 flex items-center gap-1 mr-1">
+            <Building2 className="w-3.5 h-3.5 text-indigo-700" />
+            <span>{isEn ? 'Mandi Branch:' : 'ਮੰਡੀ ਬ੍ਰਾਂਚ:'}</span>
+          </span>
+          <button
+            type="button"
+            onClick={() => setSelectedMandiFilter('ALL')}
+            className={`px-2.5 py-1 rounded-md text-xs font-bold transition cursor-pointer ${
+              selectedMandiFilter === 'ALL'
+                ? 'bg-slate-900 text-white shadow-xs ring-1 ring-slate-700'
+                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+            }`}
+          >
+            🌟 {isEn ? 'All Mandis' : 'ਸਾਰੀਆਂ ਮੰਡੀਆਂ'}
+          </button>
+          {firms.map((f) => {
+            const isSelected = selectedMandiFilter === f.id;
+            const fName = f?.name || '';
+            const fAddress = f?.address || '';
+            const isKang = f.id === 'FIRM-001' || fName.includes('Kang') || fAddress.includes('Kang');
+            const isMehraj = f.id === 'FIRM-002' || fName.includes('Mehrajwala') || fAddress.includes('Mehrajwala');
+            const isKamal = f.id === 'FIRM-003' || fName.includes('Kamalpur') || fAddress.includes('Kamalpur');
+            const shortLabel = isMehraj ? 'ਮਹਿਰਾਜਵਾਲਾ' : isKamal ? 'ਕਮਾਲਪੁਰ' : isKang ? 'ਕੰਗ ਖੁਰਦ' : (f?.namePa || f?.name || 'ਮੰਡੀ');
+            return (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => setSelectedMandiFilter(f.id)}
+                className={`px-2.5 py-1 rounded-md text-xs font-bold transition cursor-pointer flex items-center gap-1 ${
+                  isSelected
+                    ? 'bg-amber-600 text-white font-black shadow-xs ring-1 ring-amber-500'
+                    : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                <span>📍 {shortLabel}</span>
+              </button>
+            );
+          })}
+
+          <div className="h-4 w-px bg-slate-300 mx-1 hidden sm:block" />
+
+          {/* Fiscal Year Filter */}
+          <span className="text-xs font-bold text-slate-700 ml-1">
+            {isEn ? 'Fiscal Year:' : 'ਵਿੱਤੀ ਸਾਲ:'}
+          </span>
+          <button
+            type="button"
+            onClick={() => setSelectedFiscalYear('ALL')}
+            className={`px-2.5 py-1 rounded-md text-xs font-bold transition cursor-pointer ${
+              selectedFiscalYear === 'ALL'
+                ? 'bg-slate-900 text-white shadow-xs'
+                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+            }`}
+          >
+            {isEn ? 'All FY' : 'ਸਾਰੇ ਸਾਲ'}
+          </button>
+          {fiscalYears && fiscalYears.map((yr) => (
+            <button
+              key={yr}
+              type="button"
+              onClick={() => setSelectedFiscalYear(yr)}
+              className={`px-2.5 py-1 rounded-md text-xs font-bold transition cursor-pointer ${
+                selectedFiscalYear === yr
+                  ? 'bg-indigo-700 text-white font-black shadow-xs'
+                  : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
+              }`}
+            >
+              {yr}
+            </button>
+          ))}
+
+          <div className="h-4 w-px bg-slate-300 mx-1 hidden sm:block" />
+
+          {/* Crop Filter */}
+          <span className="text-xs font-bold text-slate-700 ml-1">
+            {isEn ? 'Crop:' : 'ਫਸਲ:'}
+          </span>
+          {[
+            { id: 'ALL', labelPa: 'ਸਭ ਫਸਲਾਂ', labelEn: 'All Crops' },
+            { id: 'PADDY', labelPa: '🍚 ਝੋਨਾ (37.5 KG)', labelEn: '🍚 Paddy (37.5 KG)' },
+            { id: 'WHEAT', labelPa: '🌾 ਕਣਕ', labelEn: '🌾 Wheat' },
+            { id: 'MAIZE', labelPa: '🌽 ਮੱਕੀ', labelEn: '🌽 Maize' }
+          ].map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              onClick={() => setSelectedCropFilter(c.id as CropFilterType)}
+              className={`px-2.5 py-1 rounded-md text-xs font-bold transition cursor-pointer ${
+                selectedCropFilter === c.id
+                  ? 'bg-emerald-700 text-white font-black shadow-xs'
+                  : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
+              }`}
+            >
+              {isEn ? c.labelEn : c.labelPa}
+            </button>
+          ))}
+        </div>
+
+        {/* Live 37.5 KG Bags Exact Match & Reconciliation Banner */}
+        <div className={`mt-3 p-3.5 rounded-xl border flex flex-col md:flex-row items-start md:items-center justify-between gap-3 ${
+          bagsDifference === 0
+            ? 'bg-emerald-50 border-emerald-300 text-emerald-950 shadow-2xs'
+            : 'bg-amber-50 border-amber-300 text-amber-950 shadow-2xs'
+        }`}>
+          <div className="flex items-center gap-3">
+            <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
+              bagsDifference === 0 ? 'bg-emerald-600 text-white shadow-xs' : 'bg-amber-600 text-white shadow-xs'
+            }`}>
+              {bagsDifference === 0 ? <CheckCircle2 className="w-5 h-5" /> : <AlertTriangle className="w-5 h-5" />}
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-black text-sm">
+                  {bagsDifference === 0
+                    ? (isEn ? '✅ 100% Bag Match Verified (Zero Duplication / Zero Omission)' : '✅ 37.5 KG ਬੋਰੀਆਂ ਦਾ 100% ਸਹੀ ਮਿਲਾਨ (ਕੋਈ ਡਬਲ ਐਂਟਰੀ ਨਹੀਂ)')
+                    : (isEn ? '⚠️ Bag Count Difference' : '⚠️ ਬੋਰੀਆਂ ਵਿੱਚ ਅੰਤਰ')}
+                </span>
+                <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                  bagsDifference === 0 ? 'bg-emerald-200 text-emerald-900 border border-emerald-400' : 'bg-amber-200 text-amber-900 border border-amber-400'
+                }`}>
+                  {bagsDifference === 0 ? (isEn ? '100% EXACT MATCH' : '100% ਬਿਲਕੁਲ ਇਕ ਸਮਾਨ') : `${bagsDifference} ਬੋਰੀਆਂ ਅੰਤਰ`}
+                </span>
+              </div>
+              <p className="text-xs text-slate-700 mt-0.5">
+                {isEn
+                  ? `Kachi Tol (37.5 KG) Register Total: ${totalEnteredBagsCount.toLocaleString('en-IN')} Bags | Farmer Bag Balance Report Total: ${grandTotals.totalBagsBrought.toLocaleString('en-IN')} Bags`
+                  : `ਕੱਚੀ ਤੋਲ (37.5 KG) ਰਜਿਸਟਰ ਕੁੱਲ: ${totalEnteredBagsCount.toLocaleString('en-IN')} ਬੋਰੀਆਂ | ਕਿਸਾਨ ਬੋਰੀ ਬੈਲੇਂਸ ਰਿਪੋਰਟ ਕੁੱਲ: ${grandTotals.totalBagsBrought.toLocaleString('en-IN')} ਬੋਰੀਆਂ`}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <div className="text-right">
+              <span className="text-[10px] uppercase font-bold text-slate-500 block">
+                {isEn ? 'Reconciliation Diff' : 'ਰਿਪੋਰਟਾਂ ਵਿਚਲਾ ਅੰਤਰ'}
+              </span>
+              <span className={`text-base font-black font-mono ${bagsDifference === 0 ? 'text-emerald-700' : 'text-amber-800'}`}>
+                {bagsDifference} {isEn ? 'Bags' : 'ਬੋਰੀਆਂ'}
+              </span>
+            </div>
           </div>
         </div>
 
