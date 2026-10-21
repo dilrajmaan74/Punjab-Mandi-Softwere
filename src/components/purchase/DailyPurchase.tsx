@@ -2141,10 +2141,12 @@ export const DailyPurchase: React.FC = () => {
             </button>
 
             {firms.map((f) => {
-              const isKang = f.id === 'FIRM-001' || f.name.includes('Kang') || f.address.includes('Kang');
-              const isMehraj = f.id === 'FIRM-002' || f.name.includes('Mehrajwala') || f.address.includes('Mehrajwala');
-              const isKamal = f.id === 'FIRM-003' || f.name.includes('Kamalpur') || f.address.includes('Kamalpur');
-              const shortLabel = isMehraj ? 'ਮਹਿਰਾਜਵਾਲਾ' : isKamal ? 'ਕਮਾਲਪੁਰ' : isKang ? 'ਕੰਗ ਖੁਰਦ' : (f.namePa || f.name);
+              const fName = f?.name || '';
+              const fAddress = f?.address || '';
+              const isKang = f.id === 'FIRM-001' || fName.includes('Kang') || fAddress.includes('Kang');
+              const isMehraj = f.id === 'FIRM-002' || fName.includes('Mehrajwala') || fAddress.includes('Mehrajwala');
+              const isKamal = f.id === 'FIRM-003' || fName.includes('Kamalpur') || fAddress.includes('Kamalpur');
+              const shortLabel = isMehraj ? 'ਮਹਿਰਾਜਵਾਲਾ' : isKamal ? 'ਕਮਾਲਪੁਰ' : isKang ? 'ਕੰਗ ਖੁਰਦ' : (f?.namePa || f?.name || 'ਮੰਡੀ');
               const fStat = mandiBranchStats[f.id];
               const count = fStat ? fStat.count : 0;
               const isSelected = selectedMandiFilter === f.id;
@@ -2175,10 +2177,12 @@ export const DailyPurchase: React.FC = () => {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
             {firms.map((f) => {
               const fStat = mandiBranchStats[f.id] || { count: 0, totalBags: 0, totalWeightKg: 0, totalAmount: 0, farmers: new Set() };
-              const isKang = f.id === 'FIRM-001' || f.name.includes('Kang') || f.address.includes('Kang');
-              const isMehraj = f.id === 'FIRM-002' || f.name.includes('Mehrajwala') || f.address.includes('Mehrajwala');
-              const isKamal = f.id === 'FIRM-003' || f.name.includes('Kamalpur') || f.address.includes('Kamalpur');
-              const titlePa = isMehraj ? 'ਦਾਣਾ ਮੰਡੀ ਮਹਿਰਾਜਵਾਲਾ' : isKamal ? 'ਦਾਣਾ ਮੰਡੀ ਕਮਾਲਪੁਰ' : isKang ? 'ਦਾਣਾ ਮੰਡੀ ਕੰਗ ਖੁਰਦ' : (f.namePa || f.name);
+              const fName = f?.name || '';
+              const fAddress = f?.address || '';
+              const isKang = f.id === 'FIRM-001' || fName.includes('Kang') || fAddress.includes('Kang');
+              const isMehraj = f.id === 'FIRM-002' || fName.includes('Mehrajwala') || fAddress.includes('Mehrajwala');
+              const isKamal = f.id === 'FIRM-003' || fName.includes('Kamalpur') || fAddress.includes('Kamalpur');
+              const titlePa = isMehraj ? 'ਦਾਣਾ ਮੰਡੀ ਮਹਿਰਾਜਵਾਲਾ' : isKamal ? 'ਦਾਣਾ ਮੰਡੀ ਕਮਾਲਪੁਰ' : isKang ? 'ਦਾਣਾ ਮੰਡੀ ਕੰਗ ਖੁਰਦ' : (f?.namePa || f?.name || 'ਮੰਡੀ');
               const cardBorder = isMehraj ? 'border-purple-200 bg-purple-50/50' : isKamal ? 'border-emerald-200 bg-emerald-50/50' : 'border-amber-200 bg-amber-50/50';
               const textAccent = isMehraj ? 'text-purple-900' : isKamal ? 'text-emerald-900' : 'text-amber-900';
               const wtBreakdown = formatKgToQulKg(fStat.totalWeightKg);
@@ -2604,8 +2608,9 @@ export const DailyPurchase: React.FC = () => {
                                 </span>
                                 {(() => {
                                   const rf = getRecordFirm(rec);
-                                  const isMehraj = rf.id === 'FIRM-002' || rf.name.includes('Mehrajwala');
-                                  const isKamal = rf.id === 'FIRM-003' || rf.name.includes('Kamalpur');
+                                  const rfName = rf?.name || '';
+                                  const isMehraj = rf?.id === 'FIRM-002' || rfName.includes('Mehrajwala');
+                                  const isKamal = rf?.id === 'FIRM-003' || rfName.includes('Kamalpur');
                                   const label = isMehraj ? 'ਮਹਿਰਾਜਵਾਲਾ' : isKamal ? 'ਕਮਾਲਪੁਰ' : 'ਕੰਗ ਖੁਰਦ';
                                   const badgeCls = isMehraj ? 'bg-purple-100 text-purple-900 border-purple-200' : isKamal ? 'bg-emerald-100 text-emerald-900 border-emerald-200' : 'bg-amber-100 text-amber-900 border-amber-200';
                                   return (
@@ -3068,8 +3073,9 @@ export const DailyPurchase: React.FC = () => {
                                     </span>
                                     {(() => {
                                       const rf = getRecordFirm(rec);
-                                      const isMehraj = rf.id === 'FIRM-002' || rf.name.includes('Mehrajwala');
-                                      const isKamal = rf.id === 'FIRM-003' || rf.name.includes('Kamalpur');
+                                      const rfName = rf?.name || '';
+                                      const isMehraj = rf?.id === 'FIRM-002' || rfName.includes('Mehrajwala');
+                                      const isKamal = rf?.id === 'FIRM-003' || rfName.includes('Kamalpur');
                                       const label = isMehraj ? 'ਮਹਿਰਾਜਵਾਲਾ' : isKamal ? 'ਕਮਾਲਪੁਰ' : 'ਕੰਗ ਖੁਰਦ';
                                       const badgeCls = isMehraj ? 'bg-purple-100 text-purple-900 border-purple-200' : isKamal ? 'bg-emerald-100 text-emerald-900 border-emerald-200' : 'bg-amber-100 text-amber-900 border-amber-200';
                                       return (

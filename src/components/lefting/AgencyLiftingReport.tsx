@@ -421,9 +421,12 @@ export const AgencyLiftingReport: React.FC = () => {
           </button>
           {firms.map((f) => {
             const isSelected = selectedMandiFilter === f.id;
-            const isMehraj = f.id === 'FIRM-002' || f.name.includes('Mehrajwala') || f.address.includes('Mehrajwala');
-            const isKamal = f.id === 'FIRM-003' || f.name.includes('Kamalpur') || f.address.includes('Kamalpur');
-            const shortLabel = isMehraj ? 'ਮਹਿਰਾਜਵਾਲਾ' : isKamal ? 'ਕਮਾਲਪੁਰ' : 'ਕੰਗ ਖੁਰਦ';
+            const fName = f?.name || '';
+            const fAddress = f?.address || '';
+            const isKang = f.id === 'FIRM-001' || fName.includes('Kang') || fAddress.includes('Kang');
+            const isMehraj = f.id === 'FIRM-002' || fName.includes('Mehrajwala') || fAddress.includes('Mehrajwala');
+            const isKamal = f.id === 'FIRM-003' || fName.includes('Kamalpur') || fAddress.includes('Kamalpur');
+            const shortLabel = isMehraj ? 'ਮਹਿਰਾਜਵਾਲਾ' : isKamal ? 'ਕਮਾਲਪੁਰ' : isKang ? 'ਕੰਗ ਖੁਰਦ' : (f?.namePa || f?.name || 'ਮੰਡੀ');
             return (
               <button
                 key={f.id}

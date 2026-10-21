@@ -126,8 +126,9 @@ export const LeftingManagement: React.FC = () => {
     if (!truckNo.trim()) return [];
     const query = truckNo.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
     return trucks.filter((t) => {
-      const cleanNo = t.truckNo.toUpperCase().replace(/[^A-Z0-9]/g, '');
-      return cleanNo.includes(query) || cleanNo.endsWith(query) || t.truckNo.toUpperCase().includes(truckNo.trim().toUpperCase());
+      const tNo = t?.truckNo || '';
+      const cleanNo = tNo.toUpperCase().replace(/[^A-Z0-9]/g, '');
+      return cleanNo.includes(query) || cleanNo.endsWith(query) || tNo.toUpperCase().includes(truckNo.trim().toUpperCase());
     }).slice(0, 8);
   }, [trucks, truckNo]);
 
@@ -1151,9 +1152,12 @@ export const LeftingManagement: React.FC = () => {
             </button>
             {firms.map((f) => {
               const isSelected = selectedMandiFilter === f.id;
-              const isMehraj = f.id === 'FIRM-002' || f.name.includes('Mehrajwala') || f.address.includes('Mehrajwala');
-              const isKamal = f.id === 'FIRM-003' || f.name.includes('Kamalpur') || f.address.includes('Kamalpur');
-              const shortLabel = isMehraj ? 'ਮਹਿਰਾਜਵਾਲਾ' : isKamal ? 'ਕਮਾਲਪੁਰ' : 'ਕੰਗ ਖੁਰਦ';
+              const fName = f?.name || '';
+              const fAddress = f?.address || '';
+              const isKang = f.id === 'FIRM-001' || fName.includes('Kang') || fAddress.includes('Kang');
+              const isMehraj = f.id === 'FIRM-002' || fName.includes('Mehrajwala') || fAddress.includes('Mehrajwala');
+              const isKamal = f.id === 'FIRM-003' || fName.includes('Kamalpur') || fAddress.includes('Kamalpur');
+              const shortLabel = isMehraj ? 'ਮਹਿਰਾਜਵਾਲਾ' : isKamal ? 'ਕਮਾਲਪੁਰ' : isKang ? 'ਕੰਗ ਖੁਰਦ' : (f?.namePa || f?.name || 'ਮੰਡੀ');
               return (
                 <button
                   key={f.id}

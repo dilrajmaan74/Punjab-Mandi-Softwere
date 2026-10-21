@@ -1969,17 +1969,17 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (activeFirm) {
       setSettings((prev) => ({
         ...prev,
-        firmNameEn: activeFirm.name,
-        firmNamePa: activeFirm.namePa,
-        firmAddress: activeFirm.address,
-        firmMobile: activeFirm.mobile,
-        firmLicence: activeFirm.licenceNo,
+        firmNameEn: activeFirm.name || prev.firmNameEn,
+        firmNamePa: activeFirm.namePa || prev.firmNamePa,
+        firmAddress: activeFirm.address || prev.firmAddress,
+        firmMobile: activeFirm.mobile || prev.firmMobile,
+        firmLicence: activeFirm.licenceNo || prev.firmLicence,
         firmPan: activeFirm.pan !== undefined ? activeFirm.pan : (prev.firmPan || ''),
         firmGstin: activeFirm.gstin || prev.firmGstin,
-        mandiNameEn: activeFirm.address.split(',')[0]?.trim() || prev.mandiNameEn,
-        mandiNamePa: activeFirm.addressPa?.split(',')[0]?.trim() || prev.mandiNamePa,
-        marketCommitteeEn: `Market Committee ${activeFirm.marketCommittee}`,
-        marketCommitteePa: `ਮਾਰਕੀਟ ਕਮੇਟੀ ${activeFirm.marketCommitteePa || activeFirm.marketCommittee}`
+        mandiNameEn: (activeFirm.address || '').split(',')[0]?.trim() || prev.mandiNameEn,
+        mandiNamePa: (activeFirm.addressPa || activeFirm.address || '').split(',')[0]?.trim() || prev.mandiNamePa,
+        marketCommitteeEn: activeFirm.marketCommittee ? `Market Committee ${activeFirm.marketCommittee}` : prev.marketCommitteeEn,
+        marketCommitteePa: `ਮਾਰਕੀਟ ਕਮੇਟੀ ${activeFirm.marketCommitteePa || activeFirm.marketCommittee || ''}`
       }));
     }
   }, [activeFirmId, firms]);
@@ -5767,7 +5767,7 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     ];
 
     if (iformDetails.tdsAmount > 0) {
-      const tdsLedger = pakkaLedgers.find((l) => l.group === 'CURRENT_ASSETS' && l.name.includes('TDS')) || pakkaLedgers[0];
+      const tdsLedger = pakkaLedgers.find((l) => l.group === 'CURRENT_ASSETS' && (l.name || '').includes('TDS')) || pakkaLedgers[0];
       const newTds: TDSRecord = {
         id: `TDS-${Date.now()}`,
         date: options.date,
