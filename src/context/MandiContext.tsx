@@ -168,83 +168,105 @@ export const DEFAULT_AGENCIES: ProcurementAgency[] = [
   { id: 'AG-06', nameEn: 'Other Agency', namePa: 'ਹੋਰ ਖਰੀਦ ਏਜੰਸੀ (Other Agency)', code: 'OTHER' }
 ];
 
-export const DEFAULT_FIRM: MandiFirm = {
+export const JAMMU_TRADING_CO_FIRM: MandiFirm = {
+  id: 'FIRM-001',
+  name: 'Jammu Trading Co',
+  namePa: 'ਜੰਮੂ ਟਰੇਡਿੰਗ ਕੰਪਨੀ',
+  address: 'Dana Mandi Kang Khurd, Teh. Shahkot, Distt. Jalandhar, Punjab - 144629',
+  addressPa: 'ਦਾਣਾ ਮੰਡੀ ਕੰਗ ਖੁਰਦ, ਤਹਿ. ਸ਼ਾਹਕੋਟ, ਜ਼ਿਲ੍ਹਾ ਜਲੰਧਰ, ਪੰਜਾਬ - 144629',
+  marketCommittee: 'Kang Khurd',
+  marketCommitteePa: 'ਮਾਰਕੀਟ ਕਮੇਟੀ ਕੰਗ ਖੁਰਦ',
+  mobile: '98141-92345',
+  licenceNo: 'MC/KNG/2024/089',
+  proprietorName: 'Daljit Singh',
+  proprietorNamePa: 'ਸ. ਦਲਜੀਤ ਸਿੰਘ',
+  pan: 'ABCDE1234F',
+  gstin: '',
+  isDefault: true,
+  createdAt: '01/04/2024'
+};
+
+export const DEFAULT_FIRM: MandiFirm = JAMMU_TRADING_CO_FIRM;
+
+export const DEFAULT_FIRM_MEHRAJWALA: MandiFirm = {
+  id: 'FIRM-002',
+  name: 'Jammu Trading Co (Branch Mehrajwala)',
+  namePa: 'ਜੰਮੂ ਟਰੇਡਿੰਗ ਕੰਪਨੀ (ਸ਼ਾਖਾ ਮਹਿਰਾਜਵਾਲਾ)',
+  address: 'Dana Mandi Mehrajwala, Punjab - 144629',
+  addressPa: 'ਦਾਣਾ ਮੰਡੀ ਮਹਿਰਾਜਵਾਲਾ, ਪੰਜਾਬ',
+  marketCommittee: 'Kang Khurd',
+  marketCommitteePa: 'ਮਾਰਕੀਟ ਕਮੇਟੀ ਕੰਗ ਖੁਰਦ',
+  mobile: '98141-92345',
+  licenceNo: 'MC/KNG/2024/089-B2',
+  proprietorName: 'Daljit Singh',
+  proprietorNamePa: 'ਸ. ਦਲਜੀਤ ਸਿੰਘ',
+  pan: 'ABCDE1234F',
+  gstin: '',
+  isDefault: false,
+  createdAt: '01/04/2024'
+};
+
+export const DEFAULT_FIRM_KAMALPUR: MandiFirm = {
+  id: 'FIRM-003',
+  name: 'Jammu Trading Co (Branch Kamalpur)',
+  namePa: 'ਜੰਮੂ ਟਰੇਡਿੰਗ ਕੰਪਨੀ (ਸ਼ਾਖਾ ਕਮਾਲਪੁਰ)',
+  address: 'Dana Mandi Kamalpur, Punjab - 144629',
+  addressPa: 'ਦਾਣਾ ਮੰਡੀ ਕਮਾਲਪੁਰ, ਪੰਜਾਬ',
+  marketCommittee: 'Kang Khurd',
+  marketCommitteePa: 'ਮਾਰਕੀਟ ਕਮੇਟੀ ਕੰਗ ਖੁਰਦ',
+  mobile: '98141-92345',
+  licenceNo: 'MC/KNG/2024/089-B3',
+  proprietorName: 'Daljit Singh',
+  proprietorNamePa: 'ਸ. ਦਲਜੀਤ ਸਿੰਘ',
+  pan: 'ABCDE1234F',
+  gstin: '',
+  isDefault: false,
+  createdAt: '01/04/2024'
+};
+
+export const DEMO_PRACTICE_DEFAULT_FIRM: MandiFirm = {
   id: 'DEMO-FIRM-001',
   name: 'Punjab Mandi Trading Co (Demo Practice)',
   namePa: 'ਪੰਜਾਬ ਮੰਡੀ ਟਰੇਡਿੰਗ ਕੰਪਨੀ (ਡੈਮੋ ਪ੍ਰੈਕਟਿਸ ਮੰਡੀ)',
-  address: 'Shop No. 12, Main Grain Market, Punjab - 144001 (Practice Mode)',
+  address: 'Shop No. 12, Main Grain Market, Punjab - 144001',
   addressPa: 'ਦੁਕਾਨ ਨੰ. 12, ਮੁੱਖ ਦਾਣਾ ਮੰਡੀ, ਪੰਜਾਬ (ਪ੍ਰੈਕਟਿਸ ਮੋਡ)',
   marketCommittee: 'Punjab Mandi Board',
   marketCommitteePa: 'ਪੰਜਾਬ ਮੰਡੀ ਬੋਰਡ',
   mobile: '98765-43210',
   licenceNo: 'DEMO/PB/2026',
   proprietorName: 'Daljit Singh (Demo)',
-  proprietorNamePa: 'ਸ. ਦਲਜੀਤ ਸਿੰਘ (ਡੈਮੋ ਪ੍ਰੋਪਰਾਈਟਰ)',
+  proprietorNamePa: 'ਸ. ਦਲਜੀਤ ਸਿੰਘ (ਡੈਮੋ)',
   pan: 'ABCDE1234F',
   gstin: '',
   isDefault: true,
   createdAt: '01/04/2026'
 };
 
-export const DEFAULT_FIRM_MEHRAJWALA: MandiFirm = {
-  id: 'DEMO-FIRM-002',
-  name: 'Punjab Mandi Trading Co (Branch 2 Demo)',
-  namePa: 'ਪੰਜਾਬ ਮੰਡੀ ਟਰੇਡਿੰਗ ਕੰਪਨੀ (ਸ਼ਾਖਾ 2 ਡੈਮੋ)',
-  address: 'Sub Yard Grain Market, Punjab - 144001',
-  addressPa: 'ਸਬ ਯਾਰਡ ਦਾਣਾ ਮੰਡੀ, ਪੰਜਾਬ (ਪ੍ਰੈਕਟਿਸ ਮੋਡ)',
-  marketCommittee: 'Punjab Mandi Board',
-  marketCommitteePa: 'ਪੰਜਾਬ ਮੰਡੀ ਬੋਰਡ',
-  mobile: '98765-43210',
-  licenceNo: 'DEMO/PB/2026/B2',
-  proprietorName: 'Daljit Singh (Demo)',
-  proprietorNamePa: 'ਸ. ਦਲਜੀਤ ਸਿੰਘ (ਡੈਮੋ)',
-  pan: 'ABCDE1234F',
-  gstin: '',
-  isDefault: false,
-  createdAt: '01/04/2026'
-};
-
-export const DEFAULT_FIRM_KAMALPUR: MandiFirm = {
-  id: 'DEMO-FIRM-003',
-  name: 'Punjab Mandi Trading Co (Branch 3 Demo)',
-  namePa: 'ਪੰਜਾਬ ਮੰਡੀ ਟਰੇਡਿੰਗ ਕੰਪਨੀ (ਸ਼ਾਖਾ 3 ਡੈਮੋ)',
-  address: 'Rural Yard Grain Market, Punjab - 144001',
-  addressPa: 'ਪੇਂਡੂ ਯਾਰਡ ਦਾਣਾ ਮੰਡੀ, ਪੰਜਾਬ (ਪ੍ਰੈਕਟਿਸ ਮੋਡ)',
-  marketCommittee: 'Punjab Mandi Board',
-  marketCommitteePa: 'ਪੰਜਾਬ ਮੰਡੀ ਬੋਰਡ',
-  mobile: '98765-43210',
-  licenceNo: 'DEMO/PB/2026/B3',
-  proprietorName: 'Daljit Singh (Demo)',
-  proprietorNamePa: 'ਸ. ਦਲਜੀਤ ਸਿੰਘ (ਡੈਮੋ)',
-  pan: 'ABCDE1234F',
-  gstin: '',
-  isDefault: false,
-  createdAt: '01/04/2026'
-};
-
-export const DEFAULT_FIRM_NEW_JAMMU: MandiFirm = {
-  id: 'DEMO-FIRM-004',
-  name: 'New Punjab Mandi Trading Co (Demo)',
-  namePa: 'ਨਿਊ ਪੰਜਾਬ ਮੰਡੀ ਟਰੇਡਿੰਗ ਕੰਪਨੀ (ਡੈਮੋ)',
-  address: 'New Grain Market Complex, Punjab - 144001',
-  addressPa: 'ਨਵੀਂ ਦਾਣਾ ਮੰਡੀ ਕੰਪਲੈਕਸ, ਪੰਜਾਬ (ਪ੍ਰੈਕਟਿਸ ਮੋਡ)',
-  marketCommittee: 'Punjab Mandi Board',
-  marketCommitteePa: 'ਪੰਜਾਬ ਮੰਡੀ ਬੋਰਡ',
-  mobile: '98765-43210',
-  licenceNo: 'DEMO/PB/2026/N',
-  proprietorName: 'Daljit Singh (Demo)',
-  proprietorNamePa: 'ਸ. ਦਲਜੀਤ ਸਿੰਘ (ਡੈਮੋ)',
-  pan: '',
-  gstin: '',
-  isDefault: false,
-  createdAt: '01/04/2026'
-};
-
 export const INITIAL_DEFAULT_FIRMS: MandiFirm[] = [
-  DEFAULT_FIRM,
-  DEFAULT_FIRM_NEW_JAMMU,
+  JAMMU_TRADING_CO_FIRM,
   DEFAULT_FIRM_MEHRAJWALA,
   DEFAULT_FIRM_KAMALPUR
+];
+
+export const DEMO_PRACTICE_FIRMS: MandiFirm[] = [
+  DEMO_PRACTICE_DEFAULT_FIRM,
+  {
+    id: 'DEMO-FIRM-002',
+    name: 'Punjab Mandi Trading Co (Branch 2 Demo)',
+    namePa: 'ਪੰਜਾਬ ਮੰਡੀ ਟਰੇਡਿੰਗ ਕੰਪਨੀ (ਸ਼ਾਖਾ 2 ਡੈਮੋ)',
+    address: 'Sub Yard Grain Market, Punjab - 144001',
+    addressPa: 'ਸਬ ਯਾਰਡ ਦਾਣਾ ਮੰਡੀ, ਪੰਜਾਬ (ਪ੍ਰੈਕਟਿਸ ਮੋਡ)',
+    marketCommittee: 'Punjab Mandi Board',
+    marketCommitteePa: 'ਪੰਜਾਬ ਮੰਡੀ ਬੋਰਡ',
+    mobile: '98765-43210',
+    licenceNo: 'DEMO/PB/2026/B2',
+    proprietorName: 'Daljit Singh (Demo)',
+    proprietorNamePa: 'ਸ. ਦਲਜੀਤ ਸਿੰਘ (ਡੈਮੋ)',
+    pan: 'ABCDE1234F',
+    gstin: '',
+    isDefault: false,
+    createdAt: '01/04/2026'
+  }
 ];
 
 export const DEFAULT_FISCAL_YEARS = ['2024-25', '2025-26', '2026-27'];
@@ -684,35 +706,6 @@ const DEFAULT_SETTINGS: MandiSettings = {
 // Firm-specific storage key generator
 export const getFirmStorageKey = (baseKey: string, firmId: string) => `${baseKey}_${firmId}`;
 
-// One-time automatic purge of old legacy real data keys from previous AI Studio sessions
-if (typeof window !== 'undefined') {
-  try {
-    const purged = localStorage.getItem('mandi_legacy_real_data_purged_v5');
-    if (purged !== 'true') {
-      const keysToRemove: string[] = [];
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (
-          key &&
-          (key.includes('FIRM-001') ||
-            key.includes('FIRM-002') ||
-            key.includes('FIRM-003') ||
-            key.includes('FIRM-004') ||
-            key === 'punjab_mandi_farmers' ||
-            key === 'punjab_mandi_bags_entries' ||
-            key === 'punjab_mandi_daily_purchases' ||
-            key === 'punjab_mandi_farmer_payments' ||
-            key === 'punjab_mandi_advances')
-        ) {
-          keysToRemove.push(key);
-        }
-      }
-      keysToRemove.forEach((k) => localStorage.removeItem(k));
-      localStorage.setItem('mandi_legacy_real_data_purged_v5', 'true');
-    }
-  } catch {}
-}
-
 // Load data strictly for specified firm with complete demo isolation
 export const loadFirmData = <T,>(baseKey: string, firmId: string, defaultValue: T): T => {
   try {
@@ -929,21 +922,25 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     try {
       const isDemo = (() => {
         try {
-          return localStorage.getItem('mandi_demo_practice_mode') !== 'false';
+          return localStorage.getItem('mandi_demo_practice_mode') === 'true';
         } catch {
-          return true;
+          return false;
         }
       })();
 
       if (isDemo) {
-        // In Demo Practice Mode, strictly use clean Demo Firms
-        return INITIAL_DEFAULT_FIRMS;
+        return DEMO_PRACTICE_FIRMS;
       }
 
       const stored = localStorage.getItem(LOCAL_STORAGE_KEYS.FIRMS);
       if (stored) {
         const parsed = JSON.parse(stored);
         if (Array.isArray(parsed) && parsed.length > 0) {
+          // If stored firms exist, verify if FIRM-001 is included, if not ensure JAMMU_TRADING_CO_FIRM is present
+          const hasJammu = parsed.some((f: any) => f.id === 'FIRM-001' || (f.name && f.name.toLowerCase().includes('jammu')));
+          if (!hasJammu) {
+            return [JAMMU_TRADING_CO_FIRM, ...parsed.filter((f: any) => !f.id.startsWith('DEMO-'))];
+          }
           return parsed;
         }
       }
@@ -955,10 +952,23 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const [activeFirmId, setActiveFirmIdState] = useState<string>(() => {
     try {
+      const isDemo = (() => {
+        try {
+          return localStorage.getItem('mandi_demo_practice_mode') === 'true';
+        } catch {
+          return false;
+        }
+      })();
+      if (isDemo) {
+        return DEMO_PRACTICE_DEFAULT_FIRM.id;
+      }
       const stored = localStorage.getItem(LOCAL_STORAGE_KEYS.ACTIVE_FIRM_ID);
-      return stored || DEFAULT_FIRM.id;
+      if (!stored || stored.startsWith('DEMO-')) {
+        return 'FIRM-001';
+      }
+      return stored;
     } catch {
-      return DEFAULT_FIRM.id;
+      return 'FIRM-001';
     }
   });
 
@@ -969,9 +979,9 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [isDemoMode, setIsDemoModeState] = useState<boolean>(() => {
     try {
       const stored = localStorage.getItem('mandi_demo_practice_mode');
-      return stored !== 'false'; // Defaults to TRUE for safe practice in Google AI Studio
+      return stored === 'true'; // Defaults to FALSE so real Jammu Trading Co & Supabase live data opens!
     } catch {
-      return true;
+      return false;
     }
   });
 
@@ -984,8 +994,8 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   // 2. Farmers list - strictly isolated per active firm
   const [farmers, setFarmers] = useState<Farmer[]>(() => {
-    const list = loadFirmData<Farmer[]>(LOCAL_STORAGE_KEYS.FARMERS, activeFirmId, DEMO_PRACTICE_FARMERS);
-    const source = (Array.isArray(list) && list.length > 0) ? list : DEMO_PRACTICE_FARMERS;
+    const list = loadFirmData<Farmer[]>(LOCAL_STORAGE_KEYS.FARMERS, activeFirmId, isDemoMode ? DEMO_PRACTICE_FARMERS : []);
+    const source = Array.isArray(list) ? (list.length > 0 ? list : (isDemoMode ? DEMO_PRACTICE_FARMERS : [])) : [];
     const deleted = getAllDeletedIds(activeFirmId);
     const filtered = source.filter((f) => !f.isDeleted && !deleted.has(f.id));
     const transferred = transferFarmersTo2026_27(filtered);
@@ -995,8 +1005,8 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   // 3. Bags entries - strictly isolated per active firm
   const [bagsEntries, setBagsEntries] = useState<BagsEntryRecord[]>(() => {
-    const list = loadFirmData<BagsEntryRecord[]>(LOCAL_STORAGE_KEYS.BAGS_ENTRIES, activeFirmId, DEMO_PRACTICE_BAGS);
-    const source = (Array.isArray(list) && list.length > 0) ? list : DEMO_PRACTICE_BAGS;
+    const list = loadFirmData<BagsEntryRecord[]>(LOCAL_STORAGE_KEYS.BAGS_ENTRIES, activeFirmId, isDemoMode ? DEMO_PRACTICE_BAGS : []);
+    const source = Array.isArray(list) ? (list.length > 0 ? list : (isDemoMode ? DEMO_PRACTICE_BAGS : [])) : [];
     const deleted = getAllDeletedIds(activeFirmId);
     const filtered = source.filter((b) => !deleted.has(b.id) && !deleted.has((b as any).entryNumber));
     const { updatedList } = migrate37_5KgEntriesToPakkiLabour8(filtered);
@@ -1007,8 +1017,8 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   // 4. Bardana Received Records - strictly isolated per active firm
   const [bardanaRecords, setBardanaRecords] = useState<BardanaReceivedRecord[]>(() => {
-    const list = loadFirmData<BardanaReceivedRecord[]>(LOCAL_STORAGE_KEYS.BARDANA, activeFirmId, DEMO_PRACTICE_BARDANA);
-    const source = (Array.isArray(list) && list.length > 0) ? list : DEMO_PRACTICE_BARDANA;
+    const list = loadFirmData<BardanaReceivedRecord[]>(LOCAL_STORAGE_KEYS.BARDANA, activeFirmId, isDemoMode ? DEMO_PRACTICE_BARDANA : []);
+    const source = Array.isArray(list) ? (list.length > 0 ? list : (isDemoMode ? DEMO_PRACTICE_BARDANA : [])) : [];
     const deleted = getAllDeletedIds(activeFirmId);
     const filtered = source.filter((b) => !deleted.has(b.id));
     const transferred = transferRecordArrayTo2026_27(filtered, 'date');
@@ -1019,8 +1029,8 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   // 5. Daily Purchase Records - strictly isolated per active firm
   const purchaseIdCounterRef = useRef<number>(0);
   const [dailyPurchaseRecords, setDailyPurchaseRecords] = useState<DailyPurchaseRecord[]>(() => {
-    const list = loadFirmData<DailyPurchaseRecord[]>(LOCAL_STORAGE_KEYS.DAILY_PURCHASES, activeFirmId, DEMO_PRACTICE_PURCHASES);
-    const source = (Array.isArray(list) && list.length > 0) ? list : DEMO_PRACTICE_PURCHASES;
+    const list = loadFirmData<DailyPurchaseRecord[]>(LOCAL_STORAGE_KEYS.DAILY_PURCHASES, activeFirmId, isDemoMode ? DEMO_PRACTICE_PURCHASES : []);
+    const source = Array.isArray(list) ? (list.length > 0 ? list : (isDemoMode ? DEMO_PRACTICE_PURCHASES : [])) : [];
     const deleted = getAllDeletedIds(activeFirmId);
     const nonDeleted = source.filter((p) => !deleted.has(p.id));
     const seen = new Set<string>();
@@ -1047,8 +1057,8 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   // 6. Farmer Payment Records - strictly isolated per active firm
   const [farmerPayments, setFarmerPayments] = useState<FarmerPaymentRecord[]>(() => {
-    const list = loadFirmData<FarmerPaymentRecord[]>(LOCAL_STORAGE_KEYS.FARMER_PAYMENTS, activeFirmId, DEMO_PRACTICE_PAYMENTS);
-    const source = (Array.isArray(list) && list.length > 0) ? list : DEMO_PRACTICE_PAYMENTS;
+    const list = loadFirmData<FarmerPaymentRecord[]>(LOCAL_STORAGE_KEYS.FARMER_PAYMENTS, activeFirmId, isDemoMode ? DEMO_PRACTICE_PAYMENTS : []);
+    const source = Array.isArray(list) ? (list.length > 0 ? list : (isDemoMode ? DEMO_PRACTICE_PAYMENTS : [])) : [];
     const deleted = getAllDeletedIds(activeFirmId);
     const filtered = source.filter((p) => !deleted.has(p.id));
     const transferred = transferRecordArrayTo2026_27(filtered, 'date');
@@ -1058,8 +1068,8 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   // 7. Farmer Advance Records - strictly isolated per active firm
   const [farmerAdvances, setFarmerAdvances] = useState<FarmerAdvanceRecord[]>(() => {
-    const list = loadFirmData<FarmerAdvanceRecord[]>(LOCAL_STORAGE_KEYS.ADVANCES, activeFirmId, DEMO_PRACTICE_ADVANCES);
-    const source = (Array.isArray(list) && list.length > 0) ? list : DEMO_PRACTICE_ADVANCES;
+    const list = loadFirmData<FarmerAdvanceRecord[]>(LOCAL_STORAGE_KEYS.ADVANCES, activeFirmId, isDemoMode ? DEMO_PRACTICE_ADVANCES : []);
+    const source = Array.isArray(list) ? (list.length > 0 ? list : (isDemoMode ? DEMO_PRACTICE_ADVANCES : [])) : [];
     const deleted = getAllDeletedIds(activeFirmId);
     const filtered = source.filter((a) => !deleted.has(a.id));
     const transferred = transferRecordArrayTo2026_27(filtered, 'date');
@@ -1069,8 +1079,8 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   // 8. Boli Records - strictly isolated per active firm
   const [boliRecords, setBoliRecords] = useState<BoliRecord[]>(() => {
-    const list = loadFirmData<BoliRecord[]>(LOCAL_STORAGE_KEYS.BOLI_RECORDS, activeFirmId, DEMO_PRACTICE_BOLI);
-    const source = (Array.isArray(list) && list.length > 0) ? list : DEMO_PRACTICE_BOLI;
+    const list = loadFirmData<BoliRecord[]>(LOCAL_STORAGE_KEYS.BOLI_RECORDS, activeFirmId, isDemoMode ? DEMO_PRACTICE_BOLI : []);
+    const source = Array.isArray(list) ? (list.length > 0 ? list : (isDemoMode ? DEMO_PRACTICE_BOLI : [])) : [];
     const deleted = getAllDeletedIds(activeFirmId);
     const filtered = source.filter((b) => !deleted.has(b.id));
     const transferred = transferRecordArrayTo2026_27(filtered, 'date');
@@ -1098,8 +1108,8 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   // 12. Lefting (Sheller Dispatch) Records - strictly isolated per active firm
   const [leftingRecords, setLeftingRecords] = useState<LeftingRecord[]>(() => {
-    const list = loadFirmData<LeftingRecord[]>(LOCAL_STORAGE_KEYS.LEFTING, activeFirmId, DEMO_PRACTICE_LEFTING);
-    const source = (Array.isArray(list) && list.length > 0) ? list : DEMO_PRACTICE_LEFTING;
+    const list = loadFirmData<LeftingRecord[]>(LOCAL_STORAGE_KEYS.LEFTING, activeFirmId, isDemoMode ? DEMO_PRACTICE_LEFTING : []);
+    const source = Array.isArray(list) ? (list.length > 0 ? list : (isDemoMode ? DEMO_PRACTICE_LEFTING : [])) : [];
     const deleted = getAllDeletedIds(activeFirmId);
     const filtered = source.filter((l) => !deleted.has(l.id));
     return transferRecordArrayTo2026_27(filtered, 'dispatchDate');
@@ -1527,12 +1537,25 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const client = getSupabaseClient();
     if (!client || !isSupabaseConfigured()) return;
 
+    // Immediately trigger sync
+    syncWithSupabase();
+
     // Check if user is already authenticated
     client.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
         syncWithSupabase();
       }
     });
+
+    // Listen to custom auth success event from AuthContext or modals
+    const handleAuthSuccess = () => {
+      setIsDemoMode(false);
+      setActiveFirmId('FIRM-001');
+      setTimeout(() => {
+        syncWithSupabase();
+      }, 50);
+    };
+    window.addEventListener('supabase-auth-success', handleAuthSuccess);
 
     // Listen to login and logout events
     const { data: { subscription } } = client.auth.onAuthStateChange((event, session) => {
@@ -1555,6 +1578,7 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     return () => {
       subscription.unsubscribe();
+      window.removeEventListener('supabase-auth-success', handleAuthSuccess);
     };
   }, [isDemoMode]);
 

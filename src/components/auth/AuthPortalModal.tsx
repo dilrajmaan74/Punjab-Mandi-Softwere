@@ -38,6 +38,7 @@ export const AuthPortalModal: React.FC = () => {
   // Form states
   const [fullName, setFullName] = useState('');
   const [mobile, setMobile] = useState('');
+  const [loginId, setLoginId] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [otpCode, setOtpCode] = useState('');
@@ -180,9 +181,20 @@ export const AuthPortalModal: React.FC = () => {
     setErrorMessage(null);
     setSuccessMessage(null);
 
+    const targetIdentifier = (loginId || mobile || '').trim();
+    if (!targetIdentifier) {
+      setErrorMessage('ਕਿਰਪਾ ਕਰਕੇ ਆਪਣੀ ਸੁਪਾਬੇਸ ਈਮੇਲ ਜਾਂ ਮੋਬਾਈਲ ਨੰਬਰ ਭਰੋ (Enter Email or Mobile)');
+      return;
+    }
+
+    if (!password) {
+      setErrorMessage('ਕਿਰਪਾ ਕਰਕੇ ਪਾਸਵਰਡ ਭਰੋ (Enter Password)');
+      return;
+    }
+
     setIsLoading(true);
     try {
-      const res = await login(mobile, password, rememberMe);
+      const res = await login(targetIdentifier, password, rememberMe);
       if (res.success) {
         setSuccessMessage(res.message);
         setTimeout(() => {
@@ -237,6 +249,7 @@ export const AuthPortalModal: React.FC = () => {
 
   // Quick 1-Click Demo Login
   const handleQuickDemo = async () => {
+    setLoginId('9876543210');
     setMobile('9876543210');
     setPassword('Password@123');
     setIsLoading(true);
@@ -252,7 +265,6 @@ export const AuthPortalModal: React.FC = () => {
         setErrorMessage(res.message);
       }
     } catch {
-      // In all cases close modal and open demo
       setIsAuthModalOpen(false);
     } finally {
       setIsLoading(false);
@@ -353,24 +365,32 @@ export const AuthPortalModal: React.FC = () => {
           {/* -------------------- 1. LOGIN FORM -------------------- */}
           {authModalMode === 'LOGIN' && (
             <form onSubmit={handleLogin} className="space-y-4">
-              {/* Mobile Number */}
+              {/* Supabase Email or Mobile Number */}
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  ਰਜਿਸਟਰਡ ਮੋਬਾਈਲ ਨੰਬਰ (Registered Mobile)
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-bold text-slate-700">
+                    ਸੁਪਾਬੇਸ ਈਮੇਲ ਜਾਂ ਮੋਬਾਈਲ ਨੰਬਰ (Email or Mobile)
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setLoginId('dilrajmaan74@gmail.com')}
+                    className="text-[10px] font-bold text-emerald-700 hover:text-emerald-800 hover:underline"
+                    title="Click to fill dilrajmaan74@gmail.com"
+                  >
+                    dilrajmaan74@gmail.com
+                  </button>
+                </div>
                 <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400 font-bold text-xs">
-                    <Phone className="w-4 h-4 mr-1 text-slate-400" />
-                    <span>+91</span>
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                    <User className="w-4 h-4" />
                   </div>
                   <input
-                    type="tel"
-                    maxLength={10}
-                    value={mobile}
-                    onChange={(e) => setMobile(e.target.value.replace(/\D/g, ''))}
-                    placeholder="9876543210"
+                    type="text"
+                    value={loginId}
+                    onChange={(e) => setLoginId(e.target.value)}
+                    placeholder="ਜਿਵੇਂ: dilrajmaan74@gmail.com ਜਾਂ 9814192345"
                     required
-                    className="w-full pl-16 pr-3 py-2.5 text-sm font-semibold bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:bg-white focus:outline-none transition"
+                    className="w-full pl-10 pr-3 py-2.5 text-sm font-semibold bg-slate-50 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:bg-white focus:outline-none transition"
                   />
                 </div>
               </div>

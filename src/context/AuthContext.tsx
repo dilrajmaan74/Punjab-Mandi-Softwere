@@ -104,8 +104,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               setIsAuthChecking(false);
             }
 
-            // Auto verify & claim owner access to DEMO-FIRM-001 in background
-            ensureUserFirmAccess('DEMO-FIRM-001').catch(console.warn);
+            // Auto verify & claim owner access to FIRM-001 (Jammu Trading Co) in background
+            ensureUserFirmAccess('FIRM-001').catch(console.warn);
             return;
           }
         }
@@ -164,7 +164,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           };
           setCurrentUser(appUser);
           setIsAuthChecking(false);
-          ensureUserFirmAccess('DEMO-FIRM-001').catch(console.warn);
+          ensureUserFirmAccess('FIRM-001').catch(console.warn);
         } else if (event === 'SIGNED_OUT') {
           setCurrentUser(null);
           setIsAuthChecking(false);
@@ -202,6 +202,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (isDemoLogin) {
       setCurrentUser(DEMO_USER);
       setIsAuthModalOpen(false);
+      try {
+        localStorage.setItem('mandi_demo_practice_mode', 'true');
+        localStorage.setItem('punjab_mandi_active_firm_id', 'DEMO-FIRM-001');
+      } catch {}
       if (rememberMe) {
         localStorage.setItem(AUTH_STORAGE_KEYS.CURRENT_USER, JSON.stringify(DEMO_USER));
         localStorage.setItem(AUTH_STORAGE_KEYS.REMEMBER_ME, 'true');
@@ -238,8 +242,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const user = data.user;
         const appUser: AppUserAccount = {
           id: user.id,
-          fullName: user.user_metadata?.full_name || user.email?.split('@')[0] || 'ਸ. ਦਲਜੀਤ ਸਿੰਘ (ਡੈਮੋ)',
-          mobile: user.user_metadata?.mobile || user.phone || '9876543210',
+          fullName: user.user_metadata?.full_name || user.email?.split('@')[0] || 'ਸ. ਦਲਜੀਤ ਸਿੰਘ (ਜੰਮੂ ਟਰੇਡਿੰਗ)',
+          mobile: user.user_metadata?.mobile || user.phone || '9814192345',
           email: user.email || email,
           password: '',
           isVerified: true,
@@ -249,17 +253,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         setCurrentUser(appUser);
         setIsAuthModalOpen(false);
+        try {
+          localStorage.setItem('mandi_demo_practice_mode', 'false');
+          localStorage.setItem('punjab_mandi_active_firm_id', 'FIRM-001');
+        } catch {}
         if (rememberMe) {
           localStorage.setItem(AUTH_STORAGE_KEYS.CURRENT_USER, JSON.stringify(appUser));
           localStorage.setItem(AUTH_STORAGE_KEYS.REMEMBER_ME, 'true');
         }
 
-        // Link to DEMO-FIRM-001
-        await ensureUserFirmAccess('DEMO-FIRM-001');
+        // Link to FIRM-001 (Jammu Trading Co)
+        await ensureUserFirmAccess('FIRM-001');
+
+        // Notify MandiContext to switch to FIRM-001 and sync live data
+        window.dispatchEvent(new CustomEvent('supabase-auth-success', { detail: { user: appUser } }));
 
         return {
           success: true,
-          message: `ਲੌਗਇਨ ਸਫਲ ਰਿਹਾ! ਜੀ ਆਇਆਂ ਨੂੰ, ${appUser.fullName}`
+          message: `ਸੁਪਾਬੇਸ ਲੌਗਇਨ ਸਫਲ ਰਿਹਾ! ਜੀ ਆਇਆਂ ਨੂੰ, ${appUser.fullName}`
         };
       } catch (err: any) {
         return {
@@ -363,9 +374,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             lastLoginAt: new Date().toISOString()
           };
           setCurrentUser(appUser);
-          setIsAuthModalOpen(false);
+          try {
+            localStorage.setItem('mandi_demo_practice_mode', 'false');
+            localStorage.setItem('punjab_mandi_active_firm_id', 'FIRM-001');
+          } catch {}
           localStorage.setItem(AUTH_STORAGE_KEYS.CURRENT_USER, JSON.stringify(appUser));
-          await ensureUserFirmAccess('DEMO-FIRM-001');
+          await ensureUserFirmAccess('FIRM-001');
+          window.dispatchEvent(new CustomEvent('supabase-auth-success', { detail: { user: appUser } }));
           return {
             success: true,
             message: `ਨਵਾਂ ਖਾਤਾ ਸਫਲਤਾਪੂਰਵਕ ਬਣ ਗਿਆ ਅਤੇ ਲੌਗਇਨ ਹੋ ਗਿਆ! ਜੀ ਆਇਆਂ ਨੂੰ, ${fullName}`

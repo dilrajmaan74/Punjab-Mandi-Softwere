@@ -63,7 +63,10 @@ export const Header: React.FC = () => {
     isSupabaseConfigured,
     appMode,
     setAppMode,
-    setActiveSection
+    setActiveSection,
+    isDemoMode,
+    setIsDemoMode,
+    syncWithSupabase
   } = useMandi();
   const { syncStatus: sheetsSyncStatus, lastSyncTime, conflicts } = useGoogleSheetsSync();
   const { currentUser, logout, setIsAuthModalOpen, setAuthModalMode } = useAuth();
@@ -278,6 +281,34 @@ export const Header: React.FC = () => {
                 <AlertCircle className="w-3 h-3 text-rose-400" />
               )}
             </button>
+
+            {/* Live Jammu Trading Cloud vs Demo Mode Indicator */}
+            {!isDemoMode ? (
+              <div
+                className="hidden md:flex items-center gap-1.5 px-2 py-1 rounded-lg border border-emerald-500/50 bg-emerald-950/70 text-emerald-300 text-[11px] font-black"
+                title="Active Firm: Jammu Trading Co (Live Supabase Cloud Database Connected)"
+              >
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span>ਜੰਮੂ ਟਰੇਡਿੰਗ (ਲਾਈਵ)</span>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  setIsDemoMode(false);
+                  setActiveFirmId('FIRM-001');
+                  try {
+                    localStorage.setItem('mandi_demo_practice_mode', 'false');
+                    localStorage.setItem('punjab_mandi_active_firm_id', 'FIRM-001');
+                  } catch {}
+                  setTimeout(syncWithSupabase, 50);
+                }}
+                className="flex items-center gap-1.5 px-2 py-1 rounded-lg border border-amber-500/60 bg-amber-950/80 text-amber-300 text-[11px] font-black hover:bg-amber-900 transition cursor-pointer animate-pulse"
+                title="Currently in Demo Practice Mode. Click to switch to Live Jammu Trading Co data!"
+              >
+                <span>🎯 ਡੈਮੋ • ਲਾਈਵ ਖੋਲ੍ਹੋ</span>
+              </button>
+            )}
 
             {/* Google Sheets & Drive Sync Button */}
             <button

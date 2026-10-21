@@ -96,11 +96,11 @@ export async function checkUserFirmAccess(firmId: string = 'FIRM-001'): Promise<
 }
 
 /**
- * Ensure the currently authenticated user is linked to target firm (default: DEMO-FIRM-001 Punjab Mandi Trading Co)
+ * Ensure the currently authenticated user is linked to target firm (default: FIRM-001 Jammu Trading Co)
  * as owner/admin in firm_members table. Securely creates the firm_members record if missing.
- * Verifies user_has_firm_access('DEMO-FIRM-001') = true.
+ * Verifies user_has_firm_access('FIRM-001') = true.
  */
-export async function ensureUserFirmAccess(targetFirmId: string = 'DEMO-FIRM-001'): Promise<{
+export async function ensureUserFirmAccess(targetFirmId: string = 'FIRM-001'): Promise<{
   success: boolean;
   hasAccess: boolean;
   userId?: string;
@@ -146,19 +146,20 @@ export async function ensureUserFirmAccess(targetFirmId: string = 'DEMO-FIRM-001
 
     // 3. User is not yet linked or record is missing.
     // Ensure target firm exists in public.mandi_firms table (ignore conflict if already present)
+    const isJammu = targetFirmId === 'FIRM-001';
     const defaultFirmPayload = {
       id: targetFirmId,
-      name: 'Punjab Mandi Trading Co',
-      name_pa: 'ਪੰਜਾਬ ਮੰਡੀ ਟਰੇਡਿੰਗ ਕੰਪਨੀ',
-      address: 'Main Grain Market Yard, Punjab - 144001',
-      mobile: '98765-43210',
-      licence_no: 'DEMO/PB/2026',
-      market_committee: 'Punjab Mandi Board',
+      name: isJammu ? 'Jammu Trading Co' : 'Punjab Mandi Trading Co',
+      name_pa: isJammu ? 'ਜੰਮੂ ਟਰੇਡਿੰਗ ਕੰਪਨੀ' : 'ਪੰਜਾਬ ਮੰਡੀ ਟਰੇਡਿੰਗ ਕੰਪਨੀ',
+      address: isJammu ? 'Dana Mandi Kang Khurd, Teh. Shahkot, Distt. Jalandhar, Punjab - 144629' : 'Main Grain Market Yard, Punjab - 144001',
+      mobile: isJammu ? '98141-92345' : '98765-43210',
+      licence_no: isJammu ? 'MC/KNG/2024/089' : 'DEMO/PB/2026',
+      market_committee: isJammu ? 'Kang Khurd' : 'Punjab Mandi Board',
       is_default: true,
       data: {
         id: targetFirmId,
-        name: 'Punjab Mandi Trading Co',
-        namePa: 'ਪੰਜਾਬ ਮੰਡੀ ਟਰੇਡਿੰਗ ਕੰਪਨੀ',
+        name: isJammu ? 'Jammu Trading Co' : 'Punjab Mandi Trading Co',
+        namePa: isJammu ? 'ਜੰਮੂ ਟਰੇਡਿੰਗ ਕੰਪਨੀ' : 'ਪੰਜਾਬ ਮੰਡੀ ਟਰੇਡਿੰਗ ਕੰਪਨੀ',
         isDefault: true
       },
       updated_at: new Date().toISOString()

@@ -9,10 +9,15 @@ import {
 import { useMandi } from '../../context/MandiContext';
 
 export const DemoModeBanner: React.FC = () => {
-  const { resetToDemoPracticeData } = useMandi();
+  const { isDemoMode, setIsDemoMode, setActiveFirmId, syncWithSupabase, resetToDemoPracticeData } = useMandi();
   const [isResetting, setIsResetting] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [successNotice, setSuccessNotice] = useState<string | null>(null);
+
+  // If in Live Supabase Cloud Mode (Real software / Jammu Trading Co), do not show demo banner
+  if (!isDemoMode) {
+    return null;
+  }
 
   const handleReset = () => {
     setIsResetting(true);
@@ -26,6 +31,18 @@ export const DemoModeBanner: React.FC = () => {
     } finally {
       setIsResetting(false);
     }
+  };
+
+  const handleSwitchToLive = async () => {
+    setIsDemoMode(false);
+    setActiveFirmId('FIRM-001');
+    try {
+      localStorage.setItem('mandi_demo_practice_mode', 'false');
+      localStorage.setItem('punjab_mandi_active_firm_id', 'FIRM-001');
+    } catch {}
+    setTimeout(() => {
+      syncWithSupabase();
+    }, 50);
   };
 
   return (
@@ -47,13 +64,24 @@ export const DemoModeBanner: React.FC = () => {
               </span>
             </div>
             <p className="text-[11px] text-slate-300 hidden md:block mt-0.5">
-              ਤੁਸੀਂ ਬੇਫ਼ਿਕਰ ਹੋ ਕੇ ਨਵੀਂਆਂ ਐਂਟਰੀਆਂ ਪਾ ਸਕਦੇ ਹੋ, ਡਿਲੀਟ ਕਰ ਸਕਦੇ ਹੋ ਅਤੇ ਮੰਡੀ ਦੇ ਹਰ ਫੀਚਰ ਦੀ ਪ੍ਰੈਕਟਿਸ ਕਰ ਸਕਦੇ ਹੋ।
+              ਤੁਸੀਂ ਬੇਫ਼ਿਕਰ ਹੋ ਕੇ ਨਵੀਂਆਂ ਐਂਟਰੀਆਂ ਪਾ ਸਕਦੇ ਹੋ, ਡਿਲੀਟ ਕਰ ਸਕਦੇ ਹੋ ਅਤੇ ਪ੍ਰੈਕਟਿਸ ਕਰ ਸਕਦੇ ਹੋ।
             </p>
           </div>
         </div>
 
         {/* Right Action Buttons */}
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2 shrink-0 flex-wrap">
+          {/* Switch to Live Cloud Jammu Trading Button */}
+          <button
+            type="button"
+            onClick={handleSwitchToLive}
+            className="flex items-center gap-1.5 px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black transition shadow-sm cursor-pointer"
+            title="Switch to Real Supabase Cloud Data (Jammu Trading Co)"
+          >
+            <ShieldCheck className="w-3.5 h-3.5 text-white" />
+            <span>ਅਸਲ ਲਾਈਵ ਡਾਟਾ ਖੋਲ੍ਹੋ (ਜੰਮੂ ਟਰੇਡਿੰਗ)</span>
+          </button>
+
           {successNotice ? (
             <span className="text-xs text-emerald-300 font-bold flex items-center gap-1.5 bg-emerald-950/80 px-3 py-1 rounded-lg border border-emerald-600 animate-in fade-in">
               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
@@ -86,7 +114,7 @@ export const DemoModeBanner: React.FC = () => {
               title="Reset sample demo data back to default fresh state"
             >
               <RotateCcw className="w-3.5 h-3.5 text-amber-400" />
-              <span>ਡੈਮੋ ਡਾਟਾ ਰੀਸੈੱਟ ਕਰੋ (Reset Demo)</span>
+              <span>ਡੈਮੋ ਡਾਟਾ ਰੀਸੈੱਟ ਕਰੋ</span>
             </button>
           )}
         </div>
