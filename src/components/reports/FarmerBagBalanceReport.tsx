@@ -306,14 +306,52 @@ export const FarmerBagBalanceReport: React.FC = () => {
       const linkedSubFarmers = subFarmersByMainId.get(mainFarmer.id) || [];
       const subFarmerIdSet = new Set(linkedSubFarmers.map((s) => s.id));
 
-      const familyPurchases = purchasesByMainFarmer.get(mainFarmer.id) || [];
-      const ownPurchasesList = familyPurchases.filter((p) => !subFarmerIdSet.has(p.farmerId));
-
-      const totalBagsBrought = arrivalEntries.reduce((sum, b) => sum + getEntryBagsCount(b), 0);
-      const totalWeightBroughtKg = arrivalEntries.reduce((sum, b) => {
+      // Separate main farmer's own weighed arrivals from linked sub-farmers' weighed arrivals
+      const ownArrivalEntriesList = arrivalEntries.filter((b) => !subFarmerIdSet.has(b.farmerId));
+      const ownBagsBrought = ownArrivalEntriesList.reduce((sum, b) => sum + getEntryBagsCount(b), 0);
+      const ownWeightBroughtKg = ownArrivalEntriesList.reduce((sum, b) => {
         const safeWt = Number(b.grandTotalKg || b.totalBagsWeightKg) || (getEntryBagsCount(b) * 37.5);
         return sum + safeWt;
       }, 0);
+
+      const linkedFarmerArrivals = linkedSubFarmers.map((subFarmer) => {
+        const subArrivals = arrivalEntries.filter((b) => b.farmerId === subFarmer.id);
+        const subTotalBags = subArrivals.reduce((sum, b) => sum + getEntryBagsCount(b), 0);
+        const subTotalWeightKg = subArrivals.reduce((sum, b) => {
+          const safeWt = Number(b.grandTotalKg || b.totalBagsWeightKg) || (getEntryBagsCount(b) * 37.5);
+          return sum + safeWt;
+        }, 0);
+
+        return {
+          linkedFarmerId: subFarmer.id,
+          linkedFarmerName: subFarmer.farmerName,
+          linkedFarmerNamePa: subFarmer.farmerNamePa,
+          fatherName: subFarmer.fatherName,
+          village: subFarmer.village,
+          mobile: subFarmer.mobile,
+          entries: subArrivals.map((b) => ({
+            id: b.id,
+            entryNumber: b.entryNumber || (b as any).parchiNumber || '-',
+            date: b.date,
+            newBags: Number(b.newBags ?? (b.bardana === 'NEW' ? getEntryBagsCount(b) : 0)),
+            oldBags: Number(b.oldBags ?? (b.bardana === 'OLD' ? getEntryBagsCount(b) : 0)),
+            bags: getEntryBagsCount(b),
+            weightDisplay: b.grandTotalDisplay || b.totalBagsWeightDisplay || formatKgToQulKg(b.grandTotalKg || (getEntryBagsCount(b) * 37.5)).displayEn,
+            labourAmount: getEntryRecordedLabour(b)
+          })),
+          totalBags: subTotalBags,
+          totalWeightKg: subTotalWeightKg
+        };
+      });
+
+      const linkedBagsBrought = linkedFarmerArrivals.reduce((s, lf) => s + lf.totalBags, 0);
+      const linkedWeightBroughtKg = linkedFarmerArrivals.reduce((s, lf) => s + lf.totalWeightKg, 0);
+
+      const totalBagsBrought = ownBagsBrought + linkedBagsBrought;
+      const totalWeightBroughtKg = ownWeightBroughtKg + linkedWeightBroughtKg;
+
+      const familyPurchases = purchasesByMainFarmer.get(mainFarmer.id) || [];
+      const ownPurchasesList = familyPurchases.filter((p) => !subFarmerIdSet.has(p.farmerId));
 
       const ownPurchasedBags = ownPurchasesList.reduce((sum, p) => sum + (Number(p.bags) || 0), 0);
       const ownPurchasedWeightKg = ownPurchasesList.reduce((sum, p) => sum + (Number(p.totalWeightKg) || 0), 0);
@@ -400,6 +438,23 @@ export const FarmerBagBalanceReport: React.FC = () => {
         })),
         totalBagsBrought,
         totalWeightBroughtKg,
+        ownBagsBrought,
+        ownWeightBroughtKg,
+        ownArrivalEntries: ownArrivalEntriesList.map((b) => ({
+          id: b.id,
+          entryNumber: b.entryNumber || (b as any).parchiNumber || '-',
+          date: b.date,
+          newBags: Number(b.newBags ?? (b.bardana === 'NEW' ? getEntryBagsCount(b) : 0)),
+          oldBags: Number(b.oldBags ?? (b.bardana === 'OLD' ? getEntryBagsCount(b) : 0)),
+          bags: getEntryBagsCount(b),
+          weightDisplay: b.grandTotalDisplay || b.totalBagsWeightDisplay || formatKgToQulKg(b.grandTotalKg || (getEntryBagsCount(b) * 37.5)).displayEn,
+          labourAmount: getEntryRecordedLabour(b),
+          farmerId: b.farmerId,
+          farmerName: b.farmerName
+        })),
+        linkedBagsBrought,
+        linkedWeightBroughtKg,
+        linkedFarmerArrivals,
         arrivalEntries: arrivalEntries.map((b) => ({
           id: b.id,
           entryNumber: b.entryNumber || (b as any).parchiNumber || '-',
@@ -408,7 +463,9 @@ export const FarmerBagBalanceReport: React.FC = () => {
           oldBags: Number(b.oldBags ?? (b.bardana === 'OLD' ? getEntryBagsCount(b) : 0)),
           bags: getEntryBagsCount(b),
           weightDisplay: b.grandTotalDisplay || b.totalBagsWeightDisplay || formatKgToQulKg(b.grandTotalKg || (getEntryBagsCount(b) * 37.5)).displayEn,
-          labourAmount: getEntryRecordedLabour(b)
+          labourAmount: getEntryRecordedLabour(b),
+          farmerId: b.farmerId,
+          farmerName: b.farmerName
         })),
         ownPurchasedBags,
         ownPurchasedWeightKg,
@@ -497,6 +554,19 @@ export const FarmerBagBalanceReport: React.FC = () => {
       const labourBagsAdjustment = Math.ceil(rawLabourBags);
       const finalBalanceBags = balanceBeforeLabourBags - labourBagsAdjustment;
 
+      const fallbackArrivals = arrivalEntries.map((b) => ({
+        id: b.id,
+        entryNumber: b.entryNumber || (b as any).parchiNumber || '-',
+        date: b.date,
+        newBags: Number(b.newBags ?? (b.bardana === 'NEW' ? getEntryBagsCount(b) : 0)),
+        oldBags: Number(b.oldBags ?? (b.bardana === 'OLD' ? getEntryBagsCount(b) : 0)),
+        bags: getEntryBagsCount(b),
+        weightDisplay: b.grandTotalDisplay || b.totalBagsWeightDisplay || formatKgToQulKg(b.grandTotalKg || (getEntryBagsCount(b) * 37.5)).displayEn,
+        labourAmount: getEntryRecordedLabour(b),
+        farmerId: b.farmerId,
+        farmerName: b.farmerName
+      }));
+
       items.push({
         farmerId,
         farmerName,
@@ -509,16 +579,13 @@ export const FarmerBagBalanceReport: React.FC = () => {
         linkedFarmers: [],
         totalBagsBrought,
         totalWeightBroughtKg,
-        arrivalEntries: arrivalEntries.map((b) => ({
-          id: b.id,
-          entryNumber: b.entryNumber || (b as any).parchiNumber || '-',
-          date: b.date,
-          newBags: Number(b.newBags ?? (b.bardana === 'NEW' ? getEntryBagsCount(b) : 0)),
-          oldBags: Number(b.oldBags ?? (b.bardana === 'OLD' ? getEntryBagsCount(b) : 0)),
-          bags: getEntryBagsCount(b),
-          weightDisplay: b.grandTotalDisplay || b.totalBagsWeightDisplay || formatKgToQulKg(b.grandTotalKg || (getEntryBagsCount(b) * 37.5)).displayEn,
-          labourAmount: getEntryRecordedLabour(b)
-        })),
+        ownBagsBrought: totalBagsBrought,
+        ownWeightBroughtKg: totalWeightBroughtKg,
+        ownArrivalEntries: fallbackArrivals,
+        linkedBagsBrought: 0,
+        linkedWeightBroughtKg: 0,
+        linkedFarmerArrivals: [],
+        arrivalEntries: fallbackArrivals,
         ownPurchasedBags,
         ownPurchasedWeightKg,
         ownPurchases: purchasesList.map((p) => ({
@@ -586,6 +653,8 @@ export const FarmerBagBalanceReport: React.FC = () => {
     return filteredData.reduce(
       (acc, item) => ({
         totalBagsBrought: acc.totalBagsBrought + item.totalBagsBrought,
+        totalOwnBagsBrought: acc.totalOwnBagsBrought + (item.ownBagsBrought ?? item.totalBagsBrought),
+        totalLinkedBagsBrought: acc.totalLinkedBagsBrought + (item.linkedBagsBrought ?? 0),
         totalOwnPurchase: acc.totalOwnPurchase + item.ownPurchasedBags,
         totalLinkedFarmerPurchase: acc.totalLinkedFarmerPurchase + item.linkedPurchasedBags,
         totalPurchase: acc.totalPurchase + item.totalPurchasedBags,
@@ -595,6 +664,8 @@ export const FarmerBagBalanceReport: React.FC = () => {
       }),
       {
         totalBagsBrought: 0,
+        totalOwnBagsBrought: 0,
+        totalLinkedBagsBrought: 0,
         totalOwnPurchase: 0,
         totalLinkedFarmerPurchase: 0,
         totalPurchase: 0,
@@ -1007,9 +1078,15 @@ export const FarmerBagBalanceReport: React.FC = () => {
           <span className="text-xl font-black text-slate-900 mt-0.5 block">
             {grandTotals.totalBagsBrought.toLocaleString('en-IN')}
           </span>
-          <span className="text-[10px] text-slate-500">
-            {formatKgToQulKg(grandTotals.totalBagsBrought * (settings.fixedBagWeightKg || 37.5)).displayEn}
-          </span>
+          <div className="text-[10px] text-slate-500 flex items-center gap-1.5 flex-wrap mt-0.5 font-medium">
+            <span className="text-emerald-700 font-bold" title="Main Farmer Own Weighment">
+              {isEn ? 'Own' : 'ਆਪਣੀ'}: {grandTotals.totalOwnBagsBrought.toLocaleString('en-IN')}
+            </span>
+            <span>•</span>
+            <span className="text-amber-700 font-bold" title="Linked Sub-Farmers Weighment">
+              {isEn ? 'Linked' : 'ਸੰਬੰਧਿਤ'}: {grandTotals.totalLinkedBagsBrought.toLocaleString('en-IN')}
+            </span>
+          </div>
         </div>
 
         <div className="bg-white border border-slate-200 rounded-xl p-3 shadow-2xs">
@@ -1063,8 +1140,8 @@ export const FarmerBagBalanceReport: React.FC = () => {
                 <th className="py-3 px-3 min-w-[200px]">
                   {isEn ? 'Main Farmer Name' : 'ਮੁੱਖ ਕਿਸਾਨ ਦਾ ਨਾਂ'}
                 </th>
-                <th className="py-3 px-2 text-right min-w-[90px]">
-                  {isEn ? 'Total Brought' : 'ਕੁੱਲ ਆਮਦ'}
+                <th className="py-3 px-2 text-right min-w-[100px]">
+                  {isEn ? 'Total Brought (Bags)' : 'ਕੁੱਲ ਆਮਦ (ਤੋਲਾ)'}
                 </th>
                 <th className="py-3 px-2 text-right min-w-[85px]">
                   {isEn ? 'Own Purchase' : 'ਆਪਣੀ ਖਰੀਦ'}
@@ -1168,9 +1245,21 @@ export const FarmerBagBalanceReport: React.FC = () => {
                         {/* 3. Total Bags Brought */}
                         <td className="py-3 px-2 text-right">
                           <span className="font-bold text-slate-900 text-sm">{item.totalBagsBrought}</span>
-                          <span className="block text-[10px] text-slate-400">
-                            {formatKgToQulKg(item.totalWeightBroughtKg).displayEn}
-                          </span>
+                          {item.linkedFarmers.length > 0 ? (
+                            <div className="text-[10px] font-semibold flex items-center justify-end gap-1 mt-0.5">
+                              <span className="text-emerald-700" title={isEn ? "Main Farmer's Own Weighment" : "ਮੁੱਖ ਕਿਸਾਨ ਦੀ ਆਪਣੀ ਤੁਲਾਈ"}>
+                                {isEn ? 'Own' : 'ਆ'}: {item.ownBagsBrought}
+                              </span>
+                              <span className="text-slate-300">|</span>
+                              <span className={item.linkedBagsBrought > 0 ? 'text-amber-700 font-bold' : 'text-slate-400'} title={isEn ? "Linked Farmers' Weighment" : "ਸੰਬੰਧਿਤ ਕਿਸਾਨਾਂ ਦੀ ਤੁਲਾਈ"}>
+                                {isEn ? 'Lnk' : 'ਸੰ'}: {item.linkedBagsBrought}
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="block text-[10px] text-slate-400">
+                              {formatKgToQulKg(item.totalWeightBroughtKg).displayEn}
+                            </span>
+                          )}
                         </td>
 
                         {/* 4. Own Farmer Purchase */}
@@ -1314,51 +1403,170 @@ export const FarmerBagBalanceReport: React.FC = () => {
                                 </div>
                               </div>
 
-                              {/* 1. Total Bags Brought by Main Farmer */}
-                              <div className="bg-white border border-slate-200 rounded-lg p-3">
-                                <div className="flex items-center justify-between mb-2">
-                                  <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
-                                    <Package className="w-4 h-4 text-emerald-700" />
-                                    <span>
-                                      1. {isEn ? 'Total Bags Brought to Mandi' : 'ਮੰਡੀ ਆਮਦ ਤੁਲਾਈ ਵੇਰਵਾ'} (
-                                      {item.totalBagsBrought} Bags)
+                              {/* 1. Mandi Arrival & Weighment Breakdown (Tola Bags) */}
+                              <div className="bg-white border border-slate-200 rounded-lg p-3 space-y-3">
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-2 border-b border-slate-200 gap-2">
+                                  <div>
+                                    <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                                      <Package className="w-4 h-4 text-emerald-700" />
+                                      <span>
+                                        1. {isEn ? 'Mandi Arrival & Weighment Details' : 'ਮੰਡੀ ਆਮਦ ਤੁਲਾਈ ਵੇਰਵਾ (ਤੋਲਾ)'}
+                                      </span>
+                                    </h4>
+                                    <p className="text-[11px] text-slate-500 mt-0.5">
+                                      {isEn
+                                        ? 'Main farmer and linked sub-farmers weighment slips are kept completely distinct'
+                                        : 'ਮੁੱਖ ਕਿਸਾਨ ਅਤੇ ਸੰਬੰਧਿਤ ਕਿਸਾਨਾਂ ਦੀਆਂ ਤੁਲਾਈ ਪਰਚੀਆਂ ਵੱਖ-ਵੱਖ ਦਰਸਾਈਆਂ ਗਈਆਂ ਹਨ'}
+                                    </p>
+                                  </div>
+
+                                  <div className="flex items-center gap-2 flex-wrap text-xs">
+                                    <span className="px-2.5 py-1 bg-slate-900 text-white font-black rounded-md">
+                                      {isEn ? 'Total' : 'ਕੁੱਲ ਤੋਲਾ'}: {item.totalBagsBrought} Bags ({formatKgToQulKg(item.totalWeightBroughtKg).displayEn})
                                     </span>
-                                  </h4>
-                                  <span className="text-xs font-bold text-slate-700">
-                                    {formatKgToQulKg(item.totalWeightBroughtKg).displayEn}
-                                  </span>
+                                    <span className="px-2.5 py-1 bg-emerald-50 text-emerald-900 border border-emerald-300 font-bold rounded-md">
+                                      {isEn ? 'Own' : 'ਆਪਣੀ ਤੁਲਾਈ'}: {item.ownBagsBrought}
+                                    </span>
+                                    {item.linkedFarmers.length > 0 && (
+                                      <span className="px-2.5 py-1 bg-amber-50 text-amber-900 border border-amber-300 font-bold rounded-md">
+                                        {isEn ? 'Linked' : 'ਸੰਬੰਧਿਤ ਤੁਲਾਈ'}: {item.linkedBagsBrought}
+                                      </span>
+                                    )}
+                                  </div>
                                 </div>
 
-                                <div className="overflow-x-auto">
-                                  <table className="w-full text-left text-xs border-collapse">
-                                    <thead>
-                                      <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 text-[11px]">
-                                        <th className="py-1.5 px-2">Parchi / Entry #</th>
-                                        <th className="py-1.5 px-2">Date</th>
-                                        <th className="py-1.5 px-2 text-right">New Juths</th>
-                                        <th className="py-1.5 px-2 text-right">Old Juths</th>
-                                        <th className="py-1.5 px-2 text-right">Total Bags</th>
-                                        <th className="py-1.5 px-2 text-right">Weight (Qtl/Kg)</th>
-                                        <th className="py-1.5 px-2 text-right">Recorded Labour</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-100">
-                                      {item.arrivalEntries.map((arr, i) => (
-                                        <tr key={arr.id || i} className="hover:bg-slate-50">
-                                          <td className="py-1.5 px-2 font-medium">{arr.entryNumber}</td>
-                                          <td className="py-1.5 px-2">{arr.date}</td>
-                                          <td className="py-1.5 px-2 text-right text-slate-600">{arr.newBags}</td>
-                                          <td className="py-1.5 px-2 text-right text-slate-600">{arr.oldBags}</td>
-                                          <td className="py-1.5 px-2 text-right font-bold text-slate-900">{arr.bags}</td>
-                                          <td className="py-1.5 px-2 text-right font-medium">{arr.weightDisplay}</td>
-                                          <td className="py-1.5 px-2 text-right text-slate-700">
-                                            ₹{Math.round(arr.labourAmount).toLocaleString('en-IN')}
-                                          </td>
-                                        </tr>
-                                      ))}
-                                    </tbody>
-                                  </table>
+                                {/* 1A. Main Farmer's Own Weighment */}
+                                <div className="border border-emerald-200 rounded-lg p-2.5 bg-emerald-50/20">
+                                  <div className="flex items-center justify-between mb-1.5">
+                                    <div className="flex items-center gap-1.5">
+                                      <div className="w-2 h-2 rounded-full bg-emerald-600" />
+                                      <span className="text-xs font-bold text-slate-900">
+                                        1A. {isEn ? "Main Farmer's Own Weighment" : 'ਮੁੱਖ ਕਿਸਾਨ ਦੀ ਆਪਣੀ ਤੁਲਾਈ'}:{' '}
+                                        <strong className="text-emerald-800">{item.farmerName} {item.farmerNamePa ? `(${item.farmerNamePa})` : ''}</strong>
+                                      </span>
+                                    </div>
+                                    <span className="text-xs font-black text-emerald-900 bg-emerald-100 px-2 py-0.5 rounded">
+                                      {item.ownBagsBrought} Bags ({formatKgToQulKg(item.ownWeightBroughtKg).displayEn})
+                                    </span>
+                                  </div>
+
+                                  {item.ownArrivalEntries.length === 0 ? (
+                                    <p className="text-xs text-slate-400 italic py-2">
+                                      {isEn
+                                        ? 'No weighment entries recorded directly under main farmer name.'
+                                        : 'ਮੁੱਖ ਕਿਸਾਨ ਦੇ ਨਾਂ ਉੱਤੇ ਸਿੱਧੀ ਕੋਈ ਤੁਲਾਈ ਪਰਚੀ ਨਹੀਂ ਹੈ (ਸਾਰਾ ਮਾਲ ਸੰਬੰਧਿਤ ਕਿਸਾਨਾਂ ਦਾ ਹੈ)।'}
+                                    </p>
+                                  ) : (
+                                    <div className="overflow-x-auto">
+                                      <table className="w-full text-left text-xs border-collapse bg-white rounded border border-slate-200">
+                                        <thead>
+                                          <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 text-[11px]">
+                                            <th className="py-1.5 px-2">Parchi / Entry #</th>
+                                            <th className="py-1.5 px-2">Date</th>
+                                            <th className="py-1.5 px-2 text-right">New Juths</th>
+                                            <th className="py-1.5 px-2 text-right">Old Juths</th>
+                                            <th className="py-1.5 px-2 text-right">Total Bags</th>
+                                            <th className="py-1.5 px-2 text-right">Weight (Qtl/Kg)</th>
+                                            <th className="py-1.5 px-2 text-right">Recorded Labour</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100">
+                                          {item.ownArrivalEntries.map((arr, i) => (
+                                            <tr key={arr.id || i} className="hover:bg-slate-50">
+                                              <td className="py-1.5 px-2 font-medium">{arr.entryNumber}</td>
+                                              <td className="py-1.5 px-2">{arr.date}</td>
+                                              <td className="py-1.5 px-2 text-right text-slate-600">{arr.newBags}</td>
+                                              <td className="py-1.5 px-2 text-right text-slate-600">{arr.oldBags}</td>
+                                              <td className="py-1.5 px-2 text-right font-bold text-slate-900">{arr.bags}</td>
+                                              <td className="py-1.5 px-2 text-right font-medium">{arr.weightDisplay}</td>
+                                              <td className="py-1.5 px-2 text-right text-slate-700">
+                                                ₹{Math.round(arr.labourAmount).toLocaleString('en-IN')}
+                                              </td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  )}
                                 </div>
+
+                                {/* 1B. Linked Sub-Farmers' Separate Weighment */}
+                                {item.linkedFarmers.length > 0 && (
+                                  <div className="border border-amber-200 rounded-lg p-2.5 bg-amber-50/20 space-y-2.5">
+                                    <div className="flex items-center justify-between pb-1 border-b border-amber-200">
+                                      <div className="flex items-center gap-1.5">
+                                        <div className="w-2 h-2 rounded-full bg-amber-600" />
+                                        <span className="text-xs font-bold text-slate-900">
+                                          1B. {isEn ? "Linked Sub-Farmers' Separate Weighment" : 'ਸੰਬੰਧਿਤ ਕਿਸਾਨਾਂ ਦੀ ਵੱਖਰੀ ਤੁਲਾਈ (ਤੋਲਾ)'}
+                                        </span>
+                                      </div>
+                                      <span className="text-xs font-black text-amber-900 bg-amber-100 px-2 py-0.5 rounded border border-amber-300">
+                                        {item.linkedBagsBrought} Bags ({formatKgToQulKg(item.linkedWeightBroughtKg).displayEn})
+                                      </span>
+                                    </div>
+
+                                    <div className="space-y-2">
+                                      {item.linkedFarmerArrivals.map((lfa) => (
+                                        <div
+                                          key={lfa.linkedFarmerId}
+                                          className="border border-slate-200 rounded-md p-2 bg-white"
+                                        >
+                                          <div className="flex items-center justify-between pb-1 border-b border-slate-100">
+                                            <div>
+                                              <span className="font-bold text-slate-900 text-xs">
+                                                {lfa.linkedFarmerName}
+                                                {lfa.linkedFarmerNamePa ? ` (${lfa.linkedFarmerNamePa})` : ''}
+                                              </span>
+                                              <span className="text-[11px] text-slate-500 ml-2">
+                                                S/o: {lfa.fatherName || '-'} | Village: {lfa.village || '-'} | Mobile: {lfa.mobile || '-'}
+                                              </span>
+                                            </div>
+                                            <div className="text-xs font-black text-amber-900 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                                              {lfa.totalBags} Bags • {formatKgToQulKg(lfa.totalWeightKg).displayEn}
+                                            </div>
+                                          </div>
+
+                                          {lfa.entries.length === 0 ? (
+                                            <p className="text-[11px] text-slate-400 italic py-1 mt-1">
+                                              {isEn
+                                                ? 'No weighment slips recorded directly under this linked farmer.'
+                                                : 'ਇਸ ਸੰਬੰਧਿਤ ਕਿਸਾਨ ਦੇ ਨਾਂ ਉੱਤੇ ਕੋਈ ਤੁਲਾਈ ਪਰਚੀ ਨਹੀਂ ਹੈ।'}
+                                            </p>
+                                          ) : (
+                                            <table className="w-full text-left text-[11px] border-collapse mt-1.5">
+                                              <thead>
+                                                <tr className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
+                                                  <th className="py-1 px-1.5">Parchi / Entry #</th>
+                                                  <th className="py-1 px-1.5">Date</th>
+                                                  <th className="py-1 px-1.5 text-right">New Juths</th>
+                                                  <th className="py-1 px-1.5 text-right">Old Juths</th>
+                                                  <th className="py-1 px-1.5 text-right">Total Bags</th>
+                                                  <th className="py-1 px-1.5 text-right">Weight (Qtl/Kg)</th>
+                                                  <th className="py-1 px-1.5 text-right">Recorded Labour</th>
+                                                </tr>
+                                              </thead>
+                                              <tbody className="divide-y divide-slate-100">
+                                                {lfa.entries.map((arr, i) => (
+                                                  <tr key={arr.id || i} className="hover:bg-slate-50">
+                                                    <td className="py-1 px-1.5 font-medium">{arr.entryNumber}</td>
+                                                    <td className="py-1 px-1.5">{arr.date}</td>
+                                                    <td className="py-1 px-1.5 text-right text-slate-600">{arr.newBags}</td>
+                                                    <td className="py-1 px-1.5 text-right text-slate-600">{arr.oldBags}</td>
+                                                    <td className="py-1 px-1.5 text-right font-bold text-slate-900">{arr.bags}</td>
+                                                    <td className="py-1 px-1.5 text-right font-medium">{arr.weightDisplay}</td>
+                                                    <td className="py-1 px-1.5 text-right text-slate-700">
+                                                      ₹{Math.round(arr.labourAmount).toLocaleString('en-IN')}
+                                                    </td>
+                                                  </tr>
+                                                ))}
+                                              </tbody>
+                                            </table>
+                                          )}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
                               </div>
 
                               {/* 2. Own Farmer Purchases */}
