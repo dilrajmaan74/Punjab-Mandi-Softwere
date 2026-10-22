@@ -42,9 +42,9 @@ export function getMandiBranchDropdownLabel(
 ): string {
   if (!firmOrId) return MANDI_BRANCH_CONFIGS[0].dropdownLabel;
 
-  const id = typeof firmOrId === 'string' ? firmOrId : firmOrId.id;
-  const name = typeof firmOrId === 'object' ? (firmOrId.name || '') : '';
-  const namePa = typeof firmOrId === 'object' ? (firmOrId.namePa || '') : '';
+  const id = typeof firmOrId === 'string' ? firmOrId : (firmOrId?.id || '');
+  const name = typeof firmOrId === 'object' && firmOrId ? (firmOrId.name || '') : '';
+  const namePa = typeof firmOrId === 'object' && firmOrId ? (firmOrId.namePa || '') : '';
 
   if (id === 'DEMO-FIRM-001' || id === 'FIRM-001') {
     return '[ MANDI BRANCH: MAIN GRAIN MARKET (ਮੁੱਖ ਦਾਣਾ ਮੰਡੀ) ]';
@@ -53,11 +53,11 @@ export function getMandiBranchDropdownLabel(
     return '[ MANDI BRANCH: DANA MANDI BRANCH 2 (ਦਾਣਾ ਮੰਡੀ ਬ੍ਰਾਂਚ 2) ]';
   }
 
-  if (typeof firmOrId === 'object' && firmOrId.name) {
+  if (typeof firmOrId === 'object' && firmOrId?.name) {
     const labelPa = namePa ? ` (${namePa})` : '';
     return `[ MANDI BRANCH: ${firmOrId.name.toUpperCase()}${labelPa} ]`;
   }
-  return `[ MANDI BRANCH: ${id} ]`;
+  return `[ MANDI BRANCH: ${id || 'BRANCH'} ]`;
 }
 
 /**
@@ -71,9 +71,9 @@ export function getMandiBranchPlainLabel(
     return 'ALL MANDIS (ਸਾਰੀਆਂ ਮੰਡੀਆਂ: ਮੁੱਖ ਮੰਡੀ • ਬ੍ਰਾਂਚ 2)';
   }
 
-  const id = typeof firmOrId === 'string' ? firmOrId : firmOrId.id;
-  const name = typeof firmOrId === 'object' ? (firmOrId.name || '') : '';
-  const namePa = typeof firmOrId === 'object' ? (firmOrId.namePa || '') : '';
+  const id = typeof firmOrId === 'string' ? firmOrId : (firmOrId?.id || '');
+  const name = typeof firmOrId === 'object' && firmOrId ? (firmOrId.name || '') : '';
+  const namePa = typeof firmOrId === 'object' && firmOrId ? (firmOrId.namePa || '') : '';
 
   if (id === 'DEMO-FIRM-001' || id === 'FIRM-001') {
     return 'MAIN GRAIN MARKET (ਮੁੱਖ ਦਾਣਾ ਮੰਡੀ)';
@@ -82,8 +82,8 @@ export function getMandiBranchPlainLabel(
     return 'DANA MANDI BRANCH 2 (ਦਾਣਾ ਮੰਡੀ ਬ੍ਰਾਂਚ 2)';
   }
 
-  if (typeof firmOrId === 'object' && firmOrId.name) {
+  if (typeof firmOrId === 'object' && firmOrId?.name) {
     return namePa ? `${firmOrId.name} (${namePa})` : firmOrId.name;
   }
-  return id;
+  return id || 'BRANCH';
 }

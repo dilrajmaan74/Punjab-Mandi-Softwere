@@ -4771,8 +4771,9 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (!cleanQ) return [];
 
     return trucks.filter((t) => {
-      const cleanTruck = t.truckNo.replace(/[^A-Z0-9]/g, '');
-      return cleanTruck.endsWith(cleanQ) || cleanTruck.includes(cleanQ) || t.truckNo.includes(query.trim().toUpperCase());
+      if (!t || !t.truckNo) return false;
+      const cleanTruck = (t.truckNo || '').replace(/[^A-Z0-9]/g, '');
+      return cleanTruck.endsWith(cleanQ) || cleanTruck.includes(cleanQ) || (t.truckNo || '').includes(query.trim().toUpperCase());
     });
   };
 

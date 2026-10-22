@@ -400,7 +400,7 @@ export const AgencyLiftingReport: React.FC = () => {
               <option value="ALL" className="font-bold py-1">
                 {ALL_MANDIS_DROPDOWN_LABEL}
               </option>
-              {firms.map((f) => (
+              {firms.filter(Boolean).map((f) => (
                 <option key={f.id} value={f.id} className="font-bold py-1">
                   {getMandiBranchDropdownLabel(f)}
                 </option>
@@ -419,7 +419,8 @@ export const AgencyLiftingReport: React.FC = () => {
           >
             🌟 ਸਾਰੀਆਂ ਮੰਡੀਆਂ
           </button>
-          {firms.map((f) => {
+          {firms.filter(Boolean).map((f) => {
+            if (!f) return null;
             const isSelected = selectedMandiFilter === f.id;
             const fName = f?.name || '';
             const fAddress = f?.address || '';

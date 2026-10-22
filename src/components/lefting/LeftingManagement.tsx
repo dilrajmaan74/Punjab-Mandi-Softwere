@@ -446,7 +446,7 @@ export const LeftingManagement: React.FC = () => {
   }).sort((a, b) => {
     const d = compareDatesChronological(a.dispatchDate || a.date, b.dispatchDate || b.date, 'ASC');
     if (d !== 0) return d;
-    return a.id.localeCompare(b.id);
+    return (a?.id || '').localeCompare(b?.id || '');
   });
 
   return (
@@ -1127,7 +1127,8 @@ export const LeftingManagement: React.FC = () => {
                 <option value="ALL" className="font-bold py-1">
                   {ALL_MANDIS_DROPDOWN_LABEL} ({leftingRecords.length} ਬਿਲਟੀਆਂ)
                 </option>
-                {firms.map((f) => {
+                {firms.filter(Boolean).map((f) => {
+                  if (!f) return null;
                   const count = leftingRecords.filter((r) => (r.firmId || 'FIRM-001') === f.id).length;
                   return (
                     <option key={f.id} value={f.id} className="font-bold py-1">
@@ -1150,7 +1151,8 @@ export const LeftingManagement: React.FC = () => {
             >
               🌟 ਸਾਰੀਆਂ ਮੰਡੀਆਂ
             </button>
-            {firms.map((f) => {
+            {firms.filter(Boolean).map((f) => {
+              if (!f) return null;
               const isSelected = selectedMandiFilter === f.id;
               const fName = f?.name || '';
               const fAddress = f?.address || '';
