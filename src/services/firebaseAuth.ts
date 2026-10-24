@@ -51,7 +51,9 @@ export const initAuth = (
 
 export const requestGoogleAccessTokenViaGis = async (
   clientId: string = firebaseConfig.oAuthClientId,
-  scopes: string = 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file'
+  scopes: string = 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file',
+  loginHint: string = 'dilrajmaan74@gmail.com',
+  isSilent: boolean = false
 ): Promise<{ user: User; accessToken: string }> => {
   return new Promise((resolve, reject) => {
     const google = (window as any).google;
@@ -64,7 +66,8 @@ export const requestGoogleAccessTokenViaGis = async (
       const tokenClient = google.accounts.oauth2.initTokenClient({
         client_id: clientId,
         scope: scopes,
-        prompt: 'consent',
+        prompt: isSilent ? '' : 'select_account',
+        hint: loginHint,
         callback: async (resp: any) => {
           if (resp.error) {
             reject(new Error(resp.error_description || resp.error));
@@ -80,7 +83,7 @@ export const requestGoogleAccessTokenViaGis = async (
           cachedTokenExpiry = Date.now() + expiresIn * 1000;
 
           // Attempt to fetch user profile info
-          let userEmail = 'dilrajmaan74@gmail.com';
+          let userEmail = loginHint || 'dilrajmaan74@gmail.com';
           let displayName = 'Google User';
           try {
             const userInfoResp = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
@@ -105,7 +108,7 @@ export const requestGoogleAccessTokenViaGis = async (
           });
         }
       });
-      tokenClient.requestAccessToken();
+      tokenClient.requestAccessToken({ prompt: isSilent ? '' : 'select_account', hint: loginHint });
     } catch (err) {
       reject(err);
     }
@@ -115,6 +118,15 @@ export const requestGoogleAccessTokenViaGis = async (
 export const googleSignIn = async (): Promise<{ user: User; accessToken: string }> => {
   try {
     isSigningIn = true;
+    // Prefer GIS Token Client directly if available to prevent browser popup blocking
+    if ((window as any).google?.accounts?.oauth2 && firebaseConfig.oAuthClientId) {
+      try {
+        return await requestGoogleAccessTokenViaGis(firebaseConfig.oAuthClientId, undefined, 'dilrajmaan74@gmail.com', false);
+      } catch (gisErr) {
+        console.warn('GIS direct sign-in notice, falling back to popup:', gisErr);
+      }
+    }
+
     try {
       const result = await signInWithPopup(auth, provider);
       const credential = GoogleAuthProvider.credentialFromResult(result);
@@ -124,9 +136,9 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
         return { user: result.user, accessToken: cachedAccessToken };
       }
     } catch (popupErr: any) {
-      console.warn('Firebase signInWithPopup failed, falling back to GIS Token Client:', popupErr?.code || popupErr?.message);
+      console.warn('Firebase popup attempt notice:', popupErr?.code || popupErr?.message);
       if ((window as any).google?.accounts?.oauth2 && firebaseConfig.oAuthClientId) {
-        return await requestGoogleAccessTokenViaGis(firebaseConfig.oAuthClientId);
+        return await requestGoogleAccessTokenViaGis(firebaseConfig.oAuthClientId, undefined, 'dilrajmaan74@gmail.com', false);
       }
       throw popupErr;
     }

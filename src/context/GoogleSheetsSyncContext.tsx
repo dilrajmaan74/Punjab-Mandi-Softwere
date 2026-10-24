@@ -33,7 +33,9 @@ import {
   googleSignIn,
   getAccessToken,
   setCachedAccessToken,
-  logoutGoogle
+  logoutGoogle,
+  requestGoogleAccessTokenViaGis,
+  firebaseConfig
 } from '../services/firebaseAuth';
 import {
   getSameFarmerAdjustments,
@@ -127,6 +129,24 @@ export const GoogleSheetsSyncProvider: React.FC<{ children: React.ReactNode }> =
           if (tok) {
             setAccessToken(tok);
             if (spreadsheetId) setSyncStatus('connected');
+          } else {
+            // Attempt automatic silent Google account connection via GIS for dilrajmaan74@gmail.com
+            setTimeout(() => {
+              if ((window as any).google?.accounts?.oauth2 && firebaseConfig.oAuthClientId) {
+                requestGoogleAccessTokenViaGis(
+                  firebaseConfig.oAuthClientId,
+                  undefined,
+                  'dilrajmaan74@gmail.com',
+                  true
+                ).then((res) => {
+                  setCurrentUser(res.user);
+                  setAccessToken(res.accessToken);
+                  setSyncStatus('connected');
+                }).catch(() => {
+                  // Silent attempt did not succeed, user can click to connect
+                });
+              }
+            }, 1000);
           }
         });
       }
