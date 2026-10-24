@@ -19,6 +19,7 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import {
   getSupabaseUrl,
+  setSupabaseUrlLocal,
   getSupabaseAnonKey,
   setSupabaseAnonKeyLocal,
   isSupabaseConfigured
@@ -41,6 +42,7 @@ export const SupabaseStrictLoginLock: React.FC = () => {
 
   // Optional collapsible key editor
   const [showKeyConfig, setShowKeyConfig] = useState<boolean>(false);
+  const [customUrl, setCustomUrl] = useState<string>(getSupabaseUrl());
   const [customKey, setCustomKey] = useState<string>(getSupabaseAnonKey());
   const [keySaveNotice, setKeySaveNotice] = useState<string | null>(null);
 
@@ -102,8 +104,11 @@ export const SupabaseStrictLoginLock: React.FC = () => {
 
   const handleSaveKey = () => {
     try {
+      if (customUrl && customUrl.trim().startsWith('http')) {
+        setSupabaseUrlLocal(customUrl.trim());
+      }
       setSupabaseAnonKeyLocal(customKey.trim());
-      setKeySaveNotice('ਸੁਪਾਬੇਸ ਕੁੰਜੀ ਸਫਲਤਾਪੂਰਵਕ ਸੁਰੱਖਿਅਤ ਹੋ ਗਈ!');
+      setKeySaveNotice('ਸੁਪਾਬੇਸ URL ਅਤੇ ਕੁੰਜੀ ਸਫਲਤਾਪੂਰਵਕ ਸੁਰੱਖਿਅਤ ਹੋ ਗਏ!');
       setTimeout(() => setKeySaveNotice(null), 2500);
     } catch (err: any) {
       setErrorMessage(err.message || 'ਕੁੰਜੀ ਸੁਰੱਖਿਅਤ ਕਰਨ ਵਿੱਚ ਅਸਫਲ');
@@ -390,10 +395,30 @@ export const SupabaseStrictLoginLock: React.FC = () => {
             </button>
 
             {showKeyConfig && (
-              <div className="mt-3 p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-2 text-xs">
-                <div className="text-[10px] text-slate-400">
-                  ਪ੍ਰੋਜੈਕਟ URL: <span className="font-mono text-emerald-400">{getSupabaseUrl()}</span>
+              <div className="mt-3 p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-2.5 text-xs">
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[11px] font-bold text-slate-300">
+                      ਸੁਪਾਬੇਸ ਪ੍ਰੋਜੈਕਟ URL (Supabase Project URL):
+                    </label>
+                    <a
+                      href="https://supabase.com/dashboard/project/bktiuuxunjadogposalb"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[10px] text-amber-400 hover:underline flex items-center gap-1 font-medium"
+                    >
+                      Unpause / Restore Project ↗
+                    </a>
+                  </div>
+                  <input
+                    type="text"
+                    value={customUrl}
+                    onChange={(e) => setCustomUrl(e.target.value)}
+                    placeholder="https://your-project.supabase.co"
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                  />
                 </div>
+
                 <div>
                   <label className="text-[11px] font-bold text-slate-300 block mb-1">
                     Supabase Publishable / Anon Key:
@@ -409,13 +434,13 @@ export const SupabaseStrictLoginLock: React.FC = () => {
                     <button
                       type="button"
                       onClick={handleSaveKey}
-                      className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-bold transition shrink-0"
+                      className="px-3.5 py-1.5 bg-emerald-700 hover:bg-emerald-600 text-white rounded-lg text-xs font-bold transition shrink-0 cursor-pointer shadow-xs"
                     >
-                      ਸੇਵ
+                      ਸੇਵ ਕਰੋ
                     </button>
                   </div>
                   {keySaveNotice && (
-                    <p className="text-[11px] text-emerald-400 font-bold mt-1">{keySaveNotice}</p>
+                    <p className="text-[11px] text-emerald-400 font-bold mt-1.5">{keySaveNotice}</p>
                   )}
                 </div>
               </div>

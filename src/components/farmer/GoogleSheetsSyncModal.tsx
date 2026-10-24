@@ -76,6 +76,10 @@ export const GoogleSheetsSyncModal: React.FC<GoogleSheetsSyncModalProps> = ({ is
     importFromGoogleSheets,
     conflicts,
     resolveConflict,
+    resolveAllConflicts,
+    clearAllConflicts,
+    popupBlockedNotice,
+    setPopupBlockedNotice,
     auditLogs,
     tableStats,
     latestImportResult,
@@ -420,7 +424,7 @@ export const GoogleSheetsSyncModal: React.FC<GoogleSheetsSyncModalProps> = ({ is
                 <>
                   {/* Official Google Sign In Button */}
                   <button
-                    onClick={() => signInWithGoogle().catch(() => setShowManualToken(true))}
+                    onClick={() => signInWithGoogle()}
                     disabled={isAuthenticating}
                     className="flex items-center gap-2 px-3.5 py-2 bg-white hover:bg-slate-50 border border-slate-300 rounded-lg text-xs font-bold text-slate-700 shadow-2xs transition cursor-pointer"
                   >
@@ -484,6 +488,50 @@ export const GoogleSheetsSyncModal: React.FC<GoogleSheetsSyncModalProps> = ({ is
               )}
             </div>
           </div>
+
+          {/* Popup Blocked Guidance Banner */}
+          {popupBlockedNotice && !accessToken && (
+            <div className="bg-amber-50 border border-amber-300 rounded-xl p-3.5 space-y-2 text-xs">
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <p className="font-bold text-amber-900">
+                      {isEn ? 'Google Sign-In Popup Blocked' : 'ਬ੍ਰਾਊਜ਼ਰ ਨੇ ਗੂਗਲ ਸਾਈਨ-ਇਨ ਪੌਪਅੱਪ ਰੋਕਿਆ'}
+                    </p>
+                    <p className="text-[11px] text-amber-800 leading-relaxed">
+                      {isEn
+                        ? 'Browsers block popups inside preview iframes. You can (1) click the popup blocker icon in your browser address bar to allow popups, or (2) enter an OAuth Access Token directly below.'
+                        : 'ਪ੍ਰੀਵਿਊ ਫਰੇਮ ਵਿੱਚ ਬ੍ਰਾਊਜ਼ਰ ਵੱਲੋਂ ਪੌਪਅੱਪ ਰੋਕਿਆ ਜਾਂਦਾ ਹੈ। ਤੁਸੀਂ ਬ੍ਰਾਊਜ਼ਰ ਵਿੱਚ ਪੌਪਅੱਪ ਦੀ ਇਜਾਜ਼ਤ ਦੇ ਸਕਦੇ ਹੋ ਜਾਂ ਹੇਠਾਂ ਸਿੱਧਾ ਟੋਕਨ ਦਾਖਲ ਕਰ ਸਕਦੇ ਹੋ।'}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setPopupBlockedNotice(false)}
+                  className="text-amber-700 hover:text-amber-900 cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+              <div className="flex items-center gap-2 pt-1">
+                <button
+                  onClick={() => setShowManualToken(true)}
+                  className="px-3 py-1.5 bg-amber-700 hover:bg-amber-800 text-white rounded-lg font-bold text-xs cursor-pointer shadow-2xs"
+                >
+                  {isEn ? 'Enter Direct OAuth Token' : 'OAuth ਟੋਕਨ ਦਾਖਲ ਕਰੋ'}
+                </button>
+                <button
+                  onClick={() => {
+                    setPopupBlockedNotice(false);
+                    signInWithGoogle();
+                  }}
+                  className="px-3 py-1.5 bg-white hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-lg font-semibold text-xs cursor-pointer"
+                >
+                  {isEn ? 'Retry Sign In' : 'ਦੁਬਾਰਾ ਕੋਸ਼ਿਸ਼ ਕਰੋ'}
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Optional: Manual Token Entry Accordion */}
           {showManualToken && (
@@ -736,6 +784,46 @@ export const GoogleSheetsSyncModal: React.FC<GoogleSheetsSyncModalProps> = ({ is
                 </span>
               </div>
 
+              {/* Batch Action Bar if conflicts exist */}
+              {conflicts.length > 0 && (
+                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3 shadow-xs">
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse"></span>
+                      <h4 className="text-xs font-bold text-blue-950">
+                        {isEn ? 'Batch Resolve All Conflicts (Recommended)' : 'ਇਕੋ ਕਲਿੱਕ ਵਿੱਚ ਸਾਰੇ ਹੱਲ ਕਰੋ (ਸਿਫ਼ਾਰਿਸ਼ ਕੀਤੀ)'}
+                      </h4>
+                    </div>
+                    <p className="text-[11px] text-blue-800">
+                      {isEn
+                        ? `Choose "Keep All Software Versions" to protect all ${conflicts.length} newly recovered records in the software and prepare them to sync with Google Sheets.`
+                        : `ਸਾਫਟਵੇਅਰ ਵਿੱਚ ਨਵੇਂ ਰਿਕਵਰ ਕੀਤੇ ${conflicts.length} ਰਿਕਾਰਡਾਂ ਨੂੰ ਸੁਰੱਖਿਅਤ ਰੱਖਣ ਲਈ "ਸਾਰੇ ਸਾਫਟਵੇਅਰ ਵਾਲਾ ਡਾਟਾ ਰੱਖੋ" ਚੁਣੋ।`}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      onClick={() => resolveAllConflicts('SOFTWARE')}
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-xs shadow-sm flex items-center gap-1.5 cursor-pointer transition active:scale-95"
+                    >
+                      <Database className="w-4 h-4" />
+                      {isEn ? `Keep All Software (${conflicts.length})` : `ਸਾਰੇ ਸਾਫਟਵੇਅਰ ਰੱਖੋ (${conflicts.length})`}
+                    </button>
+                    <button
+                      onClick={() => resolveAllConflicts('GOOGLE_SHEETS')}
+                      className="px-3 py-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg font-semibold text-xs cursor-pointer transition"
+                    >
+                      {isEn ? 'Keep All Sheets' : 'ਸਾਰੇ ਸ਼ੀਟਸ ਰੱਖੋ'}
+                    </button>
+                    <button
+                      onClick={clearAllConflicts}
+                      className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-lg font-semibold text-xs cursor-pointer transition"
+                    >
+                      {isEn ? 'Dismiss All' : 'ਸਾਰੇ ਹਟਾਓ'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {conflicts.length === 0 ? (
                 <div className="text-center py-12 bg-white rounded-xl border border-slate-200 text-slate-500 space-y-2">
                   <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto" />
@@ -750,9 +838,9 @@ export const GoogleSheetsSyncModal: React.FC<GoogleSheetsSyncModalProps> = ({ is
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {conflicts.map((conf) => (
+                  {conflicts.map((conf, index) => (
                     <div
-                      key={conf.id}
+                      key={`${conf.id || 'conf'}-${conf.recordId || ''}-${index}`}
                       className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden p-4 space-y-3"
                     >
                       <div className="flex items-center justify-between border-b border-slate-100 pb-2">

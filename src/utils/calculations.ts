@@ -1550,4 +1550,66 @@ export function transferDateTo2026_27(dateStr?: string): string {
   return '15/10/2026';
 }
 
+/**
+ * Deduplicate 37.5 KG Bags Entries (ਤੁਲਾਈ 37.5 KG ਰਿਕਾਰਡ ਡੀ-ਡੁਪਲੀਕੇਸ਼ਨ)
+ * Detects and merges:
+ * 1. Matching record IDs
+ * 2. Matching entry numbers (e.g. repeated BAG-00001)
+ * 3. Exact duplicate weighments (same farmer, same date, same bag count, same weight)
+ * Preserves the original genuine entry and returns the clean list + removed duplicates list.
+ */
+export function deduplicateBagsEntries(entries: BagsEntryRecord[]): {
+  cleanList: BagsEntryRecord[];
+  removedDuplicates: BagsEntryRecord[];
+  removedCount: number;
+} {
+  if (!Array.isArray(entries) || entries.length === 0) {
+    return { cleanList: [], removedDuplicates: [], removedCount: 0 };
+  }
+
+  const seenIds = new Set<string>();
+  const seenEntryNumbers = new Set<string>();
+  const seenFarmerWeighments = new Set<string>();
+  const cleanList: BagsEntryRecord[] = [];
+  const removedDuplicates: BagsEntryRecord[] = [];
+
+  for (const item of entries) {
+    if (!item) continue;
+    const id = (item.id || '').trim();
+    const entryNo = (item.entryNumber || '').trim().toUpperCase();
+    const farmerId = (item.farmerId || '').trim();
+    const farmerName = (item.farmerName || item.farmerNamePa || '').trim().toLowerCase();
+    const date = (item.date || '').trim();
+    const bags = Number(item.bags || 0);
+    const weight = Math.round(Number(item.grandTotalKg || item.totalBagsWeightKg || 0) * 10) / 10;
+
+    // Check 1: Exact ID collision
+    if (id && seenIds.has(id)) {
+      removedDuplicates.push(item);
+      continue;
+    }
+
+    // Check 2: Exact Entry Number collision
+    if (entryNo && seenEntryNumbers.has(entryNo)) {
+      removedDuplicates.push(item);
+      continue;
+    }
+
+    // Check 3: Exact same farmer + date + bags + weight
+    const farmerIdentifier = farmerId || farmerName;
+    const weighmentSig = `${farmerIdentifier}_${date}_${bags}_${weight}`;
+    if (farmerIdentifier && date && bags > 0 && seenFarmerWeighments.has(weighmentSig)) {
+      removedDuplicates.push(item);
+      continue;
+    }
+
+    if (id) seenIds.add(id);
+    if (entryNo) seenEntryNumbers.add(entryNo);
+    if (farmerIdentifier && date && bags > 0) seenFarmerWeighments.add(weighmentSig);
+    cleanList.push(item);
+  }
+
+  return { cleanList, removedDuplicates, removedCount: removedDuplicates.length };
+}
+
 

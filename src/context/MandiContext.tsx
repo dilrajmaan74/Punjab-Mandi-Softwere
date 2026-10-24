@@ -67,7 +67,8 @@ import {
   isRecordInFiscalYear,
   compareDatesChronological,
   transferDateTo2026_27,
-  migrate37_5KgEntriesToPakkiLabour8
+  migrate37_5KgEntriesToPakkiLabour8,
+  deduplicateBagsEntries
 } from '../utils/calculations';
 import { isSupabaseConfigured, getSupabaseClient } from '../lib/supabase';
 import {
@@ -104,7 +105,8 @@ import {
   supabaseUpsertRecycleItem,
   supabaseDeleteRecycleItem,
   supabaseClearRecycleBin,
-  drainPendingCloudDeletions
+  drainPendingCloudDeletions,
+  fetchDirectLeftingRecords
 } from '../services/supabaseService';
 import {
   recordDeletedId,
@@ -481,6 +483,12 @@ interface MandiContextType {
     messagePa: string;
     messageEn: string;
   };
+  cleanAndDeduplicateAllBagsEntries: (firmScope?: 'current' | 'all') => Promise<{
+    success: boolean;
+    removedCount: number;
+    messagePa: string;
+    messageEn: string;
+  }>;
 
   // Bardana Operations
   generateNextBardanaId: () => string;
@@ -517,6 +525,13 @@ interface MandiContextType {
   };
   updateLeftingRecord: (id: string, updates: Partial<LeftingRecord>) => boolean;
   deleteLeftingRecord: (id: string) => boolean;
+  recoverAllLeftingRecords: () => Promise<{
+    success: boolean;
+    recoveredCount: number;
+    sources: string[];
+    messagePa: string;
+    messageEn: string;
+  }>;
 
   // Recycle Bin Operations
   restoreRecycleBinItem: (id: string, restoredBy?: string) => boolean;
@@ -721,7 +736,22 @@ export const loadFirmData = <T,>(baseKey: string, firmId: string, defaultValue: 
     const firmStored = localStorage.getItem(firmKey);
     if (firmStored) {
       const parsed = JSON.parse(firmStored);
-      return parsed !== null && parsed !== undefined ? parsed : defaultValue;
+      if (parsed !== null && parsed !== undefined && (!Array.isArray(parsed) || parsed.length > 0)) {
+        return parsed;
+      }
+    }
+
+    // Fallback: If firm-specific key is empty or empty array, check un-prefixed baseKey (legacy storage)
+    if (firmId === 'FIRM-001' || firmId === DEFAULT_FIRM.id) {
+      const legacyStored = localStorage.getItem(baseKey);
+      if (legacyStored) {
+        try {
+          const parsedLegacy = JSON.parse(legacyStored);
+          if (parsedLegacy !== null && parsedLegacy !== undefined && (!Array.isArray(parsedLegacy) || parsedLegacy.length > 0)) {
+            return parsedLegacy;
+          }
+        } catch {}
+      }
     }
 
     // In demo practice mode, return clean defaultValue
@@ -1003,13 +1033,14 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return transferred;
   });
 
-  // 3. Bags entries - strictly isolated per active firm
+  // 3. Bags entries - strictly isolated per active firm with automatic deduplication
   const [bagsEntries, setBagsEntries] = useState<BagsEntryRecord[]>(() => {
     const list = loadFirmData<BagsEntryRecord[]>(LOCAL_STORAGE_KEYS.BAGS_ENTRIES, activeFirmId, isDemoMode ? DEMO_PRACTICE_BAGS : []);
     const source = Array.isArray(list) ? (list.length > 0 ? list : (isDemoMode ? DEMO_PRACTICE_BAGS : [])) : [];
     const deleted = getAllDeletedIds(activeFirmId);
     const filtered = source.filter((b) => !deleted.has(b.id) && !deleted.has((b as any).entryNumber));
-    const { updatedList } = migrate37_5KgEntriesToPakkiLabour8(filtered);
+    const { cleanList } = deduplicateBagsEntries(filtered);
+    const { updatedList } = migrate37_5KgEntriesToPakkiLabour8(cleanList);
     const transferred = transferRecordArrayTo2026_27(updatedList, 'date');
     saveFirmData(LOCAL_STORAGE_KEYS.BAGS_ENTRIES, activeFirmId, transferred);
     return transferred;
@@ -1465,7 +1496,17 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           const rawLefting = (d.leftingRecords || []).filter((l) => !allDeleted.has(l.id));
 
           const cleanFarmers = transferFarmersTo2026_27(rawFarmers);
-          const cleanBags = transferRecordArrayTo2026_27(rawBags, 'date');
+          const { cleanList: dedupedBags, removedDuplicates: cloudDuplicates } = deduplicateBagsEntries(rawBags);
+          if (cloudDuplicates.length > 0) {
+            const dupIds = cloudDuplicates.map((r) => r.id).filter(Boolean);
+            if (dupIds.length > 0 && isSupabaseConfigured()) {
+              const client = getSupabaseClient();
+              client?.from('bags_entries').delete().in('id', dupIds).then(() => {
+                console.info(`Automatically purged ${dupIds.length} duplicate bags entries from Supabase.`);
+              }, console.warn);
+            }
+          }
+          const cleanBags = transferRecordArrayTo2026_27(dedupedBags, 'date');
           const cleanBardana = transferRecordArrayTo2026_27(rawBardana, 'date');
           const cleanPurchases = transferRecordArrayTo2026_27(rawPurchases, 'date');
           const cleanPayments = transferRecordArrayTo2026_27(rawPayments, 'date');
@@ -3511,21 +3552,41 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   /**
    * Add a single Bags Entry with separated Parchi No and safe Supabase persistence
    */
-  const addBagsEntry = (entryData: Omit<BagsEntryRecord, 'id' | 'entryNumber' | 'createdAt'>): BagsEntryRecord => {
+  const addBagsEntry = (entryData: Omit<BagsEntryRecord, 'id' | 'entryNumber' | 'createdAt'> & { id?: string; entryNumber?: string; createdAt?: string }): BagsEntryRecord => {
+    // Duplicate Protection: Check if this weighment entry already exists
+    const duplicate = bagsEntries.find((b) => {
+      if (entryData.id && b.id === entryData.id) return true;
+      if (entryData.entryNumber && b.entryNumber === entryData.entryNumber) return true;
+      const sameFarmer = b.farmerId === entryData.farmerId || (b.farmerName && b.farmerName === entryData.farmerName);
+      const sameDate = b.date === entryData.date;
+      const sameBags = Number(b.bags) === Number(entryData.bags);
+      const sameWeight = Math.abs(Number(b.grandTotalKg || 0) - Number(entryData.grandTotalKg || 0)) < 0.1;
+      return Boolean(sameFarmer && sameDate && sameBags && sameWeight);
+    });
+
+    if (duplicate) {
+      console.warn('Prevented duplicate bags entry creation for:', duplicate.farmerName, duplicate.entryNumber);
+      return duplicate;
+    }
+
     const nextParchi = entryData.parchiNo || getNextParchiNo();
-    const nextEntryNumber = `BAG-${nextParchi.toString().padStart(5, '0')}`;
+    const nextEntryNumber = entryData.entryNumber || `BAG-${nextParchi.toString().padStart(5, '0')}`;
     const newRecord: BagsEntryRecord = {
       ...entryData,
       firmId: entryData.firmId || activeFirmId,
       fiscalYear: entryData.fiscalYear || activeFiscalYear,
-      id: `be_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      id: entryData.id || `be_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       parchiNo: nextParchi,
       entryNumber: nextEntryNumber,
-      createdAt: new Date().toISOString()
+      createdAt: entryData.createdAt || new Date().toISOString()
     };
 
-    setBagsEntries((prev) => [newRecord, ...prev]);
-    supabaseUpsertBagsEntry(newRecord, activeFirmId, activeFiscalYear).catch(console.error);
+    setBagsEntries((prev) => {
+      const { cleanList } = deduplicateBagsEntries([newRecord, ...prev]);
+      saveFirmData(LOCAL_STORAGE_KEYS.BAGS_ENTRIES, activeFirmId, cleanList);
+      return cleanList;
+    });
+    supabaseUpsertBagsEntry(newRecord, activeFirmId, activeFiscalYear).catch(console.warn);
     return newRecord;
   };
 
@@ -3556,7 +3617,7 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     let updated = false;
     setBagsEntries((prev) => {
       const updatedList = prev.map((item) => {
-        if (item.id === id) {
+        if (item.id === id || item.entryNumber === id) {
           updated = true;
           return {
             ...item,
@@ -3565,7 +3626,7 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         }
         return item;
       });
-      const target = updatedList.find((b) => b.id === id);
+      const target = updatedList.find((b) => b.id === id || b.entryNumber === id);
       if (target) supabaseUpsertBagsEntry(target, activeFirmId, activeFiscalYear).catch(console.error);
       return updatedList;
     });
@@ -3649,6 +3710,55 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       updatedCount: totalModified,
       messagePa: `ਸਾਰੀਆਂ 37.5 KG ਬੋਰੀਆਂ ਦੀਆਂ ${totalModified} ਐਂਟਰੀਆਂ ਵਿੱਚ ਪੱਕੀ ਲੇਬਰ ₹8 ਪ੍ਰਤੀ ਬੋਰੀ ਸਫਲਤਾਪੂਰਵਕ ਲਾਗੂ ਹੋ ਗਈ ਹੈ।`,
       messageEn: `Successfully applied ₹8 Pakki Labour to ${totalModified} 37.5kg bag entries.`
+    };
+  };
+
+  /**
+   * One-click deduplication for 37.5 KG Bags Entries across active firm & Supabase
+   * Merges duplicate entries and cleans duplicate rows from Supabase
+   */
+  const cleanAndDeduplicateAllBagsEntries = async (firmScope: 'current' | 'all' = 'all') => {
+    let totalRemoved = 0;
+    const targetFirms = firmScope === 'all' ? firms : firms.filter((f) => f.id === activeFirmIdRef.current);
+    const allRemovedIds: string[] = [];
+
+    targetFirms.forEach((f) => {
+      const firmBags = loadFirmData<BagsEntryRecord[]>(LOCAL_STORAGE_KEYS.BAGS_ENTRIES, f.id, []);
+      if (Array.isArray(firmBags) && firmBags.length > 0) {
+        const { cleanList, removedDuplicates, removedCount } = deduplicateBagsEntries(firmBags);
+        totalRemoved += removedCount;
+        removedDuplicates.forEach((r) => {
+          if (r.id) allRemovedIds.push(r.id);
+          recordDeletedId(r.id, f.id, r.entryNumber);
+        });
+        saveFirmData(LOCAL_STORAGE_KEYS.BAGS_ENTRIES, f.id, cleanList);
+        if (f.id === activeFirmIdRef.current) {
+          setBagsEntries(cleanList);
+        }
+      }
+    });
+
+    // Also remove duplicates from Supabase
+    if (allRemovedIds.length > 0 && isSupabaseConfigured()) {
+      try {
+        const client = getSupabaseClient();
+        if (client) {
+          await client.from('bags_entries').delete().in('id', allRemovedIds);
+        }
+      } catch (err) {
+        console.warn('Supabase duplicate removal notice:', err);
+      }
+    }
+
+    return {
+      success: true,
+      removedCount: totalRemoved,
+      messagePa: totalRemoved > 0
+        ? `${totalRemoved} ਡਬਲ ਐਂਟਰੀਆਂ ਸਫਲਤਾਪੂਰਵਕ ਹਟਾ ਦਿੱਤੀਆਂ ਗਈਆਂ ਹਨ ਅਤੇ ਸੁਪਾਬੇਸ ਨਾਲ ਮਿਲਾਨ ਹੋ ਗਿਆ ਹੈ।`
+        : 'ਤੁਹਾਡਾ 37.5 KG ਡਾਟਾ ਪਹਿਲਾਂ ਹੀ ਬਿਲਕੁਲ ਸਹੀ ਅਤੇ ਇਕਸਾਰ ਹੈ।',
+      messageEn: totalRemoved > 0
+        ? `Successfully removed ${totalRemoved} duplicate 37.5 KG entries.`
+        : 'All 37.5 KG records are completely unique and consistent.'
     };
   };
 
@@ -4656,6 +4766,140 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     queuePendingCloudDeletion({ id, type: 'LEFTING', firmId: activeFirmId, deletedAt: new Date().toISOString() });
     supabaseDeleteLefting(id).catch(console.error);
     return true;
+  };
+
+  /**
+   * Rescues and restores ALL Lefting records across:
+   * 1. All localStorage keys (base key, firm keys, backup keys)
+   * 2. Recycle Bin items of type 'LEFTING'
+   * 3. Tombstone removal (un-blacklists any accidentally deleted lefting IDs)
+   * 4. Supabase cloud table lefting_records (direct column-based fetch)
+   */
+  const recoverAllLeftingRecords = async (): Promise<{
+    success: boolean;
+    recoveredCount: number;
+    sources: string[];
+    messagePa: string;
+    messageEn: string;
+  }> => {
+    const sources: string[] = [];
+    const recordMap = new Map<string, LeftingRecord>();
+
+    // 0. Include existing in-memory lefting records
+    leftingRecords.forEach((rec) => {
+      if (rec && rec.id) recordMap.set(rec.id, rec);
+    });
+
+    // 1. Scan localStorage across all keys matching 'lefting'
+    try {
+      const allKeys = Object.keys(localStorage);
+      allKeys.forEach((key) => {
+        if (key.toLowerCase().includes('lefting')) {
+          try {
+            const raw = localStorage.getItem(key);
+            if (raw) {
+              const parsed = JSON.parse(raw);
+              if (Array.isArray(parsed) && parsed.length > 0) {
+                let countFromKey = 0;
+                parsed.forEach((item: any) => {
+                  if (item && (item.id || item.truckNo)) {
+                    const id = item.id || `LFT-REC-${Math.random().toString(36).substring(2, 7)}`;
+                    if (!recordMap.has(id)) {
+                      recordMap.set(id, {
+                        ...item,
+                        id,
+                        firmId: item.firmId || activeFirmId || 'FIRM-001',
+                        fiscalYear: item.fiscalYear || '2026-27'
+                      });
+                      countFromKey++;
+                    }
+                  }
+                });
+                if (countFromKey > 0) {
+                  sources.push(`Local Storage (${key}): ${countFromKey} ਰਿਕਾਰਡ`);
+                }
+              }
+            }
+          } catch {}
+        }
+      });
+    } catch (e) {
+      console.warn('Error reading localStorage for lefting recovery:', e);
+    }
+
+    // 2. Scan Recycle Bin for LEFTING items
+    let fromRecycleCount = 0;
+    recycleBinItems.forEach((binItem) => {
+      if (binItem.type === 'LEFTING' && binItem.recordData) {
+        const rec = binItem.recordData;
+        const id = rec.id || binItem.originalId;
+        if (id && !recordMap.has(id)) {
+          recordMap.set(id, {
+            ...rec,
+            id,
+            firmId: rec.firmId || activeFirmId || 'FIRM-001',
+            fiscalYear: rec.fiscalYear || '2026-27'
+          });
+          fromRecycleCount++;
+        }
+      }
+    });
+    if (fromRecycleCount > 0) {
+      sources.push(`Recycle Bin (ਰੀਸਾਈਕਲ ਬਿਨ): ${fromRecycleCount} ਰਿਕਾਰਡ`);
+    }
+
+    // 3. Supabase Cloud direct fetch (bypassing any tombstones)
+    if (isSupabaseConfigured()) {
+      try {
+        const cloudRes = await fetchDirectLeftingRecords();
+        if (cloudRes.success && cloudRes.data && cloudRes.data.length > 0) {
+          let fromCloudCount = 0;
+          cloudRes.data.forEach((rec) => {
+            if (rec && rec.id && !recordMap.has(rec.id)) {
+              recordMap.set(rec.id, {
+                ...rec,
+                firmId: rec.firmId || activeFirmId || 'FIRM-001',
+                fiscalYear: rec.fiscalYear || '2026-27'
+              });
+              fromCloudCount++;
+            }
+          });
+          if (fromCloudCount > 0) {
+            sources.push(`Supabase Cloud (ਸੁਪਾਬੇਸ ਕਲਾਊਡ): ${fromCloudCount} ਰਿਕਾਰਡ`);
+          }
+        }
+      } catch (err) {
+        console.warn('Cloud lefting fetch error during recovery:', err);
+      }
+    }
+
+    // 4. Clear all recovered IDs from tombstones so they are permanently restored
+    recordMap.forEach((_, id) => {
+      removeDeletedId(id, activeFirmId);
+      removeDeletedId(id, 'FIRM-001');
+    });
+
+    const combinedList = Array.from(recordMap.values());
+    const migrated = transferRecordArrayTo2026_27(combinedList, 'dispatchDate');
+
+    // 5. Update state and save to active firm + legacy storage
+    setLeftingRecords(migrated);
+    saveFirmData(LOCAL_STORAGE_KEYS.LEFTING, activeFirmId, migrated);
+    saveFirmData(LOCAL_STORAGE_KEYS.LEFTING, 'FIRM-001', migrated);
+    try {
+      localStorage.setItem(LOCAL_STORAGE_KEYS.LEFTING, JSON.stringify(migrated));
+    } catch {}
+
+    // 6. Clean up recovered items from recycle bin
+    setRecycleBinItems((prev) => prev.filter((i) => i.type !== 'LEFTING'));
+
+    return {
+      success: true,
+      recoveredCount: migrated.length,
+      sources,
+      messagePa: `ਕੁੱਲ ${migrated.length} ਲਿਫਟਿੰਗ ਰਿਕਾਰਡ ਸਫਲਤਾਪੂਰਵਕ ਰਿਕਵਰ ਹੋ ਕੇ ਸਾਫਟਵੇਅਰ ਵਿੱਚ ਵਾਪਸ ਆ ਗਏ ਹਨ!`,
+      messageEn: `Successfully recovered ${migrated.length} lefting records back into the software!`
+    };
   };
 
   /**
@@ -5991,6 +6235,7 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         updateBagsEntry,
         deleteBagsEntry,
         applyPakkiLabour8ToAll37_5KgEntries,
+        cleanAndDeduplicateAllBagsEntries,
         generateNextBardanaId,
         addBardanaRecord,
         updateBardanaRecord,
@@ -6006,6 +6251,7 @@ export const MandiProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         addLeftingRecord,
         updateLeftingRecord,
         deleteLeftingRecord,
+        recoverAllLeftingRecords,
         restoreRecycleBinItem,
         permanentlyDeleteRecycleBinItem,
         emptyRecycleBin,

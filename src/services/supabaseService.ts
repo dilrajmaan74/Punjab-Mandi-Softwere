@@ -312,7 +312,7 @@ export async function loadAllDataFromSupabase(): Promise<SupabaseLoadResult> {
       client.from('farmer_payments').select('data').order('created_at', { ascending: false }),
       client.from('farmer_advances').select('data').order('created_at', { ascending: false }),
       client.from('boli_records').select('data').order('created_at', { ascending: false }),
-      client.from('lefting_records').select('data').order('created_at', { ascending: false }),
+      client.from('lefting_records').select('*').order('created_at', { ascending: false }),
       client.from('recycle_bin').select('data').order('deleted_at', { ascending: false }),
       client.from('procurement_agencies').select('id, name, is_active'),
       client.from('pin_code_mappings').select('pin_code, district, state, villages'),
@@ -336,7 +336,7 @@ export async function loadAllDataFromSupabase(): Promise<SupabaseLoadResult> {
       return { success: false, tablesMissing: true, error: 'One or more Supabase tables are missing.' };
     }
 
-    // Extract records from jsonb data columns
+    // Extract records from jsonb data columns with robust column fallbacks for lefting
     const farmers: Farmer[] = (farmersRes.data || []).map((r: any) => r.data).filter(Boolean);
     const bagsEntries: BagsEntryRecord[] = (bagsRes.data || []).map((r: any) => r.data).filter(Boolean);
     const bardanaRecords: BardanaReceivedRecord[] = (bardanaRes.data || []).map((r: any) => r.data).filter(Boolean);
@@ -344,7 +344,52 @@ export async function loadAllDataFromSupabase(): Promise<SupabaseLoadResult> {
     const farmerPayments: FarmerPaymentRecord[] = (paymentsRes.data || []).map((r: any) => r.data).filter(Boolean);
     const farmerAdvances: FarmerAdvanceRecord[] = (advancesRes.data || []).map((r: any) => r.data).filter(Boolean);
     const boliRecords: BoliRecord[] = (boliRes.data || []).map((r: any) => r.data).filter(Boolean);
-    const leftingRecords: LeftingRecord[] = (leftingRes.data || []).map((r: any) => r.data).filter(Boolean);
+    const leftingRecords: LeftingRecord[] = (leftingRes.data || []).map((r: any) => {
+      if (r.data && typeof r.data === 'object' && Object.keys(r.data).length > 0) {
+        return {
+          ...r.data,
+          id: r.data.id || r.id,
+          truckNo: r.data.truckNo || r.truck_no || '',
+          gatePassNo: r.data.gatePassNo || r.gate_pass_no || '',
+          dispatchDate: r.data.dispatchDate || r.dispatch_date || r.data.date || '',
+          date: r.data.date || r.dispatch_date || r.data.dispatchDate || '',
+          agency: r.data.agency || r.agency || '',
+          destination: r.data.destination || r.destination || '',
+          driverName: r.data.driverName || r.driver_name || '',
+          driverPhone: r.data.driverPhone || r.driver_phone || '',
+          bags: Number(r.data.bags || r.bags_count || 0),
+          qul: Number(r.data.qul || r.total_quintals || 0),
+          kg: Number(r.data.kg || 0),
+          totalWeightKg: Number(r.data.totalWeightKg || ((Number(r.data.qul || r.total_quintals || 0) * 100) + Number(r.data.kg || 0))),
+          status: r.data.status || r.status || 'DISPATCHED',
+          sellerOrAgency: r.data.sellerOrAgency || r.agency || r.destination || '',
+          bardanaType: r.data.bardanaType || 'NEW',
+          firmId: r.data.firmId || r.firm_id || 'FIRM-001',
+          fiscalYear: r.data.fiscalYear || r.fiscal_year || '2026-27'
+        };
+      }
+      return {
+        id: r.id,
+        gatePassNo: r.gate_pass_no || '',
+        truckNo: r.truck_no || '',
+        dispatchDate: r.dispatch_date || '',
+        date: r.dispatch_date || '',
+        agency: r.agency || '',
+        destination: r.destination || '',
+        driverName: r.driver_name || '',
+        driverPhone: r.driver_phone || '',
+        bags: Number(r.bags_count || 0),
+        qul: Number(r.total_quintals || 0),
+        kg: 0,
+        totalWeightKg: Number(r.total_quintals || 0) * 100,
+        status: (r.status || 'DISPATCHED') as any,
+        sellerOrAgency: r.agency || r.destination || '',
+        bardanaType: 'NEW' as any,
+        firmId: r.firm_id || 'FIRM-001',
+        fiscalYear: r.fiscal_year || '2026-27',
+        createdAt: r.created_at || new Date().toISOString()
+      };
+    }).filter((l: any) => Boolean(l && l.id));
     const recycleBinItems: RecycleBinItem[] = (recycleRes.data || []).map((r: any) => r.data).filter(Boolean);
 
     // Multi-Firms & Active Firm
@@ -1474,3 +1519,77 @@ export async function drainPendingCloudDeletions(): Promise<void> {
     }
   }
 }
+
+/**
+ * Direct recovery fetch for Lefting Records:
+ * Bypasses all tombstones to rescue any historical lifting entries from Supabase
+ */
+export async function fetchDirectLeftingRecords(): Promise<{ success: boolean; data: LeftingRecord[]; error?: string }> {
+  const client = getSupabaseClient();
+  if (!client || !isSupabaseConfigured()) {
+    return { success: false, data: [], error: 'Supabase client is not configured.' };
+  }
+
+  try {
+    const { data, error } = await client
+      .from('lefting_records')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      return { success: false, data: [], error: error.message };
+    }
+
+    const records: LeftingRecord[] = (data || []).map((r: any) => {
+      if (r.data && typeof r.data === 'object' && Object.keys(r.data).length > 0) {
+        return {
+          ...r.data,
+          id: r.data.id || r.id,
+          truckNo: r.data.truckNo || r.truck_no || '',
+          gatePassNo: r.data.gatePassNo || r.gate_pass_no || '',
+          dispatchDate: r.data.dispatchDate || r.dispatch_date || r.data.date || '',
+          date: r.data.date || r.dispatch_date || r.data.dispatchDate || '',
+          agency: r.data.agency || r.agency || '',
+          destination: r.data.destination || r.destination || '',
+          driverName: r.data.driverName || r.driver_name || '',
+          driverPhone: r.data.driverPhone || r.driver_phone || '',
+          bags: Number(r.data.bags || r.bags_count || 0),
+          qul: Number(r.data.qul || r.total_quintals || 0),
+          kg: Number(r.data.kg || 0),
+          totalWeightKg: Number(r.data.totalWeightKg || ((Number(r.data.qul || r.total_quintals || 0) * 100) + Number(r.data.kg || 0))),
+          status: r.data.status || r.status || 'DISPATCHED',
+          sellerOrAgency: r.data.sellerOrAgency || r.agency || r.destination || '',
+          bardanaType: r.data.bardanaType || 'NEW',
+          firmId: r.data.firmId || r.firm_id || 'FIRM-001',
+          fiscalYear: r.data.fiscalYear || r.fiscal_year || '2026-27'
+        };
+      }
+      return {
+        id: r.id,
+        gatePassNo: r.gate_pass_no || '',
+        truckNo: r.truck_no || '',
+        dispatchDate: r.dispatch_date || '',
+        date: r.dispatch_date || '',
+        agency: r.agency || '',
+        destination: r.destination || '',
+        driverName: r.driver_name || '',
+        driverPhone: r.driver_phone || '',
+        bags: Number(r.bags_count || 0),
+        qul: Number(r.total_quintals || 0),
+        kg: 0,
+        totalWeightKg: Number(r.total_quintals || 0) * 100,
+        status: (r.status || 'DISPATCHED') as any,
+        sellerOrAgency: r.agency || r.destination || '',
+        bardanaType: 'NEW' as any,
+        firmId: r.firm_id || 'FIRM-001',
+        fiscalYear: r.fiscal_year || '2026-27',
+        createdAt: r.created_at || new Date().toISOString()
+      };
+    }).filter((l: any) => Boolean(l && l.id));
+
+    return { success: true, data: records };
+  } catch (err: any) {
+    return { success: false, data: [], error: err.message || 'Error querying Supabase lefting table.' };
+  }
+}
+

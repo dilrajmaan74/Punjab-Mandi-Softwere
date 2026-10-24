@@ -307,17 +307,49 @@ export function addSyncAuditLog(log: Omit<SyncAuditLog, 'id' | 'timestamp'>) {
   localStorage.setItem(STORAGE_KEY_AUDIT_LOGS, JSON.stringify(updated));
 }
 
+export function cleanNumberString(val: any): string {
+  if (val === null || val === undefined) return '0';
+  if (typeof val === 'number') return isNaN(val) ? '0' : String(val);
+  const str = String(val).replace(/,/g, '').replace(/[₹$\s]/g, '').trim();
+  return str || '0';
+}
+
+export function safeParseInt(val: any, fallback: number = 0): number {
+  const cleaned = cleanNumberString(val);
+  const parsed = parseInt(cleaned, 10);
+  return isNaN(parsed) ? fallback : parsed;
+}
+
+export function safeParseFloat(val: any, fallback: number = 0): number {
+  const cleaned = cleanNumberString(val);
+  const parsed = parseFloat(cleaned);
+  return isNaN(parsed) ? fallback : parsed;
+}
+
 export function getStoredConflicts(): SyncConflict[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY_CONFLICTS);
-    return raw ? JSON.parse(raw) : [];
+    if (!raw) return [];
+    const list: SyncConflict[] = JSON.parse(raw);
+    const seen = new Set<string>();
+    return list.filter((c) => {
+      if (!c || !c.id || seen.has(c.id)) return false;
+      seen.add(c.id);
+      return true;
+    });
   } catch {
     return [];
   }
 }
 
 export function saveStoredConflicts(conflicts: SyncConflict[]) {
-  localStorage.setItem(STORAGE_KEY_CONFLICTS, JSON.stringify(conflicts));
+  const seen = new Set<string>();
+  const unique = conflicts.filter((c) => {
+    if (!c || !c.id || seen.has(c.id)) return false;
+    seen.add(c.id);
+    return true;
+  });
+  localStorage.setItem(STORAGE_KEY_CONFLICTS, JSON.stringify(unique));
 }
 
 // -------------------------------------------------------------
@@ -1094,24 +1126,27 @@ export async function readAndValidateGoogleSheetsData(
 
     if (existingFarmer) {
       // Check conflict if both modified differently
-      if (
-        existingFarmer.farmerName !== farmerObj.farmerName ||
-        existingFarmer.village !== farmerObj.village ||
-        existingFarmer.fatherName !== farmerObj.fatherName
-      ) {
-        result.conflicts.push({
-          id: `CONF-FRM-${farmerId}`,
-          table: 'farmers',
-          recordId: farmerId,
-          title: `Farmer: ${existingFarmer.farmerName}`,
-          softwareValue: existingFarmer,
-          sheetValue: farmerObj,
-          softwareUpdatedAt: existingFarmer.updatedAt || existingFarmer.createdAt,
-          sheetUpdatedAt: farmerObj.updatedAt || farmerObj.createdAt,
-          detectedAt: new Date().toISOString(),
-          resolved: false
-        });
-        result.tableSummaries.farmers.warnings++;
+      const nameDiff = (existingFarmer.farmerName || '').trim() !== (farmerObj.farmerName || '').trim();
+      const villageDiff = (existingFarmer.village || '').trim() !== (farmerObj.village || '').trim();
+      const fatherDiff = (existingFarmer.fatherName || '').trim() !== (farmerObj.fatherName || '').trim();
+
+      if (nameDiff || villageDiff || fatherDiff) {
+        const conflictId = `CONF-FRM-${farmerId}`;
+        if (!result.conflicts.some((c) => c.id === conflictId)) {
+          result.conflicts.push({
+            id: conflictId,
+            table: 'farmers',
+            recordId: farmerId,
+            title: `Farmer: ${existingFarmer.farmerName}`,
+            softwareValue: existingFarmer,
+            sheetValue: farmerObj,
+            softwareUpdatedAt: existingFarmer.updatedAt || existingFarmer.createdAt,
+            sheetUpdatedAt: farmerObj.updatedAt || farmerObj.createdAt,
+            detectedAt: new Date().toISOString(),
+            resolved: false
+          });
+          result.tableSummaries.farmers.warnings++;
+        }
       } else {
         result.updatedFarmers.push(farmerObj);
         result.tableSummaries.farmers.updated++;
@@ -1137,9 +1172,9 @@ export async function readAndValidateGoogleSheetsData(
     const date = (row[2] || '').toString().trim();
     const farmerId = (row[3] || '').toString().trim();
     const farmerName = (row[4] || '').toString().trim();
-    const bagsCount = parseInt(row[10] || row[8] || '0', 10);
-    const grandTotalKg = parseFloat(row[14] || '0');
-    const totalAmount = parseFloat(row[17] || '0');
+    const bagsCount = safeParseInt(row[10] || row[8] || '0', 0);
+    const grandTotalKg = safeParseFloat(row[14] || '0', 0);
+    const totalAmount = safeParseFloat(row[17] || '0', 0);
     const status = (row[24] || row[22] || 'ACTIVE').toString().toUpperCase().trim();
 
     if (!entryNo && !farmerId && !bagsCount) return;
@@ -1196,8 +1231,8 @@ export async function readAndValidateGoogleSheetsData(
       farmerVillagePa: matchedFarmer?.villagePa || matchedFarmer?.village || '',
       farmerMobile: matchedFarmer?.mobile || (row[7] || '').toString().trim(),
       farmerAadhaar: matchedFarmer?.aadhaar || '',
-      newBags: parseInt(row[8] || '0', 10),
-      oldBags: parseInt(row[9] || '0', 10),
+      newBags: safeParseInt(row[8] || '0', 0),
+      oldBags: safeParseInt(row[9] || '0', 0),
       bags: bagsCount,
       weightPerBagKg: FIXED_BAG_WEIGHT_KG,
       totalBagsWeightKg: calculatedWeight,
@@ -1216,19 +1251,30 @@ export async function readAndValidateGoogleSheetsData(
     const existingBag = existingBagsMap.get(bagEntryObj.id) || existingData.bagsEntries.find((b) => b.entryNumber === bagEntryObj.entryNumber);
 
     if (existingBag) {
-      if (existingBag.bags !== bagEntryObj.bags || existingBag.grandTotalKg !== bagEntryObj.grandTotalKg) {
-        result.conflicts.push({
-          id: `CONF-BAG-${bagEntryObj.entryNumber}`,
-          table: 'bags',
-          recordId: bagEntryObj.entryNumber,
-          title: `Bags Entry: ${bagEntryObj.entryNumber} (${bagEntryObj.farmerName})`,
-          softwareValue: existingBag,
-          sheetValue: bagEntryObj,
-          softwareUpdatedAt: existingBag.createdAt,
-          sheetUpdatedAt: bagEntryObj.createdAt,
-          detectedAt: new Date().toISOString(),
-          resolved: false
-        });
+      const existingBagsCount = safeParseInt(existingBag.bags, 0);
+      const existingWeight = safeParseFloat(existingBag.grandTotalKg, 0);
+      const sheetWeight = safeParseFloat(bagEntryObj.grandTotalKg, 0);
+
+      // Only flag conflict if bags count differs by >= 1 OR weight differs by > 0.1 kg
+      const bagsDiffer = existingBagsCount !== bagEntryObj.bags;
+      const weightDiffers = Math.abs(existingWeight - sheetWeight) > 0.1;
+
+      if (bagsDiffer || weightDiffers) {
+        const conflictId = `CONF-BAG-${bagEntryObj.entryNumber || bagEntryObj.id || idx}-row${rowNum}`;
+        if (!result.conflicts.some((c) => c.id === conflictId)) {
+          result.conflicts.push({
+            id: conflictId,
+            table: 'bags',
+            recordId: bagEntryObj.entryNumber || bagEntryObj.id,
+            title: `Bags Entry: ${bagEntryObj.entryNumber} (${bagEntryObj.farmerName})`,
+            softwareValue: existingBag,
+            sheetValue: bagEntryObj,
+            softwareUpdatedAt: existingBag.createdAt,
+            sheetUpdatedAt: bagEntryObj.createdAt,
+            detectedAt: new Date().toISOString(),
+            resolved: false
+          });
+        }
       } else {
         result.updatedBagsEntries.push(bagEntryObj);
         result.tableSummaries.bags.updated++;
@@ -1254,9 +1300,9 @@ export async function readAndValidateGoogleSheetsData(
     const agency = (row[2] || '').toString().trim();
     const farmerId = (row[3] || '').toString().trim();
     const farmerName = (row[4] || '').toString().trim();
-    const bags = parseInt(row[8] || '0', 10);
-    const qul = parseFloat(row[11] || '0');
-    const kg = parseFloat(row[12] || '0');
+    const bags = safeParseInt(row[8] || '0', 0);
+    const qul = safeParseFloat(row[11] || '0', 0);
+    const kg = safeParseFloat(row[12] || '0', 0);
 
     if (!agency && !farmerId && !bags) return;
 
@@ -1276,7 +1322,7 @@ export async function readAndValidateGoogleSheetsData(
 
     const totalWeightKg = qul * 100 + kg;
     const matchedFarmer = farmerMap.get(farmerId);
-    const rate = parseFloat(row[14] || String(FIXED_RATE_PER_QTL));
+    const rate = safeParseFloat(row[14] || String(FIXED_RATE_PER_QTL), FIXED_RATE_PER_QTL);
     const grossAmt = (totalWeightKg / 100) * rate;
 
     const purObj: DailyPurchaseRecord = {
@@ -1290,8 +1336,8 @@ export async function readAndValidateGoogleSheetsData(
       village: matchedFarmer?.village || (row[6] || '').toString().trim(),
       mobile: matchedFarmer?.mobile || (row[7] || '').toString().trim(),
       bags,
-      newBags: parseInt(row[9] || '0', 10),
-      oldBags: parseInt(row[10] || '0', 10),
+      newBags: safeParseInt(row[9] || '0', 0),
+      oldBags: safeParseInt(row[10] || '0', 0),
       qul,
       kg,
       totalWeightKg,
@@ -1328,7 +1374,7 @@ export async function readAndValidateGoogleSheetsData(
     const farmerId = (row[1] || '').toString().trim();
     const farmerName = (row[2] || '').toString().trim();
     const date = (row[3] || '').toString().trim();
-    const amount = parseFloat(row[4] || '0');
+    const amount = safeParseFloat(row[4] || '0', 0);
 
     if (!farmerId && !amount) return;
 
@@ -1360,7 +1406,7 @@ export async function readAndValidateGoogleSheetsData(
       return;
     }
 
-    const rate = parseFloat(row[5] || '2.0');
+    const rate = safeParseFloat(row[5] || '2.0', 2.0);
     const advObj: FarmerAdvanceRecord = {
       id: recordId || `ADV-SHEET-${Date.now()}-${idx}`,
       farmerId,
@@ -1370,11 +1416,11 @@ export async function readAndValidateGoogleSheetsData(
       principal: amount,
       monthlyInterestRate: rate,
       interestTillDate: (row[6] || '').toString().trim(),
-      interestAmount: parseFloat(row[7] || '0'),
-      totalDays: parseInt(row[8] || '0', 10),
+      interestAmount: safeParseFloat(row[7] || '0', 0),
+      totalDays: safeParseInt(row[8] || '0', 0),
       monthsElapsed: 0,
       daysElapsed: 0,
-      totalPayableWithInterest: parseFloat(row[9] || String(amount)),
+      totalPayableWithInterest: safeParseFloat(row[9] || String(amount), amount),
       paymentMode: (row[10] || 'CASH') as any,
       status: (row[11] || 'ACTIVE') as any,
       remarks: (row[12] || '').toString().trim(),

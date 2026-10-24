@@ -5,7 +5,30 @@ export const SUPABASE_DEFAULT_ANON_KEY = 'sb_publishable_FqksyHDXLoj0Tpf9UjESFg_
 
 export const getSupabaseUrl = (): string => {
   const envUrl = (import.meta as any).env?.VITE_SUPABASE_URL;
-  return (envUrl && typeof envUrl === 'string' && envUrl.trim().length > 0) ? envUrl.trim() : SUPABASE_DEFAULT_URL;
+  if (envUrl && typeof envUrl === 'string' && envUrl.trim().length > 0) {
+    return envUrl.trim();
+  }
+  try {
+    const saved = localStorage.getItem('punjab_mandi_supabase_project_url');
+    if (saved && saved.trim().startsWith('http')) {
+      return saved.trim();
+    }
+  } catch {}
+  return SUPABASE_DEFAULT_URL;
+};
+
+export const setSupabaseUrlLocal = (url: string) => {
+  const trimmed = url.trim();
+  try {
+    if (trimmed && trimmed.startsWith('http')) {
+      localStorage.setItem('punjab_mandi_supabase_project_url', trimmed);
+    } else {
+      localStorage.removeItem('punjab_mandi_supabase_project_url');
+    }
+    cachedClient = null;
+  } catch (err) {
+    console.error('Failed to set local Supabase URL:', err);
+  }
 };
 
 export const isKeyServiceRole = (key: string): boolean => {

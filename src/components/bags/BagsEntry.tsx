@@ -24,7 +24,8 @@ import {
   MessageSquare,
   Send,
   MapPin,
-  Sparkles
+  Sparkles,
+  RefreshCw
 } from 'lucide-react';
 import {
   FIXED_BAG_WEIGHT_KG,
@@ -39,7 +40,8 @@ import {
   isRecordInFiscalYear,
   compareDatesChronological,
   formatKgToQulKg,
-  getBagsEntryLabourBreakdown
+  getBagsEntryLabourBreakdown,
+  deduplicateBagsEntries
 } from '../../utils/calculations';
 import { BagsEntryRecord, BardanaType, LabourAndDeductions, CropFilterType, VarietyBreakdownItem } from '../../types/mandi';
 import { SearchableSelect, SearchableSelectOption } from '../common/SearchableSelect';
@@ -91,7 +93,8 @@ export const BagsEntry: React.FC = () => {
     activeFiscalYear,
     isYearLocked,
     validateDateInFiscalYear,
-    applyPakkiLabour8ToAll37_5KgEntries
+    applyPakkiLabour8ToAll37_5KgEntries,
+    cleanAndDeduplicateAllBagsEntries
   } = useMandi();
   const isEn = language === 'en';
   const { notifySaveSuccess, notifyDeleteSuccess, confirmDelete, notifyError } = useNotification();
@@ -319,6 +322,36 @@ export const BagsEntry: React.FC = () => {
     });
   };
 
+  // One-click deduplication of 37.5 KG Bags Entries across Software & Supabase
+  const [isCleaningDuplicates, setIsCleaningDuplicates] = useState(false);
+  const handleDeduplicateEntries = async () => {
+    try {
+      setIsCleaningDuplicates(true);
+      const res = await cleanAndDeduplicateAllBagsEntries('all');
+      notifySaveSuccess({
+        titlePa: res.removedCount > 0 ? '37.5 KG ਡੁਪਲੀਕੇਟ ਸਾਫ਼ ਹੋ ਗਏ' : 'ਕੋਈ ਡੁਪਲੀਕੇਟ ਨਹੀਂ ਮਿਲਿਆ',
+        titleEn: res.removedCount > 0 ? '37.5 KG Duplicates Removed' : 'Zero Duplicates Found',
+        messagePa: res.messagePa,
+        messageEn: res.messageEn
+      });
+    } catch (err: any) {
+      console.warn('Deduplication notice:', err);
+    } finally {
+      setIsCleaningDuplicates(false);
+    }
+  };
+
+  // Automatic one-time cleanup on mount if duplicate entries exist in state
+  useEffect(() => {
+    if (bagsEntries.length > 0) {
+      const { removedCount } = deduplicateBagsEntries(bagsEntries);
+      if (removedCount > 0) {
+        console.log(`Auto-cleaning ${removedCount} duplicate 37.5 KG weighment records...`);
+        cleanAndDeduplicateAllBagsEntries('all');
+      }
+    }
+  }, []);
+
   const [savedCropFilter, setSavedCropFilter] = useState<CropFilterType>('ALL');
   const [savedConditionFilter, setSavedConditionFilter] = useState<'ALL' | 'PAKKI' | 'DOUBLE' | 'SUKKI' | 'CLEAN'>('ALL');
   const [savedDateFilter, setSavedDateFilter] = useState<string>('');
@@ -352,10 +385,14 @@ export const BagsEntry: React.FC = () => {
         return true;
       });
     }
-    let result = list;
+
+    // Always deduplicate entries so duplicate farmer rows are never rendered in UI
+    const { cleanList } = deduplicateBagsEntries(list);
+    let result = cleanList;
+
     if (savedSearchQuery.trim()) {
       const q = savedSearchQuery.toLowerCase().trim();
-      result = list.filter(
+      result = cleanList.filter(
         (b) =>
           (b.entryNumber || '').toLowerCase().includes(q) ||
           (b.parchiNo && b.parchiNo.toString().includes(q)) ||
@@ -1712,6 +1749,18 @@ export const BagsEntry: React.FC = () => {
             >
               <Sparkles className="w-3.5 h-3.5 text-amber-300" />
               <span>{isEn ? "Apply ₹8 Pakki Labour (37.5kg)" : "37.5 KG: ਪੱਕੀ ਲੇਬਰ ₹8 ਲਾਗੂ ਕਰੋ"}</span>
+            </button>
+
+            {/* Quick Action: Deduplicate 37.5kg bag entries across Software & Supabase */}
+            <button
+              type="button"
+              onClick={handleDeduplicateEntries}
+              disabled={isCleaningDuplicates}
+              className="px-3 py-1.5 rounded-lg text-xs font-black bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white shadow-xs transition flex items-center gap-1.5 cursor-pointer active:scale-95 shrink-0"
+              title={isEn ? "Clean duplicate 37.5 KG entries in Software & Supabase" : "37.5 KG: ਸੁਪਾਬੇਸ ਅਤੇ ਸਾਫਟਵੇਅਰ ਵਿੱਚੋਂ ਡਬਲ ਐਂਟਰੀਆਂ ਸਾਫ਼ ਕਰੋ"}
+            >
+              <RefreshCw className={`w-3.5 h-3.5 text-amber-300 ${isCleaningDuplicates ? 'animate-spin' : ''}`} />
+              <span>{isCleaningDuplicates ? (isEn ? "Cleaning..." : "ਸਾਫ਼ ਹੋ ਰਿਹਾ...") : (isEn ? "Remove Duplicates" : "37.5 KG: ਡਬਲ ਐਂਟਰੀਆਂ ਸਾਫ਼ ਕਰੋ")}</span>
             </button>
 
             <div className="w-full sm:w-56 relative">

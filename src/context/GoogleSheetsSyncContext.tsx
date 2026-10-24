@@ -70,6 +70,12 @@ interface GoogleSheetsSyncContextType {
   // Conflicts
   conflicts: SyncConflict[];
   resolveConflict: (conflictId: string, resolution: 'SOFTWARE' | 'GOOGLE_SHEETS') => void;
+  resolveAllConflicts: (resolution: 'SOFTWARE' | 'GOOGLE_SHEETS') => void;
+  clearAllConflicts: () => void;
+
+  // Popup blocked flag for iframe environments
+  popupBlockedNotice: boolean;
+  setPopupBlockedNotice: (val: boolean) => void;
 
   // Audit Logs & Stats
   auditLogs: SyncAuditLog[];
@@ -88,6 +94,7 @@ export const GoogleSheetsSyncProvider: React.FC<{ children: React.ReactNode }> =
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [isAuthenticating, setIsAuthenticating] = useState(false);
+  const [popupBlockedNotice, setPopupBlockedNotice] = useState(false);
 
   // Connection
   const [spreadsheetId, setSpreadsheetId] = useState<string | null>(() => getSavedTwoWaySpreadsheetId());
@@ -133,6 +140,7 @@ export const GoogleSheetsSyncProvider: React.FC<{ children: React.ReactNode }> =
   const signInWithGoogle = async () => {
     try {
       setIsAuthenticating(true);
+      setPopupBlockedNotice(false);
       const res = await googleSignIn();
       setCurrentUser(res.user);
       setAccessToken(res.accessToken);
@@ -146,13 +154,34 @@ export const GoogleSheetsSyncProvider: React.FC<{ children: React.ReactNode }> =
         messagePa: `ਗੂਗਲ ਖਾਤਾ ਕਨੈਕਟ ਹੋ ਗਿਆ: ${res.user.email || ''}`
       });
     } catch (err: any) {
-      console.error('Google Sign-in failed', err);
-      notifyError({
-        titleEn: 'Sign-in Failed',
-        titlePa: 'ਸਾਈਨ-ਇਨ ਫੇਲ੍ਹ',
-        messageEn: err.message || 'Could not authenticate with Google'
-      });
-      throw err;
+      console.warn('Google Sign-in notice:', err?.code || err?.message || err);
+      const isPopupBlockedOrNetwork =
+        err?.code === 'auth/popup-blocked' ||
+        err?.code === 'auth/network-request-failed' ||
+        err?.code === 'auth/unauthorized-domain' ||
+        err?.code === 'auth/cancelled-popup-request' ||
+        err?.code === 'auth/popup-closed-by-user' ||
+        err?.isPopupBlocked ||
+        (err?.message && (
+          err.message.toLowerCase().includes('popup') ||
+          err.message.toLowerCase().includes('network') ||
+          err.message.toLowerCase().includes('origin')
+        ));
+
+      if (isPopupBlockedOrNetwork) {
+        setPopupBlockedNotice(true);
+        notifyError({
+          titleEn: 'Popup or Iframe Restricted',
+          titlePa: 'ਪ੍ਰੀਵਿਊ ਵਿੰਡੋ ਵਿੱਚ ਪੌਪਅੱਪ ਰੋਕਿਆ ਗਿਆ',
+          messageEn: 'Google sign-in popup or iframe origin was blocked by browser. Please use the Direct Access Token below or allow popups in your browser address bar.'
+        });
+      } else {
+        notifyError({
+          titleEn: 'Sign-in Failed',
+          titlePa: 'ਸਾਈਨ-ਇਨ ਫੇਲ੍ਹ',
+          messageEn: err?.userFriendlyMessage || err?.message || 'Could not authenticate with Google'
+        });
+      }
     } finally {
       setIsAuthenticating(false);
     }
@@ -372,10 +401,18 @@ export const GoogleSheetsSyncProvider: React.FC<{ children: React.ReactNode }> =
         });
       }
 
-      // Commit new/updated Bags
+      // Commit new/updated Bags (with strict duplicate protection)
       if (result.newBagsEntries.length > 0) {
         result.newBagsEntries.forEach((b) => {
-          mandi.addBagsEntry(b);
+          const alreadyExists = mandi.bagsEntries.some(
+            (ex) =>
+              ex.id === b.id ||
+              ex.entryNumber === b.entryNumber ||
+              (ex.farmerId === b.farmerId && ex.date === b.date && ex.bags === b.bags)
+          );
+          if (!alreadyExists) {
+            mandi.addBagsEntry(b);
+          }
         });
       }
 
@@ -398,9 +435,16 @@ export const GoogleSheetsSyncProvider: React.FC<{ children: React.ReactNode }> =
         await writeBackGeneratedFarmerIds(accessToken, spreadsheetId, result.generatedFarmerIds);
       }
 
-      // Store conflicts if any detected
+      // Store conflicts if any detected (deduplicate by unique ID)
       if (result.conflicts.length > 0) {
-        const merged = [...result.conflicts, ...conflicts];
+        const conflictMap = new Map<string, SyncConflict>();
+        conflicts.forEach((c) => {
+          if (c?.id) conflictMap.set(c.id, c);
+        });
+        result.conflicts.forEach((c) => {
+          if (c?.id) conflictMap.set(c.id, c);
+        });
+        const merged = Array.from(conflictMap.values());
         setConflicts(merged);
         saveStoredConflicts(merged);
       }
@@ -490,7 +534,10 @@ export const GoogleSheetsSyncProvider: React.FC<{ children: React.ReactNode }> =
       if (found.table === 'farmers') {
         mandi.updateFarmer(found.recordId, found.sheetValue as any);
       } else if (found.table === 'bags') {
-        mandi.updateBagsEntry(found.recordId, found.sheetValue as any);
+        const bagId = (found.softwareValue as any)?.id || found.recordId;
+        mandi.updateBagsEntry(bagId, found.sheetValue as any);
+      } else if (found.table === 'lefting') {
+        mandi.updateLeftingRecord(found.recordId, found.sheetValue as any);
       }
     }
 
@@ -512,6 +559,56 @@ export const GoogleSheetsSyncProvider: React.FC<{ children: React.ReactNode }> =
       titleEn: 'Conflict Resolved',
       titlePa: 'ਵਿਰੋਧ ਹੱਲ ਹੋ ਗਿਆ',
       messageEn: `Applied ${resolution} values for ${found.title}`
+    });
+  };
+
+  // Batch resolve all conflicts at once
+  const resolveAllConflicts = (resolution: 'SOFTWARE' | 'GOOGLE_SHEETS') => {
+    if (conflicts.length === 0) return;
+
+    if (resolution === 'GOOGLE_SHEETS') {
+      conflicts.forEach((found) => {
+        if (found.table === 'farmers') {
+          mandi.updateFarmer(found.recordId, found.sheetValue as any);
+        } else if (found.table === 'bags') {
+          const bagId = (found.softwareValue as any)?.id || found.recordId;
+          mandi.updateBagsEntry(bagId, found.sheetValue as any);
+        } else if (found.table === 'lefting') {
+          mandi.updateLeftingRecord(found.recordId, found.sheetValue as any);
+        }
+      });
+    }
+
+    const count = conflicts.length;
+    setConflicts([]);
+    saveStoredConflicts([]);
+
+    addSyncAuditLog({
+      source: resolution === 'SOFTWARE' ? 'SOFTWARE' : 'GOOGLE_SHEETS',
+      action: 'CONFLICT_RESOLVE',
+      table: 'bags',
+      recordId: 'BATCH_ALL',
+      user: currentUser?.email || 'User',
+      details: `Batch resolved all ${count} conflicts by keeping ${resolution}`,
+      status: 'SUCCESS'
+    });
+    setAuditLogs(getSyncAuditLogs());
+    notifySaveSuccess({
+      titleEn: 'All Conflicts Resolved',
+      titlePa: 'ਸਾਰੇ ਵਿਰੋਧ ਹੱਲ ਹੋ ਗਏ',
+      messageEn: `Applied ${resolution} values for all ${count} items`
+    });
+  };
+
+  // Clear all pending conflicts
+  const clearAllConflicts = () => {
+    const count = conflicts.length;
+    setConflicts([]);
+    saveStoredConflicts([]);
+    notifySaveSuccess({
+      titleEn: 'Conflicts Cleared',
+      titlePa: 'ਵਿਰੋਧ ਸਾਫ਼ ਹੋ ਗਏ',
+      messageEn: `Cleared ${count} pending conflict items from review queue`
     });
   };
 
@@ -570,6 +667,8 @@ export const GoogleSheetsSyncProvider: React.FC<{ children: React.ReactNode }> =
         signInWithGoogle,
         signOutGoogle,
         setManualAccessToken,
+        popupBlockedNotice,
+        setPopupBlockedNotice,
         spreadsheetId,
         spreadsheetUrl,
         connectSpreadsheet,
@@ -584,6 +683,8 @@ export const GoogleSheetsSyncProvider: React.FC<{ children: React.ReactNode }> =
         importFromGoogleSheets,
         conflicts,
         resolveConflict,
+        resolveAllConflicts,
+        clearAllConflicts,
         auditLogs,
         tableStats,
         latestImportResult,

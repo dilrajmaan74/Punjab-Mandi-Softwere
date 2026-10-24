@@ -29,7 +29,9 @@ import {
   MapPin,
   Building,
   ShieldCheck,
-  Maximize2
+  Maximize2,
+  RotateCcw,
+  RefreshCw
 } from 'lucide-react';
 import { formatCurrencyINR, autoFormatDate, FIXED_BAG_WEIGHT_KG, formatLeftingWeightQtlKg, compareDatesChronological } from '../../utils/calculations';
 import { exportLeftingVoucherPDF } from '../../utils/leftingPdfExport';
@@ -65,6 +67,7 @@ export const LeftingManagement: React.FC = () => {
     addLeftingRecord,
     updateLeftingRecord,
     deleteLeftingRecord,
+    recoverAllLeftingRecords,
     language,
     activeCrop
   } = useMandi();
@@ -75,6 +78,37 @@ export const LeftingManagement: React.FC = () => {
 
   // Active Tab
   const [activeTab, setActiveTab] = useState<'dispatch' | 'history' | 'agency-report'>('dispatch');
+  const [isRecovering, setIsRecovering] = useState<boolean>(false);
+
+  // 1-Click Lefting Data Recovery Action
+  const handleRecoverLefting = async () => {
+    setIsRecovering(true);
+    try {
+      const res = await recoverAllLeftingRecords();
+      if (res.recoveredCount > 0) {
+        notifySaveSuccess({
+          titlePa: 'ਲਿਫਟਿੰਗ ਡਾਟਾ ਸਫਲਤਾਪੂਰਵਕ ਰਿਕਵਰ ਹੋ ਗਿਆ',
+          titleEn: 'Lefting Data Recovered',
+          messagePa: `${res.messagePa} ${res.sources.length > 0 ? `(ਸਰੋਤ: ${res.sources.join(' • ')})` : ''}`
+        });
+        setActiveTab('history');
+      } else {
+        notifyError({
+          titlePa: 'ਕੋਈ ਨਵਾਂ ਲਿਫਟਿੰਗ ਰਿਕਾਰਡ ਨਹੀਂ ਮਿਲਿਆ',
+          titleEn: 'No Lefting Records Found',
+          messagePa: 'ਸਾਰੇ ਉਪਲਬਧ ਲਿਫਟਿੰਗ ਰਿਕਾਰਡ ਪਹਿਲਾਂ ਹੀ ਰਜਿਸਟਰ ਵਿੱਚ ਮੌਜੂਦ ਹਨ ਜਾਂ ਕੋਈ ਪੁਰਾਣਾ ਰਿਕਾਰਡ ਨਹੀਂ ਮਿਲਿਆ।'
+        });
+      }
+    } catch (err: any) {
+      notifyError({
+        titlePa: 'ਰਿਕਵਰੀ ਦੌਰਾਨ ਸਮੱਸਿਆ ਆਈ',
+        titleEn: 'Recovery Error',
+        messagePa: err?.message || 'ਕਿਰਪਾ ਕਰਕੇ ਦੁਬਾਰਾ ਕੋਸ਼ਿਸ਼ ਕਰੋ।'
+      });
+    } finally {
+      setIsRecovering(false);
+    }
+  };
 
   // Mandi Branch Selection for newly added dispatches
   const [entryMandiFirmId, setEntryMandiFirmId] = useState<string>(() => activeFirm?.id || 'FIRM-001');
@@ -501,6 +535,15 @@ export const LeftingManagement: React.FC = () => {
           >
             <Building className="w-4 h-4" />
             <span>{isEn ? 'Agency-Wise Lifting Report' : 'ਸਰਕਾਰੀ ਏਜੰਸੀ ਲਿਫਟਿੰਗ ਰਿਪੋਰਟ'}</span>
+          </button>
+          <button
+            onClick={handleRecoverLefting}
+            disabled={isRecovering}
+            className="px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600 text-white shadow-2xs border border-amber-600 cursor-pointer active:scale-95 disabled:opacity-50"
+            title="ਸੁਪਾਬੇਸ, ਰੀਸਾਈਕਲ ਬਿਨ ਜਾਂ ਲੋਕਲ ਬੈਕਅੱਪ ਵਿੱਚੋਂ ਲਿਫਟਿੰਗ ਡਾਟਾ ਰਿਕਵਰ ਕਰੋ"
+          >
+            <RotateCcw className={`w-4 h-4 ${isRecovering ? 'animate-spin' : ''}`} />
+            <span>{isRecovering ? 'ਰਿਕਵਰੀ ਹੋ ਰਹੀ ਹੈ...' : (isEn ? 'Recover Lefting Data' : 'ਲਿਫਟਿੰਗ ਡਾਟਾ ਰਿਕਵਰ ਕਰੋ')}</span>
           </button>
         </div>
       </div>
@@ -1244,8 +1287,25 @@ export const LeftingManagement: React.FC = () => {
 
           {/* Table */}
           {filteredRecords.length === 0 ? (
-            <div className="p-12 text-center text-slate-400 text-xs">
-              ਕੋਈ ਲਿਫਟਿੰਗ ਰਿਕਾਰਡ ਨਹੀਂ ਮਿਲਿਆ। (No lefting dispatch records found)
+            <div className="p-10 text-center flex flex-col items-center justify-center gap-3 bg-amber-50/40 rounded-xl border border-dashed border-amber-200 m-3">
+              <div className="w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center text-amber-700">
+                <RotateCcw className="w-6 h-6" />
+              </div>
+              <div className="text-sm font-black text-slate-800">
+                ਕੋਈ ਲਿਫਟਿੰਗ ਰਿਕਾਰਡ ਨਹੀਂ ਦਿਸ ਰਿਹਾ (No lefting dispatch records displayed)
+              </div>
+              <p className="text-xs text-slate-500 max-w-md">
+                ਜੇ ਤੁਹਾਡਾ ਪੁਰਾਣਾ ਲਿਫਟਿੰਗ ਡਾਟਾ ਮਿਸ ਹੋ ਗਿਆ ਹੈ, ਤਾਂ ਹੇਠਾਂ ਦਿੱਤੇ ਬਟਨ 'ਤੇ ਕਲਿੱਕ ਕਰਕੇ ਸੁਪਾਬੇਸ ਕਲਾਊਡ, ਰੀਸਾਈਕਲ ਬਿਨ ਅਤੇ ਲੋਕਲ ਬੈਕਅੱਪ ਵਿੱਚੋਂ ਤੁਰੰਤ ਰਿਕਵਰ ਕਰੋ:
+              </p>
+              <button
+                type="button"
+                onClick={handleRecoverLefting}
+                disabled={isRecovering}
+                className="px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-black shadow-md flex items-center gap-2 transition active:scale-95 disabled:opacity-50 cursor-pointer"
+              >
+                <RotateCcw className={`w-4 h-4 ${isRecovering ? 'animate-spin' : ''}`} />
+                <span>{isRecovering ? 'ਰਿਕਵਰੀ ਚੱਲ ਰਹੀ ਹੈ...' : 'ਲਿਫਟਿੰਗ ਡਾਟਾ ਰਿਕਵਰ ਕਰੋ (1-Click Recover)'}</span>
+              </button>
             </div>
           ) : (
             <div className="overflow-x-auto">

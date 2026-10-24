@@ -63,7 +63,19 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
     cachedTokenExpiry = Date.now() + 3500 * 1000;
     return { user: result.user, accessToken: cachedAccessToken };
   } catch (error: any) {
-    console.error('Sign in error:', error);
+    console.warn('Google sign-in popup or origin check notice:', error?.code || error?.message);
+    if (
+      error?.code === 'auth/popup-blocked' ||
+      error?.code === 'auth/network-request-failed' ||
+      error?.code === 'auth/unauthorized-domain' ||
+      error?.code === 'auth/cancelled-popup-request' ||
+      error?.code === 'auth/popup-closed-by-user' ||
+      error?.message?.includes('popup-blocked') ||
+      error?.message?.includes('network-request-failed')
+    ) {
+      error.isPopupBlocked = true;
+      error.userFriendlyMessage = 'Browser blocked the Google Sign-in popup or preview iframe origin. Please allow popups for this site or use direct access token.';
+    }
     throw error;
   } finally {
     isSigningIn = false;
