@@ -49,21 +49,91 @@ export const initAuth = (
   });
 };
 
+export const requestGoogleAccessTokenViaGis = async (
+  clientId: string = firebaseConfig.oAuthClientId,
+  scopes: string = 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file'
+): Promise<{ user: User; accessToken: string }> => {
+  return new Promise((resolve, reject) => {
+    const google = (window as any).google;
+    if (!google?.accounts?.oauth2) {
+      reject(new Error('Google Identity Services client is initializing, please try again in a moment.'));
+      return;
+    }
+
+    try {
+      const tokenClient = google.accounts.oauth2.initTokenClient({
+        client_id: clientId,
+        scope: scopes,
+        prompt: 'consent',
+        callback: async (resp: any) => {
+          if (resp.error) {
+            reject(new Error(resp.error_description || resp.error));
+            return;
+          }
+          if (!resp.access_token) {
+            reject(new Error('No access token received from Google'));
+            return;
+          }
+
+          cachedAccessToken = resp.access_token;
+          const expiresIn = resp.expires_in ? parseInt(resp.expires_in, 10) : 3500;
+          cachedTokenExpiry = Date.now() + expiresIn * 1000;
+
+          // Attempt to fetch user profile info
+          let userEmail = 'dilrajmaan74@gmail.com';
+          let displayName = 'Google User';
+          try {
+            const userInfoResp = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+              headers: { Authorization: `Bearer ${resp.access_token}` }
+            });
+            if (userInfoResp.ok) {
+              const uData = await userInfoResp.json();
+              if (uData.email) userEmail = uData.email;
+              if (uData.name) displayName = uData.name;
+            }
+          } catch {}
+
+          const syntheticUser = {
+            uid: `gis_${Date.now()}`,
+            email: userEmail,
+            displayName: displayName
+          } as unknown as User;
+
+          resolve({
+            user: syntheticUser,
+            accessToken: resp.access_token
+          });
+        }
+      });
+      tokenClient.requestAccessToken();
+    } catch (err) {
+      reject(err);
+    }
+  });
+};
+
 export const googleSignIn = async (): Promise<{ user: User; accessToken: string }> => {
   try {
     isSigningIn = true;
-    const result = await signInWithPopup(auth, provider);
-    const credential = GoogleAuthProvider.credentialFromResult(result);
-    if (!credential?.accessToken) {
-      throw new Error('Failed to get Google OAuth access token from Firebase Auth');
+    try {
+      const result = await signInWithPopup(auth, provider);
+      const credential = GoogleAuthProvider.credentialFromResult(result);
+      if (credential?.accessToken) {
+        cachedAccessToken = credential.accessToken;
+        cachedTokenExpiry = Date.now() + 3500 * 1000;
+        return { user: result.user, accessToken: cachedAccessToken };
+      }
+    } catch (popupErr: any) {
+      console.warn('Firebase signInWithPopup failed, falling back to GIS Token Client:', popupErr?.code || popupErr?.message);
+      if ((window as any).google?.accounts?.oauth2 && firebaseConfig.oAuthClientId) {
+        return await requestGoogleAccessTokenViaGis(firebaseConfig.oAuthClientId);
+      }
+      throw popupErr;
     }
 
-    cachedAccessToken = credential.accessToken;
-    // Standard access tokens last ~1 hour
-    cachedTokenExpiry = Date.now() + 3500 * 1000;
-    return { user: result.user, accessToken: cachedAccessToken };
+    throw new Error('Failed to get Google OAuth access token from Firebase Auth');
   } catch (error: any) {
-    console.warn('Google sign-in popup or origin check notice:', error?.code || error?.message);
+    console.warn('Google sign-in notice:', error?.code || error?.message);
     if (
       error?.code === 'auth/popup-blocked' ||
       error?.code === 'auth/network-request-failed' ||
@@ -74,7 +144,7 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
       error?.message?.includes('network-request-failed')
     ) {
       error.isPopupBlocked = true;
-      error.userFriendlyMessage = 'Browser blocked the Google Sign-in popup or preview iframe origin. Please allow popups for this site or use direct access token.';
+      error.userFriendlyMessage = 'Browser blocked the Google Sign-in popup. Please click the popup icon in your browser address bar to allow popups, or use GIS/Direct token.';
     }
     throw error;
   } finally {

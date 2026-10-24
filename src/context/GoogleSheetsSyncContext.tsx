@@ -171,9 +171,10 @@ export const GoogleSheetsSyncProvider: React.FC<{ children: React.ReactNode }> =
       if (isPopupBlockedOrNetwork) {
         setPopupBlockedNotice(true);
         notifyError({
-          titleEn: 'Popup or Iframe Restricted',
-          titlePa: 'ਪ੍ਰੀਵਿਊ ਵਿੰਡੋ ਵਿੱਚ ਪੌਪਅੱਪ ਰੋਕਿਆ ਗਿਆ',
-          messageEn: 'Google sign-in popup or iframe origin was blocked by browser. Please use the Direct Access Token below or allow popups in your browser address bar.'
+          titleEn: 'Browser Popup Blocked',
+          titlePa: 'ਬ੍ਰਾਊਜ਼ਰ ਨੇ ਲੌਗਇਨ ਪੌਪਅੱਪ ਰੋਕਿਆ (Popup Blocked)',
+          messageEn: 'Click the pop-up blocked icon (🚫) in your laptop browser address bar and select "Always allow pop-ups", or open the software in a full browser tab.',
+          messagePa: 'ਲੈਪਟਾਪ ਦੀ ਐਡਰੈੱਸ ਬਾਰ ਵਿੱਚ ਸੱਜੇ ਪਾਸੇ ਲਾਲ ਕਰਾਸ ਵਾਲੇ ਆਈਕਨ (Pop-up Blocked) ਤੇ ਕਲਿੱਕ ਕਰਕੇ "Always allow pop-ups" ਚੁਣੋ।'
         });
       } else {
         notifyError({

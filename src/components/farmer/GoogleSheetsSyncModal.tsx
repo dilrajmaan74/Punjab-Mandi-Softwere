@@ -491,43 +491,86 @@ export const GoogleSheetsSyncModal: React.FC<GoogleSheetsSyncModalProps> = ({ is
 
           {/* Popup Blocked Guidance Banner */}
           {popupBlockedNotice && !accessToken && (
-            <div className="bg-amber-50 border border-amber-300 rounded-xl p-3.5 space-y-2 text-xs">
+            <div className="bg-amber-50 border-2 border-amber-400 rounded-xl p-4 space-y-3 text-xs shadow-sm">
               <div className="flex items-start justify-between gap-2">
-                <div className="flex items-start gap-2">
-                  <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+                <div className="flex items-start gap-2.5">
+                  <div className="p-1.5 bg-amber-200 text-amber-900 rounded-lg shrink-0 mt-0.5">
+                    <AlertTriangle className="w-5 h-5 text-amber-800" />
+                  </div>
                   <div className="space-y-1">
-                    <p className="font-bold text-amber-900">
-                      {isEn ? 'Google Sign-In Popup Blocked' : 'ਬ੍ਰਾਊਜ਼ਰ ਨੇ ਗੂਗਲ ਸਾਈਨ-ਇਨ ਪੌਪਅੱਪ ਰੋਕਿਆ'}
+                    <p className="font-black text-amber-950 text-sm">
+                      {isEn ? 'Google Sign-In Popup Blocked on Laptop' : 'ਲੈਪਟਾਪ ਉੱਤੇ ਗੂਗਲ ਲੌਗਇਨ ਪੌਪਅੱਪ ਰੋਕਿਆ ਗਿਆ (Popup Blocked)'}
                     </p>
-                    <p className="text-[11px] text-amber-800 leading-relaxed">
+                    <p className="text-[12px] text-amber-900 leading-relaxed font-medium">
                       {isEn
-                        ? 'Browsers block popups inside preview iframes. You can (1) click the popup blocker icon in your browser address bar to allow popups, or (2) enter an OAuth Access Token directly below.'
-                        : 'ਪ੍ਰੀਵਿਊ ਫਰੇਮ ਵਿੱਚ ਬ੍ਰਾਊਜ਼ਰ ਵੱਲੋਂ ਪੌਪਅੱਪ ਰੋਕਿਆ ਜਾਂਦਾ ਹੈ। ਤੁਸੀਂ ਬ੍ਰਾਊਜ਼ਰ ਵਿੱਚ ਪੌਪਅੱਪ ਦੀ ਇਜਾਜ਼ਤ ਦੇ ਸਕਦੇ ਹੋ ਜਾਂ ਹੇਠਾਂ ਸਿੱਧਾ ਟੋਕਨ ਦਾਖਲ ਕਰ ਸਕਦੇ ਹੋ।'}
+                        ? 'Google Chrome or Microsoft Edge automatically blocks popups by default. To connect your Google account, follow either of the 2 easy options below:'
+                        : 'ਗੂਗਲ ਕ੍ਰੋਮ (Chrome) ਜਾਂ ਐੱਜ (Edge) ਬ੍ਰਾਊਜ਼ਰ ਨਵੀਂ ਵਿੰਡੋ ਦੇ ਪੌਪਅੱਪ ਨੂੰ ਆਪਣੇ ਆਪ ਰੋਕ ਲੈਂਦਾ ਹੈ। ਇਸਨੂੰ ਚਾਲੂ ਕਰਨ ਲਈ ਹੇਠਾਂ ਦਿੱਤੇ ਆਸਾਨ ਤਰੀਕਿਆਂ ਵਿੱਚੋਂ ਕੋਈ ਵੀ ਚੁਣੋ:'}
                     </p>
                   </div>
                 </div>
                 <button
                   onClick={() => setPopupBlockedNotice(false)}
-                  className="text-amber-700 hover:text-amber-900 cursor-pointer"
+                  className="text-amber-700 hover:text-amber-950 p-1 cursor-pointer"
+                  title="Close"
                 >
-                  <X className="w-3.5 h-3.5" />
+                  <X className="w-4 h-4" />
                 </button>
               </div>
-              <div className="flex items-center gap-2 pt-1">
+
+              {/* Step-by-Step Box */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 pt-1">
+                <div className="bg-white p-3 rounded-lg border border-amber-200 space-y-1.5">
+                  <div className="font-black text-amber-950 text-[11px] flex items-center gap-1.5">
+                    <span className="w-5 h-5 rounded-full bg-amber-500 text-slate-950 flex items-center justify-center font-mono text-xs">1</span>
+                    <span>{isEn ? 'Option 1: Allow Pop-ups in Address Bar' : 'ਤਰੀਕਾ 1: ਐਡਰੈੱਸ ਬਾਰ ਵਿੱਚੋਂ Pop-up Allow ਕਰੋ'}</span>
+                  </div>
+                  <p className="text-[11px] text-slate-600 leading-normal">
+                    {isEn
+                      ? 'Click the Pop-up Blocked icon (🚫) at the far right of your laptop browser address bar, select "Always allow pop-ups from this site", and click Done.'
+                      : 'ਲੈਪਟਾਪ ਦੀ ਐਡਰੈੱਸ ਬਾਰ (ਜਿੱਥੇ ਲਿੰਕ ਹੁੰਦਾ ਹੈ) ਵਿੱਚ ਸੱਜੇ ਪਾਸੇ ਲਾਲ ਕਰਾਸ ਵਾਲੇ ਆਈਕਨ (Pop-up Blocked 🚫) ਤੇ ਕਲਿੱਕ ਕਰੋ, "Always allow pop-ups" ਚੁਣੋ ਅਤੇ Done ਦਬਾਓ।'}
+                  </p>
+                  <button
+                    onClick={() => {
+                      setPopupBlockedNotice(false);
+                      signInWithGoogle();
+                    }}
+                    className="w-full mt-1 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    <span>{isEn ? 'Allow Done & Retry Connect' : 'Allow ਕਰਨ ਤੋਂ ਬਾਅਦ ਦੁਬਾਰਾ ਕਲਿੱਕ ਕਰੋ'}</span>
+                  </button>
+                </div>
+
+                <div className="bg-white p-3 rounded-lg border border-amber-200 space-y-1.5">
+                  <div className="font-black text-amber-950 text-[11px] flex items-center gap-1.5">
+                    <span className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center font-mono text-xs">2</span>
+                    <span>{isEn ? 'Option 2: Open in Full Browser Tab' : 'ਤਰੀਕਾ 2: ਪੂਰੇ ਬ੍ਰਾਊਜ਼ਰ ਵਿੱਚ ਖੋਲ੍ਹੋ'}</span>
+                  </div>
+                  <p className="text-[11px] text-slate-600 leading-normal">
+                    {isEn
+                      ? 'Open this application directly in a dedicated full Chrome tab where popups are not restricted by standalone windows.'
+                      : 'ਇਸਨੂੰ ਸਿੱਧਾ ਨਵੀਂ ਕ੍ਰੋਮ ਟੈਬ ਵਿੱਚ ਖੋਲ੍ਹੋ ਜਿੱਥੇ ਪੌਪਅੱਪ ਉੱਤੇ ਕੋਈ ਰੋਕ ਨਹੀਂ ਹੁੰਦੀ।'}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => window.open(window.location.href, '_blank')}
+                    className="w-full mt-1 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-md font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>{isEn ? 'Open in Full Chrome Tab' : 'ਨਵੀਂ ਟੈਬ ਵਿੱਚ ਖੋਲ੍ਹੋ (New Tab)'}</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between pt-1 border-t border-amber-200 text-[11px]">
+                <span className="text-amber-900 font-semibold">
+                  {isEn ? 'Have an existing Google OAuth token?' : 'ਜਾਂ ਸਿੱਧਾ ਟੋਕਨ ਦਾਖਲ ਕਰਨਾ ਚਾਹੁੰਦੇ ਹੋ?'}
+                </span>
                 <button
                   onClick={() => setShowManualToken(true)}
-                  className="px-3 py-1.5 bg-amber-700 hover:bg-amber-800 text-white rounded-lg font-bold text-xs cursor-pointer shadow-2xs"
+                  className="px-2.5 py-1 bg-amber-700 hover:bg-amber-800 text-white rounded font-bold cursor-pointer"
                 >
                   {isEn ? 'Enter Direct OAuth Token' : 'OAuth ਟੋਕਨ ਦਾਖਲ ਕਰੋ'}
-                </button>
-                <button
-                  onClick={() => {
-                    setPopupBlockedNotice(false);
-                    signInWithGoogle();
-                  }}
-                  className="px-3 py-1.5 bg-white hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-lg font-semibold text-xs cursor-pointer"
-                >
-                  {isEn ? 'Retry Sign In' : 'ਦੁਬਾਰਾ ਕੋਸ਼ਿਸ਼ ਕਰੋ'}
                 </button>
               </div>
             </div>
