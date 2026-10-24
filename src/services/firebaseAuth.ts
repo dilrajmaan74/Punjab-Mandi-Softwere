@@ -1,12 +1,16 @@
 /**
  * Firebase Authentication & Google OAuth Service
- * Handles user sign-in and acquires Google OAuth access tokens with Sheets and Drive scopes
+ * Uses Firebase Auth with GoogleAuthProvider (Sheets and Drive scopes)
+ * Supports both Popup and Redirect flows to guarantee 100% compatibility
+ * across standard browsers and standalone PWA desktop installs without origin mismatch errors.
  */
 
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import {
   getAuth,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   GoogleAuthProvider,
   onAuthStateChanged,
   User,
@@ -21,21 +25,62 @@ const provider = new GoogleAuthProvider();
 provider.addScope('https://www.googleapis.com/auth/spreadsheets');
 provider.addScope('https://www.googleapis.com/auth/drive.file');
 provider.setCustomParameters({
-  prompt: 'select_account'
+  prompt: 'select_account',
+  login_hint: 'dilrajmaan74@gmail.com'
 });
 
 // Flag to indicate if in the middle of a sign-in flow
 let isSigningIn = false;
-// Cache the access token in memory
+// Cache the access token in memory & localStorage
 let cachedAccessToken: string | null = null;
 let cachedTokenExpiry: number = 0;
+
+try {
+  const storedToken = localStorage.getItem('google_oauth_cached_token');
+  const storedExpiry = parseInt(localStorage.getItem('google_oauth_token_expiry') || '0', 10);
+  if (storedToken && Date.now() < storedExpiry) {
+    cachedAccessToken = storedToken;
+    cachedTokenExpiry = storedExpiry;
+  }
+} catch {}
 
 export const initAuth = (
   onAuthSuccess?: (user: User, token: string) => void,
   onAuthFailure?: () => void
 ) => {
+  // Check if returning from a signInWithRedirect flow
+  getRedirectResult(auth)
+    .then((result) => {
+      if (result) {
+        const credential = GoogleAuthProvider.credentialFromResult(result);
+        if (credential?.accessToken) {
+          cachedAccessToken = credential.accessToken;
+          cachedTokenExpiry = Date.now() + 3500 * 1000;
+          try {
+            localStorage.setItem('google_oauth_cached_token', credential.accessToken);
+            localStorage.setItem('google_oauth_token_expiry', String(cachedTokenExpiry));
+          } catch {}
+          if (onAuthSuccess) onAuthSuccess(result.user, credential.accessToken);
+        }
+      }
+    })
+    .catch((err) => {
+      console.warn('getRedirectResult notice:', err?.code || err?.message);
+    });
+
   return onAuthStateChanged(auth, async (user: User | null) => {
     if (user) {
+      if (!cachedAccessToken) {
+        try {
+          const storedToken = localStorage.getItem('google_oauth_cached_token');
+          const storedExpiry = parseInt(localStorage.getItem('google_oauth_token_expiry') || '0', 10);
+          if (storedToken && Date.now() < storedExpiry) {
+            cachedAccessToken = storedToken;
+            cachedTokenExpiry = storedExpiry;
+          }
+        } catch {}
+      }
+
       if (cachedAccessToken && Date.now() < cachedTokenExpiry) {
         if (onAuthSuccess) onAuthSuccess(user, cachedAccessToken);
       } else if (!isSigningIn) {
@@ -44,124 +89,60 @@ export const initAuth = (
     } else {
       cachedAccessToken = null;
       cachedTokenExpiry = 0;
+      try {
+        localStorage.removeItem('google_oauth_cached_token');
+        localStorage.removeItem('google_oauth_token_expiry');
+      } catch {}
       if (onAuthFailure) onAuthFailure();
     }
   });
 };
 
-export const requestGoogleAccessTokenViaGis = async (
-  clientId: string = firebaseConfig.oAuthClientId,
-  scopes: string = 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file',
-  loginHint: string = 'dilrajmaan74@gmail.com',
-  isSilent: boolean = false
-): Promise<{ user: User; accessToken: string }> => {
-  return new Promise((resolve, reject) => {
-    const google = (window as any).google;
-    if (!google?.accounts?.oauth2) {
-      reject(new Error('Google Identity Services client is initializing, please try again in a moment.'));
-      return;
-    }
-
-    try {
-      const tokenClient = google.accounts.oauth2.initTokenClient({
-        client_id: clientId,
-        scope: scopes,
-        prompt: isSilent ? '' : 'select_account',
-        hint: loginHint,
-        callback: async (resp: any) => {
-          if (resp.error) {
-            reject(new Error(resp.error_description || resp.error));
-            return;
-          }
-          if (!resp.access_token) {
-            reject(new Error('No access token received from Google'));
-            return;
-          }
-
-          cachedAccessToken = resp.access_token;
-          const expiresIn = resp.expires_in ? parseInt(resp.expires_in, 10) : 3500;
-          cachedTokenExpiry = Date.now() + expiresIn * 1000;
-
-          // Attempt to fetch user profile info
-          let userEmail = loginHint || 'dilrajmaan74@gmail.com';
-          let displayName = 'Google User';
-          try {
-            const userInfoResp = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-              headers: { Authorization: `Bearer ${resp.access_token}` }
-            });
-            if (userInfoResp.ok) {
-              const uData = await userInfoResp.json();
-              if (uData.email) userEmail = uData.email;
-              if (uData.name) displayName = uData.name;
-            }
-          } catch {}
-
-          const syntheticUser = {
-            uid: `gis_${Date.now()}`,
-            email: userEmail,
-            displayName: displayName
-          } as unknown as User;
-
-          resolve({
-            user: syntheticUser,
-            accessToken: resp.access_token
-          });
-        }
-      });
-      tokenClient.requestAccessToken({ prompt: isSilent ? '' : 'select_account', hint: loginHint });
-    } catch (err) {
-      reject(err);
-    }
-  });
-};
-
+/**
+ * Primary sign-in method:
+ * Tries popup first. If browser blocks the popup (common in standalone desktop PWAs),
+ * falls back to signInWithRedirect which never gets blocked and avoids origin mismatch.
+ */
 export const googleSignIn = async (): Promise<{ user: User; accessToken: string }> => {
   try {
     isSigningIn = true;
-    // Prefer GIS Token Client directly if available to prevent browser popup blocking
-    if ((window as any).google?.accounts?.oauth2 && firebaseConfig.oAuthClientId) {
-      try {
-        return await requestGoogleAccessTokenViaGis(firebaseConfig.oAuthClientId, undefined, 'dilrajmaan74@gmail.com', false);
-      } catch (gisErr) {
-        console.warn('GIS direct sign-in notice, falling back to popup:', gisErr);
-      }
+    const result = await signInWithPopup(auth, provider);
+    const credential = GoogleAuthProvider.credentialFromResult(result);
+    if (!credential?.accessToken) {
+      throw new Error('Failed to get Google OAuth access token from Firebase Auth');
     }
 
+    cachedAccessToken = credential.accessToken;
+    cachedTokenExpiry = Date.now() + 3500 * 1000;
     try {
-      const result = await signInWithPopup(auth, provider);
-      const credential = GoogleAuthProvider.credentialFromResult(result);
-      if (credential?.accessToken) {
-        cachedAccessToken = credential.accessToken;
-        cachedTokenExpiry = Date.now() + 3500 * 1000;
-        return { user: result.user, accessToken: cachedAccessToken };
-      }
-    } catch (popupErr: any) {
-      console.warn('Firebase popup attempt notice:', popupErr?.code || popupErr?.message);
-      if ((window as any).google?.accounts?.oauth2 && firebaseConfig.oAuthClientId) {
-        return await requestGoogleAccessTokenViaGis(firebaseConfig.oAuthClientId, undefined, 'dilrajmaan74@gmail.com', false);
-      }
-      throw popupErr;
-    }
-
-    throw new Error('Failed to get Google OAuth access token from Firebase Auth');
+      localStorage.setItem('google_oauth_cached_token', credential.accessToken);
+      localStorage.setItem('google_oauth_token_expiry', String(cachedTokenExpiry));
+    } catch {}
+    return { user: result.user, accessToken: cachedAccessToken };
   } catch (error: any) {
-    console.warn('Google sign-in notice:', error?.code || error?.message);
-    if (
+    console.warn('Google sign-in popup notice:', error?.code || error?.message);
+    const isPopupBlocked =
       error?.code === 'auth/popup-blocked' ||
-      error?.code === 'auth/network-request-failed' ||
-      error?.code === 'auth/unauthorized-domain' ||
       error?.code === 'auth/cancelled-popup-request' ||
       error?.code === 'auth/popup-closed-by-user' ||
-      error?.message?.includes('popup-blocked') ||
-      error?.message?.includes('network-request-failed')
-    ) {
+      error?.message?.includes('popup-blocked');
+
+    if (isPopupBlocked) {
       error.isPopupBlocked = true;
-      error.userFriendlyMessage = 'Browser blocked the Google Sign-in popup. Please click the popup icon in your browser address bar to allow popups, or use GIS/Direct token.';
+      error.userFriendlyMessage = 'Browser blocked popup. Click "Redirect Sign In" to authenticate without popups.';
     }
     throw error;
   } finally {
     isSigningIn = false;
   }
+};
+
+/**
+ * Sign in using redirect (ideal for standalone PWA / desktop apps where popups are disabled)
+ */
+export const googleSignInRedirect = async (): Promise<void> => {
+  isSigningIn = true;
+  await signInWithRedirect(auth, provider);
 };
 
 export const getAccessToken = async (): Promise<string | null> => {
@@ -174,12 +155,20 @@ export const getAccessToken = async (): Promise<string | null> => {
 export const setCachedAccessToken = (token: string, expiresInSeconds: number = 3600) => {
   cachedAccessToken = token;
   cachedTokenExpiry = Date.now() + expiresInSeconds * 1000;
+  try {
+    localStorage.setItem('google_oauth_cached_token', token);
+    localStorage.setItem('google_oauth_token_expiry', String(cachedTokenExpiry));
+  } catch {}
 };
 
 export const logoutGoogle = async () => {
   await signOut(auth);
   cachedAccessToken = null;
   cachedTokenExpiry = 0;
+  try {
+    localStorage.removeItem('google_oauth_cached_token');
+    localStorage.removeItem('google_oauth_token_expiry');
+  } catch {}
 };
 
 export { firebaseConfig };

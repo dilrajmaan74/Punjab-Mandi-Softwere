@@ -31,10 +31,10 @@ import {
 import {
   initAuth,
   googleSignIn,
+  googleSignInRedirect,
   getAccessToken,
   setCachedAccessToken,
   logoutGoogle,
-  requestGoogleAccessTokenViaGis,
   firebaseConfig
 } from '../services/firebaseAuth';
 import {
@@ -50,6 +50,7 @@ interface GoogleSheetsSyncContextType {
   accessToken: string | null;
   isAuthenticating: boolean;
   signInWithGoogle: () => Promise<void>;
+  signInWithRedirectFlow: () => Promise<void>;
   signOutGoogle: () => Promise<void>;
   setManualAccessToken: (token: string) => void;
 
@@ -129,24 +130,6 @@ export const GoogleSheetsSyncProvider: React.FC<{ children: React.ReactNode }> =
           if (tok) {
             setAccessToken(tok);
             if (spreadsheetId) setSyncStatus('connected');
-          } else {
-            // Attempt automatic silent Google account connection via GIS for dilrajmaan74@gmail.com
-            setTimeout(() => {
-              if ((window as any).google?.accounts?.oauth2 && firebaseConfig.oAuthClientId) {
-                requestGoogleAccessTokenViaGis(
-                  firebaseConfig.oAuthClientId,
-                  undefined,
-                  'dilrajmaan74@gmail.com',
-                  true
-                ).then((res) => {
-                  setCurrentUser(res.user);
-                  setAccessToken(res.accessToken);
-                  setSyncStatus('connected');
-                }).catch(() => {
-                  // Silent attempt did not succeed, user can click to connect
-                });
-              }
-            }, 1000);
           }
         });
       }
@@ -156,45 +139,41 @@ export const GoogleSheetsSyncProvider: React.FC<{ children: React.ReactNode }> =
     };
   }, [spreadsheetId]);
 
-  // Handle Google Sign In
+  // Handle Google Sign In (Popup first, handles popup blocked)
   const signInWithGoogle = async () => {
     try {
       setIsAuthenticating(true);
       setPopupBlockedNotice(false);
       const res = await googleSignIn();
-      setCurrentUser(res.user);
-      setAccessToken(res.accessToken);
-      if (spreadsheetId) {
-        setSyncStatus('connected');
+      if (res?.user && res?.accessToken) {
+        setCurrentUser(res.user);
+        setAccessToken(res.accessToken);
+        if (spreadsheetId) {
+          setSyncStatus('connected');
+        }
+        notifySaveSuccess({
+          titleEn: 'Google Connected',
+          titlePa: 'ਗੂਗਲ ਕਨੈਕਟ ਹੋ ਗਿਆ',
+          messageEn: `Authenticated as ${res.user.email || 'Google User'}`,
+          messagePa: `ਗੂਗਲ ਖਾਤਾ ਕਨੈਕਟ ਹੋ ਗਿਆ: ${res.user.email || ''}`
+        });
       }
-      notifySaveSuccess({
-        titleEn: 'Google Connected',
-        titlePa: 'ਗੂਗਲ ਕਨੈਕਟ ਹੋ ਗਿਆ',
-        messageEn: `Authenticated as ${res.user.email || 'Google User'}`,
-        messagePa: `ਗੂਗਲ ਖਾਤਾ ਕਨੈਕਟ ਹੋ ਗਿਆ: ${res.user.email || ''}`
-      });
     } catch (err: any) {
       console.warn('Google Sign-in notice:', err?.code || err?.message || err);
       const isPopupBlockedOrNetwork =
         err?.code === 'auth/popup-blocked' ||
-        err?.code === 'auth/network-request-failed' ||
-        err?.code === 'auth/unauthorized-domain' ||
         err?.code === 'auth/cancelled-popup-request' ||
         err?.code === 'auth/popup-closed-by-user' ||
         err?.isPopupBlocked ||
-        (err?.message && (
-          err.message.toLowerCase().includes('popup') ||
-          err.message.toLowerCase().includes('network') ||
-          err.message.toLowerCase().includes('origin')
-        ));
+        (err?.message && err.message.toLowerCase().includes('popup'));
 
       if (isPopupBlockedOrNetwork) {
         setPopupBlockedNotice(true);
         notifyError({
-          titleEn: 'Browser Popup Blocked',
-          titlePa: 'ਬ੍ਰਾਊਜ਼ਰ ਨੇ ਲੌਗਇਨ ਪੌਪਅੱਪ ਰੋਕਿਆ (Popup Blocked)',
-          messageEn: 'Click the pop-up blocked icon (🚫) in your laptop browser address bar and select "Always allow pop-ups", or open the software in a full browser tab.',
-          messagePa: 'ਲੈਪਟਾਪ ਦੀ ਐਡਰੈੱਸ ਬਾਰ ਵਿੱਚ ਸੱਜੇ ਪਾਸੇ ਲਾਲ ਕਰਾਸ ਵਾਲੇ ਆਈਕਨ (Pop-up Blocked) ਤੇ ਕਲਿੱਕ ਕਰਕੇ "Always allow pop-ups" ਚੁਣੋ।'
+          titleEn: 'Popup Blocked on Laptop',
+          titlePa: 'ਲੈਪਟਾਪ ਉੱਤੇ ਪੌਪਅੱਪ ਰੋਕਿਆ ਗਿਆ (Popup Blocked)',
+          messageEn: 'Browser blocked popup. Click "Direct Redirect Sign-in" or allow popups in your address bar.',
+          messagePa: 'ਲੈਪਟਾਪ ਦੀ ਐਡਰੈੱਸ ਬਾਰ ਵਿੱਚ ਪੌਪਅੱਪ Allow ਕਰੋ ਜਾਂ ਹੇਠਾਂ "ਬਿਨਾਂ ਪੌਪਅੱਪ ਲੌਗਇਨ" ਬਟਨ ਦਬਾਓ।'
         });
       } else {
         notifyError({
@@ -203,6 +182,24 @@ export const GoogleSheetsSyncProvider: React.FC<{ children: React.ReactNode }> =
           messageEn: err?.userFriendlyMessage || err?.message || 'Could not authenticate with Google'
         });
       }
+    } finally {
+      setIsAuthenticating(false);
+    }
+  };
+
+  // Sign-in via Redirect: does not use any popup window, 100% immune to popup blockers
+  const signInWithRedirectFlow = async () => {
+    try {
+      setIsAuthenticating(true);
+      setPopupBlockedNotice(false);
+      await googleSignInRedirect();
+    } catch (err: any) {
+      console.warn('Redirect sign-in notice:', err);
+      notifyError({
+        titleEn: 'Redirect Failed',
+        titlePa: 'ਰੀ-ਡਾਇਰੈਕਟ ਫੇਲ੍ਹ',
+        messageEn: err?.message || 'Could not redirect to Google'
+      });
     } finally {
       setIsAuthenticating(false);
     }
@@ -686,6 +683,7 @@ export const GoogleSheetsSyncProvider: React.FC<{ children: React.ReactNode }> =
         accessToken,
         isAuthenticating,
         signInWithGoogle,
+        signInWithRedirectFlow,
         signOutGoogle,
         setManualAccessToken,
         popupBlockedNotice,

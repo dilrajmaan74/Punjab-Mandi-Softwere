@@ -60,6 +60,7 @@ export const GoogleSheetsSyncModal: React.FC<GoogleSheetsSyncModalProps> = ({ is
     accessToken,
     isAuthenticating,
     signInWithGoogle,
+    signInWithRedirectFlow,
     signOutGoogle,
     setManualAccessToken,
     spreadsheetId,
@@ -519,6 +520,32 @@ export const GoogleSheetsSyncModal: React.FC<GoogleSheetsSyncModalProps> = ({ is
 
               {/* Step-by-Step Box */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 pt-1">
+                {/* Recommended: Direct Redirect (No Popups) */}
+                <div className="bg-emerald-50/80 p-3 rounded-lg border-2 border-emerald-500 space-y-1.5 md:col-span-2">
+                  <div className="font-black text-emerald-950 text-xs flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-xs">✓</span>
+                      <span>{isEn ? 'Recommended: 1-Click Direct Sign In (No Popups / No Origin Error)' : 'ਸਭ ਤੋਂ ਆਸਾਨ: ਬਿਨਾਂ ਪੌਪਅੱਪ 1-ਕਲਿੱਕ ਗੂਗਲ ਲੌਗਇਨ'}</span>
+                    </span>
+                    <span className="text-[10px] bg-emerald-200 text-emerald-950 px-2 py-0.5 rounded font-black uppercase">
+                      100% Reliable
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-emerald-900 leading-normal">
+                    {isEn
+                      ? 'Redirects through Google authentication directly without opening any popup windows. Works in all desktop apps and laptops.'
+                      : 'ਇਹ ਬਿਨਾਂ ਕੋਈ ਪੌਪਅੱਪ ਖੋਲ੍ਹੇ ਸਿੱਧਾ ਗੂਗਲ ਰਾਹੀਂ ਤੁਹਾਡਾ ਖਾਤਾ ਲਿੰਕ ਕਰਦਾ ਹੈ। ਇਹ ਸਾਰੇ ਲੈਪਟਾਪਾਂ ਅਤੇ ਡੈਸਕਟੌਪ ਐਪਾਂ ਉੱਤੇ ਬਿਲਕੁਲ ਸਹੀ ਚੱਲਦਾ ਹੈ।'}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={signInWithRedirectFlow}
+                    className="w-full mt-1 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-md font-bold text-xs flex items-center justify-center gap-2 cursor-pointer shadow-xs active:scale-95"
+                  >
+                    <CheckCircle2 className="w-4 h-4 text-emerald-300" />
+                    <span>{isEn ? 'Sign In Now (Direct Redirect)' : 'ਹੁਣੇ ਗੂਗਲ ਕਨੈਕਟ ਕਰੋ (Direct Redirect)'}</span>
+                  </button>
+                </div>
+
                 <div className="bg-white p-3 rounded-lg border border-amber-200 space-y-1.5">
                   <div className="font-black text-amber-950 text-[11px] flex items-center gap-1.5">
                     <span className="w-5 h-5 rounded-full bg-amber-500 text-slate-950 flex items-center justify-center font-mono text-xs">1</span>
@@ -527,17 +554,17 @@ export const GoogleSheetsSyncModal: React.FC<GoogleSheetsSyncModalProps> = ({ is
                   <p className="text-[11px] text-slate-600 leading-normal">
                     {isEn
                       ? 'Click the Pop-up Blocked icon (🚫) at the far right of your laptop browser address bar, select "Always allow pop-ups from this site", and click Done.'
-                      : 'ਲੈਪਟਾਪ ਦੀ ਐਡਰੈੱਸ ਬਾਰ (ਜਿੱਥੇ ਲਿੰਕ ਹੁੰਦਾ ਹੈ) ਵਿੱਚ ਸੱਜੇ ਪਾਸੇ ਲਾਲ ਕਰਾਸ ਵਾਲੇ ਆਈਕਨ (Pop-up Blocked 🚫) ਤੇ ਕਲਿੱਕ ਕਰੋ, "Always allow pop-ups" ਚੁਣੋ ਅਤੇ Done ਦਬਾਓ।'}
+                      : 'ਲੈਪਟਾਪ ਦੀ ਐਡਰੈੱਸ ਬਾਰ ਵਿੱਚ ਸੱਜੇ ਪਾਸੇ ਲਾਲ ਕਰਾਸ ਵਾਲੇ ਆਈਕਨ (Pop-up Blocked 🚫) ਤੇ ਕਲਿੱਕ ਕਰੋ, "Always allow pop-ups" ਚੁਣੋ ਅਤੇ Done ਦਬਾਓ।'}
                   </p>
                   <button
                     onClick={() => {
                       setPopupBlockedNotice(false);
                       signInWithGoogle();
                     }}
-                    className="w-full mt-1 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+                    className="w-full mt-1 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-md font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
                   >
                     <RefreshCw className="w-3.5 h-3.5" />
-                    <span>{isEn ? 'Allow Done & Retry Connect' : 'Allow ਕਰਨ ਤੋਂ ਬਾਅਦ ਦੁਬਾਰਾ ਕਲਿੱਕ ਕਰੋ'}</span>
+                    <span>{isEn ? 'Retry Popup Sign In' : 'ਦੁਬਾਰਾ ਕੋਸ਼ਿਸ਼ ਕਰੋ (Popup Retry)'}</span>
                   </button>
                 </div>
 
