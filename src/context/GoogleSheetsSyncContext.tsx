@@ -80,6 +80,10 @@ interface GoogleSheetsSyncContextType {
   popupBlockedNotice: boolean;
   setPopupBlockedNotice: (val: boolean) => void;
 
+  // Unauthorized domain notice for Firebase Auth
+  unauthorizedDomainNotice: boolean;
+  setUnauthorizedDomainNotice: (val: boolean) => void;
+
   // Audit Logs & Stats
   auditLogs: SyncAuditLog[];
   tableStats: TableSyncStats[];
@@ -98,6 +102,7 @@ export const GoogleSheetsSyncProvider: React.FC<{ children: React.ReactNode }> =
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [popupBlockedNotice, setPopupBlockedNotice] = useState(false);
+  const [unauthorizedDomainNotice, setUnauthorizedDomainNotice] = useState(false);
 
   // Connection
   const [spreadsheetId, setSpreadsheetId] = useState<string | null>(() => getSavedTwoWaySpreadsheetId());
@@ -160,6 +165,21 @@ export const GoogleSheetsSyncProvider: React.FC<{ children: React.ReactNode }> =
       }
     } catch (err: any) {
       console.warn('Google Sign-in notice:', err?.code || err?.message || err);
+      const isUnauthorizedDomain =
+        err?.code === 'auth/unauthorized-domain' ||
+        (err?.message && err.message.toLowerCase().includes('unauthorized domain'));
+
+      if (isUnauthorizedDomain) {
+        setUnauthorizedDomainNotice(true);
+        notifyError({
+          titleEn: 'Domain Not Authorized in Firebase',
+          titlePa: 'ਫਾਇਰਬੇਸ ਵਿੱਚ ਡੋਮੇਨ ਸ਼ਾਮਲ ਕਰਨ ਦੀ ਲੋੜ ਹੈ (Unauthorized Domain)',
+          messageEn: 'Please add "run.app" to Authorized Domains in Firebase Console (link available in Google Sheets modal).',
+          messagePa: 'ਗੂਗਲ ਫਾਇਰਬੇਸ ਵਿੱਚ "run.app" ਡੋਮੇਨ ਸ਼ਾਮਲ ਕਰੋ। ਗੂਗਲ ਸ਼ੀਟਸ ਮਾਡਲ ਵਿੱਚ ਸਿੱਧਾ ਲਿੰਕ ਦਿੱਤਾ ਗਿਆ ਹੈ।'
+        });
+        return;
+      }
+
       const isPopupBlockedOrNetwork =
         err?.code === 'auth/popup-blocked' ||
         err?.code === 'auth/cancelled-popup-request' ||
@@ -192,9 +212,25 @@ export const GoogleSheetsSyncProvider: React.FC<{ children: React.ReactNode }> =
     try {
       setIsAuthenticating(true);
       setPopupBlockedNotice(false);
+      setUnauthorizedDomainNotice(false);
       await googleSignInRedirect();
     } catch (err: any) {
       console.warn('Redirect sign-in notice:', err);
+      const isUnauthorizedDomain =
+        err?.code === 'auth/unauthorized-domain' ||
+        (err?.message && err.message.toLowerCase().includes('unauthorized domain'));
+
+      if (isUnauthorizedDomain) {
+        setUnauthorizedDomainNotice(true);
+        notifyError({
+          titleEn: 'Domain Not Authorized in Firebase',
+          titlePa: 'ਫਾਇਰਬੇਸ ਵਿੱਚ ਡੋਮੇਨ ਸ਼ਾਮਲ ਕਰਨ ਦੀ ਲੋੜ ਹੈ (Unauthorized Domain)',
+          messageEn: 'Please add "run.app" to Authorized Domains in Firebase Console.',
+          messagePa: 'ਗੂਗਲ ਫਾਇਰਬੇਸ ਵਿੱਚ "run.app" ਡੋਮੇਨ ਸ਼ਾਮਲ ਕਰੋ।'
+        });
+        return;
+      }
+
       notifyError({
         titleEn: 'Redirect Failed',
         titlePa: 'ਰੀ-ਡਾਇਰੈਕਟ ਫੇਲ੍ਹ',
@@ -688,6 +724,8 @@ export const GoogleSheetsSyncProvider: React.FC<{ children: React.ReactNode }> =
         setManualAccessToken,
         popupBlockedNotice,
         setPopupBlockedNotice,
+        unauthorizedDomainNotice,
+        setUnauthorizedDomainNotice,
         spreadsheetId,
         spreadsheetUrl,
         connectSpreadsheet,

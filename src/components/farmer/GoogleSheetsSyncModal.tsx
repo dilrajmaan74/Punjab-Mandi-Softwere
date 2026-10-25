@@ -31,7 +31,9 @@ import {
   SlidersHorizontal,
   FileDown,
   Activity,
-  UserCheck
+  UserCheck,
+  ShieldAlert,
+  Globe
 } from 'lucide-react';
 import {
   exportFarmersToExcelFile,
@@ -81,11 +83,15 @@ export const GoogleSheetsSyncModal: React.FC<GoogleSheetsSyncModalProps> = ({ is
     clearAllConflicts,
     popupBlockedNotice,
     setPopupBlockedNotice,
+    unauthorizedDomainNotice,
+    setUnauthorizedDomainNotice,
     auditLogs,
     tableStats,
     latestImportResult,
     clearImportResult
   } = useGoogleSheetsSync();
+
+  const [copiedDomain, setCopiedDomain] = useState(false);
 
   // Active navigation tab
   const [activeTab, setActiveTab] = useState<ModalTab>('two_way_sync');
@@ -489,6 +495,138 @@ export const GoogleSheetsSyncModal: React.FC<GoogleSheetsSyncModalProps> = ({ is
               )}
             </div>
           </div>
+
+          {/* Unauthorized Domain Guidance Banner (Firebase auth/unauthorized-domain) */}
+          {unauthorizedDomainNotice && !accessToken && (
+            <div className="bg-rose-50 border-2 border-rose-400 rounded-xl p-4 space-y-3.5 text-xs shadow-sm">
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-start gap-2.5">
+                  <div className="p-1.5 bg-rose-200 text-rose-900 rounded-lg shrink-0 mt-0.5">
+                    <ShieldAlert className="w-5 h-5 text-rose-800" />
+                  </div>
+                  <div className="space-y-1">
+                    <p className="font-black text-rose-950 text-sm flex items-center gap-2">
+                      <span>
+                        {isEn
+                          ? 'Action Required: Add "run.app" to Firebase Authorized Domains'
+                          : 'ਜ਼ਰੂਰੀ ਕਦਮ: Firebase ਵਿੱਚ "run.app" ਡੋਮੇਨ ਸ਼ਾਮਲ ਕਰੋ'}
+                      </span>
+                      <span className="text-[10px] font-mono bg-rose-200 text-rose-900 px-2 py-0.5 rounded font-bold uppercase">
+                        auth/unauthorized-domain
+                      </span>
+                    </p>
+                    <p className="text-[12px] text-rose-900 leading-relaxed font-medium">
+                      {isEn
+                        ? 'For security, Google Firebase only allows sign-ins from domains listed in your Firebase Console. Add "run.app" once, and you can sign in anytime without errors!'
+                        : 'ਗੂਗਲ ਫਾਇਰਬੇਸ ਦੀ ਸੁਰੱਖਿਆ ਨੀਤੀ ਅਨੁਸਾਰ ਤੁਹਾਡੇ ਕਲਾਊਡ ਹੋਸਟਿੰਗ ਡੋਮੇਨ (run.app) ਨੂੰ 1 ਵਾਰ ਅਪਰੂਵ ਕਰਨਾ ਪੈਂਦਾ ਹੈ। ਹੇਠਾਂ ਦਿੱਤੇ 2 ਆਸਾਨ ਕਦਮ ਪੂਰੇ ਕਰੋ:'}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setUnauthorizedDomainNotice(false)}
+                  className="text-rose-700 hover:text-rose-950 p-1 cursor-pointer"
+                  title="Close"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* 3 Step Interactive Walkthrough */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 pt-1">
+                {/* Step 1: Copy run.app */}
+                <div className="bg-white p-3 rounded-lg border border-rose-200 space-y-2 flex flex-col justify-between">
+                  <div>
+                    <div className="font-bold text-rose-950 text-xs flex items-center gap-1.5 mb-1">
+                      <span className="w-5 h-5 rounded-full bg-rose-600 text-white flex items-center justify-center font-bold text-xs">1</span>
+                      <span>{isEn ? 'Copy Domain' : 'ਕਦਮ 1: ਡੋਮੇਨ ਕਾਪੀ ਕਰੋ'}</span>
+                    </div>
+                    <p className="text-[11px] text-slate-600">
+                      {isEn ? 'Copy this domain to your clipboard:' : 'ਇਹ ਡੋਮੇਨ ਕਾਪੀ ਕਰੋ:'}
+                    </p>
+                    <div className="mt-1.5 px-2 py-1 bg-slate-100 rounded border border-slate-300 font-mono text-[11px] font-bold text-slate-800 text-center select-all">
+                      run.app
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText('run.app');
+                      setCopiedDomain(true);
+                      setTimeout(() => setCopiedDomain(false), 3000);
+                    }}
+                    className="w-full flex items-center justify-center gap-1.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded text-xs font-bold transition cursor-pointer"
+                  >
+                    {copiedDomain ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                    <span>{copiedDomain ? (isEn ? 'Copied!' : 'ਕਾਪੀ ਹੋ ਗਿਆ!') : (isEn ? 'Copy "run.app"' : 'run.app ਕਾਪੀ ਕਰੋ')}</span>
+                  </button>
+                </div>
+
+                {/* Step 2: Open Firebase Console Settings */}
+                <div className="bg-white p-3 rounded-lg border border-rose-200 space-y-2 flex flex-col justify-between">
+                  <div>
+                    <div className="font-bold text-rose-950 text-xs flex items-center gap-1.5 mb-1">
+                      <span className="w-5 h-5 rounded-full bg-rose-600 text-white flex items-center justify-center font-bold text-xs">2</span>
+                      <span>{isEn ? 'Add in Firebase Console' : 'ਕਦਮ 2: ਫਾਇਰਬੇਸ ਵਿੱਚ ਜੋੜੋ'}</span>
+                    </div>
+                    <p className="text-[11px] text-slate-600 leading-snug">
+                      {isEn
+                        ? 'Click below -> under "Authorized domains" click "Add domain" -> paste "run.app" -> click "Add".'
+                        : 'ਹੇਠਾਂ ਕਲਿੱਕ ਕਰੋ -> "Authorized domains" ਵਿੱਚ "Add domain" ਦਬਾਓ -> "run.app" ਪੇਸਟ ਕਰਕੇ "Add" ਦਬਾਓ।'}
+                    </p>
+                  </div>
+                  <a
+                    href="https://console.firebase.google.com/project/gen-lang-client-0219590296/authentication/settings"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full flex items-center justify-center gap-1.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded text-xs font-bold transition shadow-xs"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>{isEn ? 'Open Firebase Settings' : 'Firebase ਕੰਸੋਲ ਖੋਲ੍ਹੋ'}</span>
+                  </a>
+                </div>
+
+                {/* Step 3: Sign In Now */}
+                <div className="bg-emerald-50 p-3 rounded-lg border border-emerald-300 space-y-2 flex flex-col justify-between">
+                  <div>
+                    <div className="font-bold text-emerald-950 text-xs flex items-center gap-1.5 mb-1">
+                      <span className="w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-xs">3</span>
+                      <span>{isEn ? 'Click Sign In Again' : 'ਕਦਮ 3: ਦੁਬਾਰਾ ਕਨੈਕਟ ਕਰੋ'}</span>
+                    </div>
+                    <p className="text-[11px] text-emerald-900 leading-snug">
+                      {isEn
+                        ? 'Once added in Firebase, click below to sign in immediately without any error!'
+                        : 'ਫਾਇਰਬੇਸ ਵਿੱਚ Add ਕਰਨ ਤੋਂ ਬਾਅਦ, ਹੇਠਾਂ ਕਲਿੱਕ ਕਰਕੇ ਤੁਰੰਤ ਗੂਗਲ ਖਾਤਾ ਕਨੈਕਟ ਕਰੋ!'}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => signInWithGoogle()}
+                    disabled={isAuthenticating}
+                    className="w-full flex items-center justify-center gap-1.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-xs font-bold transition cursor-pointer"
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>{isAuthenticating ? (isEn ? 'Connecting...' : 'ਕਨੈਕਟ ਹੋ ਰਿਹਾ ਹੈ...') : (isEn ? 'Sign in with Google' : 'ਗੂਗਲ ਨਾਲ ਲੌਗਇਨ ਕਰੋ')}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Alternative Fallback Row */}
+              <div className="flex items-center justify-between pt-2 border-t border-rose-200 text-[11px]">
+                <span className="text-rose-900 font-medium">
+                  {isEn
+                    ? 'Or use Direct OAuth Access Token without configuring Firebase:'
+                    : 'ਜਾਂ ਫਾਇਰਬੇਸ ਬਦਲੇ ਬਿਨਾਂ ਸਿੱਧਾ OAuth Access Token ਦਾਖਲ ਕਰੋ:'}
+                </span>
+                <button
+                  onClick={() => {
+                    setShowManualToken(true);
+                    setUnauthorizedDomainNotice(false);
+                  }}
+                  className="px-2.5 py-1 bg-white hover:bg-rose-100 text-rose-800 border border-rose-300 rounded font-bold cursor-pointer transition"
+                >
+                  {isEn ? 'Enter Access Token' : 'ਸਿੱਧਾ ਟੋਕਨ ਦਾਖਲ ਕਰੋ'}
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Popup Blocked Guidance Banner */}
           {popupBlockedNotice && !accessToken && (
