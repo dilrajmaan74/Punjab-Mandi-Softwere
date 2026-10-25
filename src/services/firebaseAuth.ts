@@ -1,8 +1,10 @@
 /**
  * Firebase Authentication & Google OAuth Service
- * Uses Firebase Auth with GoogleAuthProvider (Sheets and Drive scopes)
- * Supports both Popup and Redirect flows to guarantee 100% compatibility
- * across standard browsers and standalone PWA desktop installs without origin mismatch errors.
+ * Strictly follows Google Workspace Integration skill guidelines:
+ * - In-memory caching only for access token (NO localStorage persistence)
+ * - Uses Firebase Auth with GoogleAuthProvider (Sheets and Drive scopes)
+ * - Supports popup and redirect flows
+ * - Auto-cleans legacy expired tokens
  */
 
 import { initializeApp, getApps, getApp } from 'firebase/app';
@@ -25,24 +27,32 @@ const provider = new GoogleAuthProvider();
 provider.addScope('https://www.googleapis.com/auth/spreadsheets');
 provider.addScope('https://www.googleapis.com/auth/drive.file');
 provider.setCustomParameters({
-  prompt: 'select_account',
-  login_hint: 'dilrajmaan74@gmail.com'
+  prompt: 'consent select_account',
+  access_type: 'offline'
 });
 
-// Flag to indicate if in the middle of a sign-in flow
+// Clear any stale/expired tokens stored by earlier versions in localStorage
+try {
+  localStorage.removeItem('google_oauth_cached_token');
+  localStorage.removeItem('google_oauth_token_expiry');
+  localStorage.removeItem('punjab_mandi_google_auth_v1');
+} catch {}
+
+// Flag to indicate if currently in the middle of an interactive sign-in flow
 let isSigningIn = false;
-// Cache the access token in memory & localStorage
+// Strict in-memory cache for OAuth access token
 let cachedAccessToken: string | null = null;
 let cachedTokenExpiry: number = 0;
 
-try {
-  const storedToken = localStorage.getItem('google_oauth_cached_token');
-  const storedExpiry = parseInt(localStorage.getItem('google_oauth_token_expiry') || '0', 10);
-  if (storedToken && Date.now() < storedExpiry) {
-    cachedAccessToken = storedToken;
-    cachedTokenExpiry = storedExpiry;
-  }
-} catch {}
+export const clearCachedAccessToken = () => {
+  cachedAccessToken = null;
+  cachedTokenExpiry = 0;
+  try {
+    localStorage.removeItem('google_oauth_cached_token');
+    localStorage.removeItem('google_oauth_token_expiry');
+    localStorage.removeItem('punjab_mandi_google_auth_v1');
+  } catch {}
+};
 
 export const initAuth = (
   onAuthSuccess?: (user: User, token: string) => void,
@@ -56,10 +66,6 @@ export const initAuth = (
         if (credential?.accessToken) {
           cachedAccessToken = credential.accessToken;
           cachedTokenExpiry = Date.now() + 3500 * 1000;
-          try {
-            localStorage.setItem('google_oauth_cached_token', credential.accessToken);
-            localStorage.setItem('google_oauth_token_expiry', String(cachedTokenExpiry));
-          } catch {}
           if (onAuthSuccess) onAuthSuccess(result.user, credential.accessToken);
         }
       }
@@ -70,29 +76,16 @@ export const initAuth = (
 
   return onAuthStateChanged(auth, async (user: User | null) => {
     if (user) {
-      if (!cachedAccessToken) {
-        try {
-          const storedToken = localStorage.getItem('google_oauth_cached_token');
-          const storedExpiry = parseInt(localStorage.getItem('google_oauth_token_expiry') || '0', 10);
-          if (storedToken && Date.now() < storedExpiry) {
-            cachedAccessToken = storedToken;
-            cachedTokenExpiry = storedExpiry;
-          }
-        } catch {}
-      }
-
       if (cachedAccessToken && Date.now() < cachedTokenExpiry) {
         if (onAuthSuccess) onAuthSuccess(user, cachedAccessToken);
       } else if (!isSigningIn) {
+        // Token is not in memory or expired: prompt user to sign in
+        cachedAccessToken = null;
         if (onAuthFailure) onAuthFailure();
       }
     } else {
       cachedAccessToken = null;
       cachedTokenExpiry = 0;
-      try {
-        localStorage.removeItem('google_oauth_cached_token');
-        localStorage.removeItem('google_oauth_token_expiry');
-      } catch {}
       if (onAuthFailure) onAuthFailure();
     }
   });
@@ -100,8 +93,7 @@ export const initAuth = (
 
 /**
  * Primary sign-in method:
- * Tries popup first. If browser blocks the popup (common in standalone desktop PWAs),
- * falls back to signInWithRedirect which never gets blocked and avoids origin mismatch.
+ * Requests fresh Google OAuth Access Token with spreadsheets & drive.file scopes
  */
 export const googleSignIn = async (): Promise<{ user: User; accessToken: string }> => {
   try {
@@ -114,10 +106,6 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
 
     cachedAccessToken = credential.accessToken;
     cachedTokenExpiry = Date.now() + 3500 * 1000;
-    try {
-      localStorage.setItem('google_oauth_cached_token', credential.accessToken);
-      localStorage.setItem('google_oauth_token_expiry', String(cachedTokenExpiry));
-    } catch {}
     return { user: result.user, accessToken: cachedAccessToken };
   } catch (error: any) {
     console.warn('Google sign-in popup notice:', error?.code || error?.message);
@@ -138,7 +126,7 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
 };
 
 /**
- * Sign in using redirect (ideal for standalone PWA / desktop apps where popups are disabled)
+ * Sign in using redirect (fallback for environments where popups are completely disabled)
  */
 export const googleSignInRedirect = async (): Promise<void> => {
   isSigningIn = true;
@@ -153,22 +141,14 @@ export const getAccessToken = async (): Promise<string | null> => {
 };
 
 export const setCachedAccessToken = (token: string, expiresInSeconds: number = 3600) => {
-  cachedAccessToken = token;
+  const clean = token.replace(/^Bearer\s+/i, '').trim();
+  cachedAccessToken = clean;
   cachedTokenExpiry = Date.now() + expiresInSeconds * 1000;
-  try {
-    localStorage.setItem('google_oauth_cached_token', token);
-    localStorage.setItem('google_oauth_token_expiry', String(cachedTokenExpiry));
-  } catch {}
 };
 
 export const logoutGoogle = async () => {
   await signOut(auth);
-  cachedAccessToken = null;
-  cachedTokenExpiry = 0;
-  try {
-    localStorage.removeItem('google_oauth_cached_token');
-    localStorage.removeItem('google_oauth_token_expiry');
-  } catch {}
+  clearCachedAccessToken();
 };
 
 export { firebaseConfig };

@@ -235,6 +235,11 @@ export function requestGoogleAccessToken() {
   }
 }
 
+export function formatBearerToken(token: string): string {
+  const clean = (token || '').replace(/^Bearer\s+/i, '').trim();
+  return `Bearer ${clean}`;
+}
+
 /**
  * Create a new Google Spreadsheet in the user's Google Drive
  */
@@ -244,10 +249,11 @@ export async function createGoogleSpreadsheet(
   farmers: Farmer[] = []
 ): Promise<{ spreadsheetId: string; spreadsheetUrl: string }> {
   // 1. Create Spreadsheet with title and formatted Sheet1
+  const authHeader = formatBearerToken(accessToken);
   const createResp = await fetch('https://sheets.googleapis.com/v4/spreadsheets', {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${accessToken}`,
+      Authorization: authHeader,
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({
@@ -269,6 +275,9 @@ export async function createGoogleSpreadsheet(
 
   if (!createResp.ok) {
     const errText = await createResp.text();
+    if (createResp.status === 401) {
+      throw new Error(`Google Sheets Auth Error (401): Request had invalid authentication credentials. Expected OAuth 2 access token. Please sign in with Google to refresh permissions.`);
+    }
     throw new Error(`Google Sheets API Error (${createResp.status}): ${errText}`);
   }
 

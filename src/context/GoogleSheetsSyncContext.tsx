@@ -34,6 +34,7 @@ import {
   googleSignInRedirect,
   getAccessToken,
   setCachedAccessToken,
+  clearCachedAccessToken,
   logoutGoogle,
   firebaseConfig
 } from '../services/firebaseAuth';
@@ -249,7 +250,7 @@ export const GoogleSheetsSyncProvider: React.FC<{ children: React.ReactNode }> =
   };
 
   const setManualAccessToken = (token: string) => {
-    const trimmed = token.trim();
+    const trimmed = token.replace(/^Bearer\s+/i, '').trim();
     if (trimmed) {
       setCachedAccessToken(trimmed, 3600);
       setAccessToken(trimmed);
@@ -328,19 +329,26 @@ export const GoogleSheetsSyncProvider: React.FC<{ children: React.ReactNode }> =
 
   // Create new Firm spreadsheet
   const createNewSpreadsheetForFirm = async (): Promise<string> => {
-    if (!accessToken) {
-      throw new Error('Please sign in with Google first');
+    let token = accessToken;
+    if (!token) {
+      const res = await googleSignIn();
+      if (!res?.accessToken) {
+        throw new Error('Please sign in with Google first');
+      }
+      token = res.accessToken;
+      setAccessToken(token);
+      setCurrentUser(res.user);
     }
 
     setSyncStatus('syncing');
     try {
       const firmName = mandi.activeFirm?.name || 'Punjab Mandi Trading Co';
-      const created = await createFirmTwoWaySpreadsheet(accessToken, firmName);
+      const created = await createFirmTwoWaySpreadsheet(token, firmName);
       setSpreadsheetId(created.spreadsheetId);
 
       // Perform initial backup of all existing data
       const snapshot = getSnapshot();
-      await exportAllSoftwareToSheets(accessToken, created.spreadsheetId, snapshot);
+      await exportAllSoftwareToSheets(token, created.spreadsheetId, snapshot);
 
       setSyncStatus('connected');
       setLastSyncTime(new Date().toISOString());
@@ -354,11 +362,27 @@ export const GoogleSheetsSyncProvider: React.FC<{ children: React.ReactNode }> =
       return created.spreadsheetId;
     } catch (err: any) {
       setSyncStatus('error');
-      notifyError({
-        titleEn: 'Failed to create Google Sheet',
-        titlePa: 'ਗੂਗਲ ਸ਼ੀਟ ਬਣਾਉਣ ਵਿੱਚ ਗਲਤੀ',
-        messageEn: err.message
-      });
+      const isAuthError =
+        err?.message?.includes('401') ||
+        err?.message?.includes('UNAUTHENTICATED') ||
+        err?.message?.includes('invalid authentication credentials');
+
+      if (isAuthError) {
+        clearCachedAccessToken();
+        setAccessToken(null);
+        notifyError({
+          titleEn: 'Google Authorization Expired (401)',
+          titlePa: 'ਗੂਗਲ ਸੈਸ਼ਨ ਦੀ ਮਿਆਦ ਪੁੱਗ ਗਈ ਹੈ (401)',
+          messageEn: 'Your Google sign-in session expired. Please click "Sign in with Google" to renew authorization and try again.',
+          messagePa: 'ਗੂਗਲ ਲੌਗਇਨ ਟੋਕਨ ਖ਼ਤਮ ਹੋ ਗਿਆ ਹੈ। ਕਿਰਪਾ ਕਰਕੇ "Sign in with Google" ਦਬਾ ਕੇ ਦੁਬਾਰਾ ਕਨੈਕਟ ਕਰੋ।'
+        });
+      } else {
+        notifyError({
+          titleEn: 'Failed to create Google Sheet',
+          titlePa: 'ਗੂਗਲ ਸ਼ੀਟ ਬਣਾਉਣ ਵਿੱਚ ਗਲਤੀ',
+          messageEn: err.message
+        });
+      }
       throw err;
     }
   };
@@ -409,11 +433,27 @@ export const GoogleSheetsSyncProvider: React.FC<{ children: React.ReactNode }> =
       });
     } catch (err: any) {
       setSyncStatus('error');
-      notifyError({
-        titleEn: 'Backup Failed',
-        titlePa: 'ਬੈਕਅੱਪ ਫੇਲ੍ਹ',
-        messageEn: err.message
-      });
+      const isAuthError =
+        err?.message?.includes('401') ||
+        err?.message?.includes('UNAUTHENTICATED') ||
+        err?.message?.includes('invalid authentication credentials');
+
+      if (isAuthError) {
+        clearCachedAccessToken();
+        setAccessToken(null);
+        notifyError({
+          titleEn: 'Google Authorization Expired (401)',
+          titlePa: 'ਗੂਗਲ ਸੈਸ਼ਨ ਦੀ ਮਿਆਦ ਪੁੱਗ ਗਈ ਹੈ (401)',
+          messageEn: 'Your Google sign-in session expired. Please click "Sign in with Google" to refresh permissions.',
+          messagePa: 'ਗੂਗਲ ਲੌਗਇਨ ਟੋਕਨ ਖ਼ਤਮ ਹੋ ਗਿਆ ਹੈ। ਕਿਰਪਾ ਕਰਕੇ "Sign in with Google" ਦਬਾ ਕੇ ਦੁਬਾਰਾ ਕਨੈਕਟ ਕਰੋ।'
+        });
+      } else {
+        notifyError({
+          titleEn: 'Backup Failed',
+          titlePa: 'ਬੈਕਅੱਪ ਫੇਲ੍ਹ',
+          messageEn: err.message
+        });
+      }
       addSyncAuditLog({
         source: 'SOFTWARE',
         action: 'EXPORT',
@@ -535,11 +575,27 @@ export const GoogleSheetsSyncProvider: React.FC<{ children: React.ReactNode }> =
       return result;
     } catch (err: any) {
       setSyncStatus('error');
-      notifyError({
-        titleEn: 'Import Failed',
-        titlePa: 'ਇੰਪੋਰਟ ਫੇਲ੍ਹ',
-        messageEn: err.message
-      });
+      const isAuthError =
+        err?.message?.includes('401') ||
+        err?.message?.includes('UNAUTHENTICATED') ||
+        err?.message?.includes('invalid authentication credentials');
+
+      if (isAuthError) {
+        clearCachedAccessToken();
+        setAccessToken(null);
+        notifyError({
+          titleEn: 'Google Authorization Expired (401)',
+          titlePa: 'ਗੂਗਲ ਸੈਸ਼ਨ ਦੀ ਮਿਆਦ ਪੁੱਗ ਗਈ ਹੈ (401)',
+          messageEn: 'Your Google sign-in session expired. Please click "Sign in with Google" to refresh permissions.',
+          messagePa: 'ਗੂਗਲ ਲੌਗਇਨ ਟੋਕਨ ਖ਼ਤਮ ਹੋ ਗਿਆ ਹੈ। ਕਿਰਪਾ ਕਰਕੇ "Sign in with Google" ਦਬਾ ਕੇ ਦੁਬਾਰਾ ਕਨੈਕਟ ਕਰੋ।'
+        });
+      } else {
+        notifyError({
+          titleEn: 'Import Failed',
+          titlePa: 'ਇੰਪੋਰਟ ਫੇਲ੍ਹ',
+          messageEn: err.message
+        });
+      }
       addSyncAuditLog({
         source: 'GOOGLE_SHEETS',
         action: 'IMPORT',

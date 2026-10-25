@@ -138,7 +138,12 @@ export const GoogleSheetsSyncModal: React.FC<GoogleSheetsSyncModalProps> = ({ is
   const handleCreateNewSpreadsheet = async () => {
     setIsBusy(true);
     try {
+      if (!accessToken) {
+        await signInWithGoogle();
+      }
       await createNewSpreadsheetForFirm();
+    } catch (err: any) {
+      console.warn('handleCreateNewSpreadsheet error:', err);
     } finally {
       setIsBusy(false);
     }

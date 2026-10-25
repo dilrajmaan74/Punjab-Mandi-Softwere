@@ -262,6 +262,12 @@ export const TABLE_HEADERS: Record<SyncTableType, string[]> = {
   ]
 };
 
+// Helper to guarantee standard Bearer header format without redundant tokens or extra whitespace
+export function formatBearerToken(token: string): string {
+  const clean = (token || '').replace(/^Bearer\s+/i, '').trim();
+  return `Bearer ${clean}`;
+}
+
 // Persistence helpers
 export function getSavedTwoWaySpreadsheetId(): string | null {
   return localStorage.getItem(STORAGE_KEY_SPREADSHEET_ID);
@@ -624,10 +630,11 @@ export async function createFirmTwoWaySpreadsheet(
     }
   }));
 
+  const authHeader = formatBearerToken(accessToken);
   const createResp = await fetch('https://sheets.googleapis.com/v4/spreadsheets', {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${accessToken}`,
+      Authorization: authHeader,
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({
@@ -638,6 +645,9 @@ export async function createFirmTwoWaySpreadsheet(
 
   if (!createResp.ok) {
     const errText = await createResp.text();
+    if (createResp.status === 401) {
+      throw new Error(`Google Sheets Auth Error (401): Request had invalid authentication credentials. Expected OAuth 2 access token. Please sign in with Google to refresh permissions.`);
+    }
     throw new Error(`Google Sheets Create Error (${createResp.status}): ${errText}`);
   }
 
@@ -654,7 +664,7 @@ export async function createFirmTwoWaySpreadsheet(
   await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values:batchUpdate`, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${accessToken}`,
+      Authorization: authHeader,
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({
@@ -686,7 +696,7 @@ export async function createFirmTwoWaySpreadsheet(
     await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${accessToken}`,
+        Authorization: authHeader,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({ requests: stylingRequests })
@@ -716,11 +726,15 @@ export async function verifyAndCreateMissingSheets(
   accessToken: string,
   spreadsheetId: string
 ): Promise<void> {
+  const authHeader = formatBearerToken(accessToken);
   const getResp = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}`, {
-    headers: { Authorization: `Bearer ${accessToken}` }
+    headers: { Authorization: authHeader }
   });
 
   if (!getResp.ok) {
+    if (getResp.status === 401) {
+      throw new Error(`Google Sheets Auth Error (401): Request had invalid authentication credentials. Expected OAuth 2 access token. Please sign in with Google to refresh permissions.`);
+    }
     throw new Error(`Failed to load Google Sheet metadata (${getResp.status})`);
   }
 
@@ -747,7 +761,7 @@ export async function verifyAndCreateMissingSheets(
     await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${accessToken}`,
+        Authorization: authHeader,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({ requests: addRequests })
@@ -762,7 +776,7 @@ export async function verifyAndCreateMissingSheets(
     await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values:batchUpdate`, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${accessToken}`,
+        Authorization: authHeader,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
@@ -869,11 +883,12 @@ export async function exportAllSoftwareToSheets(
   bagTransfers.forEach((bt) => bagTransferRows.push(serializeBagTransferToRow(bt)));
 
   // Batch Clear & Write for all 9 tables
+  const authHeader = formatBearerToken(accessToken);
   const clearRanges = Object.values(SHEET_NAMES).map((name) => `'${name}'!A:Z`);
   await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values:batchClear`, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${accessToken}`,
+      Authorization: authHeader,
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({ ranges: clearRanges })
@@ -894,7 +909,7 @@ export async function exportAllSoftwareToSheets(
   const putResp = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values:batchUpdate`, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${accessToken}`,
+      Authorization: authHeader,
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({
@@ -905,6 +920,9 @@ export async function exportAllSoftwareToSheets(
 
   if (!putResp.ok) {
     const errText = await putResp.text();
+    if (putResp.status === 401) {
+      throw new Error(`Google Sheets Auth Error (401): Request had invalid authentication credentials. Expected OAuth 2 access token. Please sign in with Google to refresh permissions.`);
+    }
     throw new Error(`Google Sheets Update Error: ${errText}`);
   }
 
@@ -965,17 +983,21 @@ export async function readAndValidateGoogleSheetsData(
 
   // Read all 9 ranges in a single batch request
   const ranges = Object.values(SHEET_NAMES).map((name) => `'${name}'!A:Z`);
+  const authHeader = formatBearerToken(accessToken);
   const resp = await fetch(
     `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values:batchGet?ranges=${ranges
       .map(encodeURIComponent)
       .join('&ranges=')}`,
     {
-      headers: { Authorization: `Bearer ${accessToken}` }
+      headers: { Authorization: authHeader }
     }
   );
 
   if (!resp.ok) {
     const errText = await resp.text();
+    if (resp.status === 401) {
+      throw new Error(`Google Sheets Auth Error (401): Request had invalid authentication credentials. Expected OAuth 2 access token. Please sign in with Google to refresh permissions.`);
+    }
     throw new Error(`Failed to read spreadsheet: ${errText}`);
   }
 
