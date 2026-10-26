@@ -50,7 +50,7 @@ interface GoogleSheetsSyncContextType {
   currentUser: User | null;
   accessToken: string | null;
   isAuthenticating: boolean;
-  signInWithGoogle: () => Promise<void>;
+  signInWithGoogle: () => Promise<string | null>;
   signInWithRedirectFlow: () => Promise<void>;
   signOutGoogle: () => Promise<void>;
   setManualAccessToken: (token: string) => void;
@@ -59,7 +59,7 @@ interface GoogleSheetsSyncContextType {
   spreadsheetId: string | null;
   spreadsheetUrl: string | null;
   connectSpreadsheet: (sheetId: string) => Promise<void>;
-  createNewSpreadsheetForFirm: () => Promise<string>;
+  createNewSpreadsheetForFirm: (tokenOverride?: string) => Promise<string>;
   disconnectSpreadsheet: () => void;
 
   // Sync state
@@ -163,7 +163,9 @@ export const GoogleSheetsSyncProvider: React.FC<{ children: React.ReactNode }> =
           messageEn: `Authenticated as ${res.user.email || 'Google User'}`,
           messagePa: `ਗੂਗਲ ਖਾਤਾ ਕਨੈਕਟ ਹੋ ਗਿਆ: ${res.user.email || ''}`
         });
+        return res.accessToken;
       }
+      return null;
     } catch (err: any) {
       console.warn('Google Sign-in notice:', err?.code || err?.message || err);
       const isUnauthorizedDomain =
@@ -178,7 +180,7 @@ export const GoogleSheetsSyncProvider: React.FC<{ children: React.ReactNode }> =
           messageEn: 'Please add "run.app" to Authorized Domains in Firebase Console (link available in Google Sheets modal).',
           messagePa: 'ਗੂਗਲ ਫਾਇਰਬੇਸ ਵਿੱਚ "run.app" ਡੋਮੇਨ ਸ਼ਾਮਲ ਕਰੋ। ਗੂਗਲ ਸ਼ੀਟਸ ਮਾਡਲ ਵਿੱਚ ਸਿੱਧਾ ਲਿੰਕ ਦਿੱਤਾ ਗਿਆ ਹੈ।'
         });
-        return;
+        return null;
       }
 
       const isPopupBlockedOrNetwork =
@@ -203,6 +205,7 @@ export const GoogleSheetsSyncProvider: React.FC<{ children: React.ReactNode }> =
           messageEn: err?.userFriendlyMessage || err?.message || 'Could not authenticate with Google'
         });
       }
+      return null;
     } finally {
       setIsAuthenticating(false);
     }
@@ -328,8 +331,8 @@ export const GoogleSheetsSyncProvider: React.FC<{ children: React.ReactNode }> =
   };
 
   // Create new Firm spreadsheet
-  const createNewSpreadsheetForFirm = async (): Promise<string> => {
-    let token = accessToken;
+  const createNewSpreadsheetForFirm = async (tokenOverride?: string): Promise<string> => {
+    let token = tokenOverride || accessToken;
     if (!token) {
       const res = await googleSignIn();
       if (!res?.accessToken) {

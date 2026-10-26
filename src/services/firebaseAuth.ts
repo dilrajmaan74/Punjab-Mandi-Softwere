@@ -27,8 +27,7 @@ const provider = new GoogleAuthProvider();
 provider.addScope('https://www.googleapis.com/auth/spreadsheets');
 provider.addScope('https://www.googleapis.com/auth/drive.file');
 provider.setCustomParameters({
-  prompt: 'consent select_account',
-  access_type: 'offline'
+  prompt: 'consent select_account'
 });
 
 // Clear any stale/expired tokens stored by earlier versions in localStorage
